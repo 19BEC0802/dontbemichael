@@ -543,11 +543,11 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 
 ### First-success confirmation and morning report (Decision 32)
 
-**What:** Confirm the first finished job to the owner, and a morning summary.
+**What:** Confirm the first finished job to the owner, and a morning summary, plus a weekly digest for owners who open the app once a week (issue #81): emails handled and drafted, tasks closed by each team member, scheduled jobs run, and what still waits on the owner.
 
 **Why:** New owners need proof the office works while they were away.
 
-**Context:** Packs declare `firstAction` (Decision 29), used only in agent goals today.
+**Context:** Packs declare `firstAction` (Decision 29), used only in agent goals today. Every count comes from what the app recorded (the task ledger, the mail send records, the schedule runs), never from Michael's memory, and a week with nothing in it says so plainly. Deliver it the way reports already work: Michael posts it on Ask me as a report (`kind: "report"`), from a schedule the owner can see and change in Schedules. No estimated time saved: the owner declined it (2026-10-10, #81), because minutes per task set by the owner would end up wrong for everyone.
 
 **Effort:** M
 **Priority:** P1
