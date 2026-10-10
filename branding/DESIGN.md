@@ -1091,7 +1091,7 @@ could speak.
 **Banter.** A little over half the time, when two quiet people sit in different pods, they
 trade an exchange instead (owner, 2026-10-01: Kelly and Ryan throwing paper planes or mail
 at each other). Each beat flies pod to pod as a paper plane, never an envelope (owner,
-2026-10-04: envelopes are only real messages), in the sender's department color, and on landing shows in the catcher's
+2026-10-04: envelopes are only real messages between the team; a plane is banter or what passes between the owner and Michael), in the sender's department color, and on landing shows in the catcher's
 bubble with the sender's name on top and the sender's color on the ring. Each line holds 2
 to 3.6 s by its length while the reply flies back, so the conversation reads in order; the
 last one holds a little longer. Exchanges are the full set in the file: `EXCHANGES`, the "that's
@@ -1160,7 +1160,7 @@ Every effect starts from a real event or state; nothing is decorative noise.
 | A question for the owner (a message to the owner, or a new Needs you item) | A paper plane flies from Michael's office toward Needs you, and the Needs you button bumps as it lands |
 | Two people message back and forth | A dashed violet arc joins their pods with a count bubble; it fades a minute after their last message |
 | Two quiet people banter (§8.8) | A paper plane in the sender's color flies pod to pod; the line pops up on the catcher's chip as it lands, and the reply flies back |
-| The owner messages Michael (from `human`) | The envelope rises from the composer under the stage |
+| The owner messages Michael (from `human`) | A paper plane in the owner's indigo rises from the composer under the stage to Michael's office, like the one he throws to Ask me in coral, and lands with two rings |
 | A new team member appears on the roster after launch | Their pod drops in, confetti in the department colors, and "Welcome, Jim" in front of the pod |
 | The office opens (each person's action is the clocking in marker) | Every light starts off. Michael's office comes on when he is in, a pod's when the first of its people is in, each desk when its person is; a light that comes on flickers like a strip light. A desk stays dark at most one minute, so a quiet engine never leaves it off |
 | Closing time (`onClosingTime`) | Each person's desk goes dark and they leave the chip as they confirm or are excused; a pod with nobody left goes dark and its chip fades out; Michael's office goes dark when it completes; cancelling brings it all back |
@@ -1478,6 +1478,7 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-10-07 | Access tab, Email: no switch; one row per address used with Inbox and Sending lines, and Add a mailbox with Watch the inbox or Send only (§7.12). Settings, Mailboxes names who else sends from a mailbox (§7.26). |
 | 2026-10-07 | Onboarding: the card is centered while the studio isn't showing and glides to its column when it appears, the background glow following it (§7.25); onboarding reference screens re-shot. |
 | 2026-10-07 | Onboarding: a Ready step (Get Michael ready) installs Claude Code and signs the owner in where they can see it; skipped, Ask me keeps a card (§7.25). |
+| 2026-10-10 | The owner's message to Michael flies as a paper plane in the owner's indigo, not an envelope; it lands at his office with the two rings (§8.8, §8.12). |
 | 2026-10-09 | Web, Windows first class: the platform switch drops the Beta tag (§9.8, §9.9 retired for web); the Windows note is a lead line plus bullets; the home page gets the Sending switch with the mail approval card (§9.11), the setup inset (§9.12) and six "Everything else" tiles (§9.5); the social card says "on your computer" (§9.7). |
 | 2026-10-04 | Banter flies as paper planes only; an envelope on the floor is always a real message (§8.8, §8.12). |
 | 2026-10-04 | Ask me file rows: a question's named files open from the card, or show in Finder (§7.8); `file` and `sheet` icons (§10). |
