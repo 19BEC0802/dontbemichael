@@ -8,7 +8,6 @@ import { family } from '@/scene/studio/theme';
 import { PixelButton } from './PixelButton';
 import { useStore } from '@/store/store';
 import { AgentAvatar } from './AgentAvatar';
-import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { type HiveTask, type HumanQA } from './TasksKanban';
 import { compareByNewestAsk } from './askMeOrder';
 import { answerMessages, isAnswered, isReport, isWithdrawn, openAskIndexes, openReportIndexes, raiserOf } from '@shared/askMeRouting';
@@ -18,7 +17,7 @@ import { ScheduleRequestCards } from './ScheduleRequestCards';
 import { WorkStyleUpdateCards } from './WorkStyleUpdateCards';
 import { MailProposalCards } from './MailProposalCards';
 import { EngineSetupCard } from './EngineSetupCard';
-import { AskFileRows } from './AskFileRows';
+import { FileText } from './FileChip';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
 
@@ -291,10 +290,9 @@ export function AskMeTab() {
             {expanded && <>
             {/* The question, as markdown: Michael writes lists, emphasis and code. */}
             <div dir={rtl ? 'auto' : undefined} className="cth-askme-q" style={{ margin: '10px 0 12px', fontSize: 12.5, lineHeight: '18px', color: 'var(--cth-ink)' }}>
-              <MarkdownPreview source={open.q} variant="card" />
+              {/* Files the question names are chips that open them (docs/designs/open-file-tab.md). */}
+              <FileText source={open.q} who={{ raisedBy: open.raisedBy, assignee: typeof t.assignee === 'string' ? t.assignee : undefined }} />
             </div>
-            {/* The files the question names, each with Open (docs/designs/ask-me-open-file.md). */}
-            <AskFileRows question={open.q} raisedBy={open.raisedBy} assignee={typeof t.assignee === 'string' ? t.assignee : undefined} style={{ margin: '-2px 0 12px' }} />
             {/* One row: the answer, and Reply. */}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
               <GrowingTextarea

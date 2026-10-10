@@ -321,7 +321,7 @@ test('Couldn\'t finish without a reason reads "No reason given", and the dock sl
   // Value: protects=a refusal never shows an empty bubble (10A) and the dock opens with the 180 ms slide, snapping for reduced motion (21A); fails_when=the fallback or the motion rule is removed; why_new=neither was built or pinned; seam=none
   const dock = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/shell/MichaelDock.tsx'), 'utf8');
   assert.match(dock, /const text = r\.act === 'refuse' && !r\.text\.trim\(\) \? t\('dock\.noReason'\) : r\.text;/);
-  assert.match(dock, /<MarkdownPreview source=\{boldFirst\(text\)\} variant="card" \/>/);
+  assert.match(dock, /<FileText source=\{boldFirst\(text\)\} who=\{\{ raisedBy: 'god' \}\} \/>/, 'files named in it are chips (open-file-tab.md)');
   assert.match(dock, /className="cth-dock"/);
   const css = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/design/global.css'), 'utf8');
   assert.match(css, /\.cth-dock \{ animation: cth-dock-in 180ms ease-out; \}/);

@@ -1656,6 +1656,16 @@
     "tasksIntro": "Every job the team has, by stage. A ? means it waits on you: answer it on Needs you. Click a card for the details.",
     "graphIntroShort": "Each circle is a person, each line the messages between them. Click a person to open their memory; drag to pin."
   },
+  "fileTab": {
+    "close": "Close {{name}}",
+    "office": "Office",
+    "openInApp": "Open in app",
+    "reading": "Reading…",
+    "empty": "Empty file",
+    "tooLarge": "Too large to show here",
+    "unreadable": "Can't show this file here",
+    "rows": "Showing {{shown}} of {{total}} rows"
+  },
   "companyProfile": {
     "intro": "Key facts about your business. Every team member, {{godName}} included, works from them. Short answers only: anything longer goes in Memory & Knowledge.",
     "ceo": "CEO or owner",

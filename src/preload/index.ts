@@ -848,8 +848,23 @@ const api = {
   /** The files an Ask me question names: whether each opens in its default
    *  app, is only shown in Finder, or is missing. Main decides
    *  (docs/designs/ask-me-open-file.md). */
-  askFiles: (paths: string[], who: { raisedBy?: string; assignee?: string }): Promise<Array<'open' | 'reveal' | 'missing'>> =>
+  askFiles: (paths: string[], who: { raisedBy?: string; assignee?: string }): Promise<Array<{ verdict: 'open' | 'reveal' | 'missing'; tab: boolean; path: string }>> =>
     ipcRenderer.invoke('fs:askFiles', paths, who),
+  /** Read a named file for its office tab (docs/designs/open-file-tab.md). Main
+   *  checks the folders again; `place` is 'office' or a team member's id. */
+  readAskFile: (p: string, who: { raisedBy?: string; assignee?: string }): Promise<
+    | { ok: true; path: string; kind: 'markdown' | 'text' | 'json' | 'csv' | 'image'; text?: string; bytes?: Uint8Array; mime?: string; size: number; place: string; folder: string[] }
+    | { ok: false; error: 'not found' | 'too large' | 'unreadable' }
+  > => ipcRenderer.invoke('fs:readAskFile', p, who),
+  /** Watch an open file tab's file; `onAskFileChanged` fires with its id. */
+  watchAskFile: (id: string, p: string, who: { raisedBy?: string; assignee?: string }): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('fs:watchAskFile', id, p, who),
+  unwatchAskFile: (id: string): Promise<void> => ipcRenderer.invoke('fs:unwatchAskFile', id),
+  onAskFileChanged: (cb: (id: string) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, id: string) => cb(id);
+    ipcRenderer.on('fs:askFileChanged', listener);
+    return () => ipcRenderer.removeListener('fs:askFileChanged', listener);
+  },
   /** Open (or, when main says so, show in Finder) one file an Ask me question names. */
   openAskFile: (p: string, who: { raisedBy?: string; assignee?: string }): Promise<{ ok: boolean; action?: 'opened' | 'revealed'; error?: string }> =>
     ipcRenderer.invoke('fs:openAskFile', p, who),

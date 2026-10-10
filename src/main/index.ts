@@ -3,7 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
-  readlinkSync, symlinkSync
+  readlinkSync, symlinkSync, watch as watchFs
 } from 'node:fs';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
@@ -25,7 +25,7 @@ import {
   modelForRole, OPS_STANDUP_MISSION, OPS_STANDUP_BUILT_IN_BODIES, OPS_STANDUP_FOCUS, OPS_STANDUP_BUILT_IN_FOCUSES, HEARTBEAT_MISSION, COMPACT_MAINTENANCE_MISSION, type HarnessConfig, type ScheduledMission
 } from './config';
 import { terminalLaunches } from './terminalAtFolder';
-import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder, type AskFileAgent } from './fs';
+import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder, readAskFile, type AskFileAgent } from './fs';
 import { answerMessages, cardConversation, mergeHumanQA, MICHAEL_ID, raiserOf } from '../shared/askMeRouting';
 import { FIRST_TASK_EDITED_MAX, firstTaskCard, firstTaskCardFromText } from '../shared/firstTask';
 import { answerKey, catchUpRequests, ownerWorkOrder } from '../shared/ownerRequests';
@@ -4215,7 +4215,94 @@ ipcMain.handle('fs:askFiles', async (_evt, paths: unknown, who: unknown) => {
   if (!Array.isArray(paths)) return [];
   // Each root's realpath once for the whole card, not once per path.
   const roots = await resolveAskFileRoots(askFileRoots(who));
-  return Promise.all(paths.slice(0, 20).map((p) => (askFilePathOk(p) ? askFileVerdict(p, roots).then((r) => r.verdict) : 'missing')));
+  return Promise.all(paths.slice(0, 20).map((p) => (askFilePathOk(p)
+    ? askFileVerdict(p, roots).then((r) => ({ verdict: r.verdict, tab: r.tab, path: r.path }))
+    : { verdict: 'missing' as const, tab: false, path: String(p) })));
+});
+
+/** Where a file sits, in office terms, for the file tab's folder line
+ *  (docs/designs/open-file-tab.md, DD4): the office, or the team member whose
+ *  folder holds it, and the folders below that. */
+function askFilePlace(root: string, real: string, path: string): { place: string; folder: string[] } {
+  const cfg = readConfig();
+  const office = cfg.businessFolder ?? legacyBusinessFolder(cfg.officeFolder);
+  const same = (a?: string) => !!a && resolve(expandTilde(a)) === resolve(root);
+  let place = 'office';
+  if (!same(office)) {
+    let agents: Record<string, AskFileAgent> = {};
+    try { agents = hive.registry().agents; } catch { /* no hive yet */ }
+    place = Object.keys(agents).find((id) => same(agents[id]?.cwd)) ?? 'office';
+  }
+  // The read path is canonical, so the folders below are taken from the root's
+  // canonical path; which root it was is matched as configured.
+  const below = path.startsWith(real) ? path.slice(real.length) : basename(path);
+  return { place, folder: dirname(below).split(/[\\/]/).filter((f) => f && f !== '.') };
+}
+
+/** Read a named file for its office tab. The same folder check as Open runs
+ *  again here; the renderer's earlier verdict never decides. */
+ipcMain.handle('fs:readAskFile', async (_evt, p: unknown, who: unknown) => {
+  if (!askFilePathOk(p)) return { ok: false, error: 'not found' };
+  const r = await readAskFile(p, askFileRoots(who));
+  if (!r.ok) {
+    if (r.error !== 'not found') console.warn(`[fs:readAskFile] ${r.error}: ${p}`);
+    return r;
+  }
+  return { ...r, ...askFilePlace(r.root, r.real, r.path) };
+});
+
+/**
+ * Live refresh for open file tabs (open-file-tab.md, E1). Main watches the
+ * file's FOLDER, filtered to its name: editors and agents often write a new
+ * file and rename it over the old one, which ends a watch on the file itself,
+ * and a deleted file cannot be watched until it comes back. At most 5 per
+ * window, the same as the tabs; a window that reloads, crashes or closes drops
+ * its watchers.
+ */
+const askFileWatches = new Map<number, Map<string, { close: () => void }>>();
+const MAX_ASK_FILE_WATCHES = 5;
+ipcMain.handle('fs:watchAskFile', async (evt, id: unknown, p: unknown, who: unknown) => {
+  if (typeof id !== 'string' || !askFilePathOk(p)) return { ok: false };
+  const v = await askFileVerdict(p, askFileRoots(who));
+  if (v.verdict === 'missing' || !v.tab) return { ok: false };
+  const wc = evt.sender;
+  let mine = askFileWatches.get(wc.id);
+  if (!mine) {
+    const forWindow = new Map<string, { close: () => void }>();
+    askFileWatches.set(wc.id, forWindow);
+    mine = forWindow;
+    const drop = () => { for (const w of forWindow.values()) w.close(); forWindow.clear(); askFileWatches.delete(wc.id); };
+    wc.once('destroyed', drop);
+    wc.once('render-process-gone', drop);
+    wc.on('did-start-navigation', (details) => { if (details.isMainFrame && !details.isSameDocument) drop(); });
+  }
+  mine.get(id)?.close();
+  if (mine.size >= MAX_ASK_FILE_WATCHES) {
+    const [oldest] = mine.keys();
+    mine.get(oldest)?.close();
+    mine.delete(oldest);
+  }
+  const name = basename(v.path);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const watcher = watchFs(dirname(v.path), (_type, file) => {
+      if (file && file.toString() !== name) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { if (!wc.isDestroyed()) wc.send('fs:askFileChanged', id); }, 300);
+    });
+    watcher.on('error', (e) => console.warn(`[fs:watchAskFile] ${(e as NodeJS.ErrnoException).code ?? e}: ${v.path}`));
+    mine.set(id, { close: () => { if (timer) clearTimeout(timer); watcher.close(); } });
+    return { ok: true };
+  } catch (e) {
+    console.warn(`[fs:watchAskFile] ${(e as NodeJS.ErrnoException).code ?? e}: ${v.path}`);
+    return { ok: false };
+  }
+});
+ipcMain.handle('fs:unwatchAskFile', (evt, id: unknown) => {
+  const mine = askFileWatches.get(evt.sender.id);
+  if (typeof id !== 'string' || !mine) return;
+  mine.get(id)?.close();
+  mine.delete(id);
 });
 
 /** Open an Ask me question's file. The check runs again here, so the renderer's

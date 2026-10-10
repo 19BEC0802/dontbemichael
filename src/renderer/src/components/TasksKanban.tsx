@@ -14,7 +14,7 @@ import { useBackdropClose } from '@/hooks/useBackdropClose';
 export { openQuestion, openQuestions, waitsOnHuman, parseTasks, type HiveTask, type HumanQA } from './hiveTasks';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
 import { waitsOnHuman, type HiveTask, type TaskStatus } from './hiveTasks';
-import { AskFileRows, useAskFileVerdicts } from './AskFileRows';
+import { FileText, useAskFileChecks } from './FileChip';
 import { blockedWithNothingAsked, michaelCardState, type WorkHours } from '@shared/ownerRequests';
 import { isAnswered, isWithdrawn } from '@shared/askMeRouting';
 
@@ -323,7 +323,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
   const detailGodName = useResolvedGodName();
   // Every file the Q&A trail names, checked in one go rather than per question.
   const qaAssignee = typeof task.assignee === 'string' ? task.assignee : undefined;
-  const qaFiles = useAskFileVerdicts(task.humanQA, qaAssignee);
+  const qaFiles = useAskFileChecks(task.humanQA, qaAssignee);
   const col = COLUMNS.find((c) => c.key === task.status) ?? COLUMNS[0];
   // Belt + suspenders: parseTasks normalizes these, but the ledger is a
   // hand-written file — never trust a card's shape at the point of use.
@@ -435,8 +435,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
                         <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--cth-ink-2)' }}>{t('kanban.question')}</span>
                         {open && <span style={{ marginInlineStart: 'auto', padding: '1px 8px', borderRadius: 999, background: 'var(--cth-coral-strong)', color: 'var(--cth-on-coral)', fontSize: 10.5, fontWeight: 600 }}>{t('kanban.awaitingAnswer')}</span>}
                       </div>
-                      <MarkdownPreview source={e.q} variant="card" />
-                      <AskFileRows question={e.q} raisedBy={e.raisedBy} assignee={qaAssignee} verdicts={qaFiles[e.raisedBy ?? ''] ?? {}} endRule={!isAnswered(e)} style={{ marginTop: 8 }} />
+                      <FileText source={e.q} who={{ raisedBy: e.raisedBy, assignee: qaAssignee }} checks={qaFiles[e.raisedBy ?? ''] ?? {}} />
                       {isAnswered(e) ? (
                         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--cth-line)' }}>
                           <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--cth-green-text)', marginBottom: 2 }}>{t('kanban.answer')}</div>
