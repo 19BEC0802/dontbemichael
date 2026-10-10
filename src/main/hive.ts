@@ -1269,7 +1269,13 @@ export class HiveManager {
       // A Git Bash the app found is pinned, so Claude Code picks the same one.
       const shell = hookShell();
       if (shell.gitBash) env.CLAUDE_CODE_GIT_BASH_PATH = shell.gitBash;
-      const settingsPath = join(dir, 'settings.json');
+      // Outside the hive (issue 100): the shell sandbox lets an agent write
+      // anywhere in the hive, and these settings set its sandbox at its next
+      // start, so they live in the app's own folder, out of every agent's reach.
+      // The copy an older build left in the agent folder is removed.
+      const settingsPath = this.settingsPathFor(dir);
+      rmSync(join(dir, 'settings.json'), { force: true });
+      mkdirSync(dirname(settingsPath), { recursive: true });
       this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell));
       args.push('--settings', settingsPath);
     }
@@ -1478,6 +1484,12 @@ export class HiveManager {
    * This is what lets auto mode keep the OS sandbox on — the old full-bypass
    * posture existed only because these paths sit outside the project cwd.
    */
+  /** An agent's per-session Claude settings: in `<harnessHome>/agent-settings`,
+   *  outside the hive and so outside every agent's writable sandbox (issue 100). */
+  private settingsPathFor(dir: string): string {
+    return join(dirname(this.root() ?? dirname(dir)), 'agent-settings', `${basename(dir)}.json`);
+  }
+
   private sandboxWritableDirs(meta: AgentMeta, dir: string, root: string, extra?: string[]): string[] {
     const out = [dir, root, ...(extra ?? [])].filter((d) => typeof d === 'string' && d.length > 0);
     return Array.from(new Set(out));
@@ -1555,7 +1567,9 @@ export class HiveManager {
               ...(folders?.sandboxOnly && process.platform !== 'win32' ? { allowUnsandboxedCommands: false } : {}),
               filesystem: {
                 allowWrite: writableDirs,
-                ...(folders?.sandbox.denyWrite.length ? { denyWrite: folders.sandbox.denyWrite } : {}),
+                // The hook program runs outside the sandbox on every tool call,
+                // so no agent's shell may rewrite its folder (issue 100).
+                denyWrite: [dirname(shim), ...(folders?.sandbox.denyWrite ?? [])],
                 ...(folders?.sandbox.denyRead.length ? { denyRead: folders.sandbox.denyRead } : {}),
                 ...(folders?.sandbox.allowRead.length ? { allowRead: folders.sandbox.allowRead } : {})
               }
