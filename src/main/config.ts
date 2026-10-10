@@ -3,7 +3,7 @@ import type { CompanyProfile } from '../shared/companyProfile';
 import type { ScheduledMission, ScheduleRequest } from '../shared/missions';
 import type { ClaudeConnectorsState } from '../shared/claudeConnectors';
 import { app } from 'electron';
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import {
@@ -708,9 +708,26 @@ export function onConfigWritten(listener: ConfigWriteListener): () => void {
   return () => { configWriteListeners.delete(listener); };
 }
 
+/** A config.json that exists but does not parse reads as the defaults, so the
+ *  next save would write over the owner's settings for good (issue 98). Keep a
+ *  copy beside it first, so it can be repaired; the app goes on working. If the
+ *  copy cannot be made, the save fails rather than lose the file. */
+function keepUnreadableConfig(p: string): void {
+  let raw: string;
+  try { raw = readFileSync(p, 'utf8'); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw e;
+  }
+  try { JSON.parse(raw); return; } catch { /* damaged: keep it below */ }
+  const copy = `${p}.damaged-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  copyFileSync(p, copy);
+  console.warn(`[config] config.json could not be read; kept a copy at ${copy} before saving`);
+}
+
 function persistConfig(next: HarnessConfig): HarnessConfig {
   const p = configPath();
   mkdirSync(dirname(p), { recursive: true });
+  keepUnreadableConfig(p);
   writeFileAtomic(p, JSON.stringify(next, null, 2));
   // Saving one setting stores only that setting, so fill the rest back in first:
   // subscribers must see the same complete config a read gives them, never a
