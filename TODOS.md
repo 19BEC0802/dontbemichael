@@ -457,18 +457,6 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 **Priority:** P1
 **Depends on:** None
 
-### Regression test: nothing writes skip-permission flags into ~/.claude/settings.json
-
-**What:** The mandatory regression test from Decision 18.
-
-**Why:** The app writes per-session Claude settings; a regression that touched the owner's global settings would silently change every Claude Code session on the Mac.
-
-**Context:** Point HOME at a temp dir, spawn through `spawnAgentCore` paths, assert `~/.claude/settings.json` is untouched.
-
-**Effort:** S
-**Priority:** P1
-**Depends on:** None
-
 ### Approvals inbox (with the two-zone panel and draft-to-post flow)
 
 **What:** Approval action payloads, an executor, and the approvals UI (Decisions 31 and Ryan's "copy to clipboard and mark posted").
