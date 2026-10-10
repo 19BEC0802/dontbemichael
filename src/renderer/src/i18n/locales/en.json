@@ -277,7 +277,7 @@
     },
     "agentsModels": {
       "defaultModel": "Default agent model",
-      "defaultModelDesc": "Every newly spawned Claude agent ({{godName}} included) starts on this model unless another is picked for that agent. Marked \"· default\" in the model pickers.",
+      "defaultModelDesc": "Every newly spawned Claude team member starts on this model unless another is picked for that member. {{godName}} has a separate model setting. Marked \"· default\" in the model pickers.",
       "advanced": "Advanced",
       "maxTurns": "Max turns per run",
       "unlimited": "Unlimited",

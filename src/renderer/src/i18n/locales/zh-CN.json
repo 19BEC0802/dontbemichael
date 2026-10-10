@@ -277,7 +277,7 @@
     },
     "agentsModels": {
       "defaultModel": "默认智能体模型",
-      "defaultModelDesc": "每个新生成的 Claude 智能体（含 {{godName}}）默认使用此模型，除非按智能体单独选择。在模型选择器中标记为「· 默认」。",
+      "defaultModelDesc": "每个新生成的 Claude 团队成员默认使用此模型，除非为该成员单独选择。{{godName}} 有自己的模型设置。在模型选择器中标记为「· 默认」。",
       "advanced": "高级",
       "maxTurns": "每次运行最大轮数",
       "unlimited": "无限制",
