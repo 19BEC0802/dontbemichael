@@ -85,6 +85,12 @@ npm run dev        # live-reloading Electron build
 > re-run `npm install` (which re-triggers `postinstall`) after confirming your
 > C/C++ toolchain is installed.
 
+On Ubuntu 23.10 and later, `npm run dev` stops at start with a "SUID sandbox
+helper" error: the system blocks the Chromium sandbox for apps without an
+AppArmor profile. For development only, start it with
+`ELECTRON_DISABLE_SANDBOX=1 npm run dev`. The Linux AppImage does not start on
+stock Ubuntu 24.04 yet (#35).
+
 ## Screenshots help
 
 A before and an after make a change quick to review: screenshots, or a short
