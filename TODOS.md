@@ -388,6 +388,18 @@
 **Priority:** P2
 **Depends on:** starter jobs written into the shipped packs.
 
+### Michael turns repeated work into a routine (issue #41)
+
+**What:** When the same kind of work keeps getting done (for example chasing overdue invoices three weeks running), Michael sets it up as a scheduled job for the team member who does it, with its how in that member's Work style.
+
+**Why:** Owners rarely notice which work repeats, so it stays manual. Starter jobs only cover what a business type usually needs, not how this office actually works.
+
+**Context:** The app works out the repeats and Michael decides, so the duty never lives only in his prompt (card-lifecycle rule): group done cards that look like the same job (title, assignee, what was done) and keep each group in front of Michael until he acts or passes. Approval follows the office management rule (owner, 2026-10-10, issue #41): Michael sets up routine jobs himself through the schedule path and adds the how to the Work style; a job that touches money, customers, legal or security goes to Ask me first with the proposed job filled in. Nothing starts without one of those two.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** nothing.
+
 ## Agents and 1:1
 
 ### Show the rewritten instructions before saving a work style
