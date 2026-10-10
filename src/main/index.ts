@@ -668,7 +668,8 @@ const mailAdmin = {
   endGrant: (agentId: string, mailbox: string, reason: string) => mailApprovals.endGrant(agentId, mailbox, reason),
   cancelFor: (agentId: string, mailbox: string, reason: string) => { mailApprovals.cancel({ agentId, mailbox }, reason); },
   sendingChanged: (agentId: string, mailbox: string, address: string, sending: SendingMode, handBack: boolean) => mailApprovals.sendingChanged(agentId, mailbox, address, sending, handBack),
-  present: memberPresent
+  present: memberPresent,
+  canStoreSecrets: () => integrations.canStoreSecrets()
 };
 
 /**

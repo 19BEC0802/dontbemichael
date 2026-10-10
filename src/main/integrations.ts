@@ -129,6 +129,16 @@ function writeSecretBlob(blob: Record<string, string>): void {
   writeFileAtomic(p, JSON.stringify(blob, null, 2), 0o600);
 }
 
+/** Whether the OS can encrypt a secret right now. Asked before a credential is
+ *  tested, so one that could never be stored is refused up front, in words. */
+export function canStoreSecrets(): boolean {
+  try {
+    return safeStorage.isEncryptionAvailable();
+  } catch {
+    return false;
+  }
+}
+
 /** Store a secret ENCRYPTED. Fail closed if OS encryption is unavailable (never
  *  writes plaintext). The plaintext is used only to encrypt and is not retained. */
 export function setSecret(secretRef: string, plaintext: string): { ok: boolean; error?: string } {
