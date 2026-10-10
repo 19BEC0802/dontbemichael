@@ -1320,12 +1320,6 @@ const api = {
   /** Read an agent's current control snapshot. */
   controlSnapshot: (agentId: string): Promise<AgentControlSnapshot | null> =>
     ipcRenderer.invoke('control:snapshot', agentId),
-  /** Subscribe to gate/deny events (a tool was blocked); returns unsubscribe fn. */
-  onApprovalRequest: (cb: (e: { agentId: string; tool?: string; reason?: string }) => void): (() => void) => {
-    const listener = (_e: IpcRendererEvent, payload: { agentId: string; tool?: string; reason?: string }) => cb(payload);
-    ipcRenderer.on('control:approvalRequest', listener);
-    return () => ipcRenderer.removeListener('control:approvalRequest', listener);
-  },
 
   // ─── Task kanban (hive/tasks.json) ───────────────────────────────────────
   /** Atomically append one card against the latest main-process ledger. */

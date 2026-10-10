@@ -475,7 +475,6 @@ export class HookServer {
     if (event === 'PreToolUse' && agentId && this.control) {
       const d = this.control.toolDecision(agentId, p.tool_name ?? '');
       if (d.deny) {
-        this.emitControl(agentId, p.tool_name, d.reason);
         this.emit(agentId, event, p);
         return {
           hookSpecificOutput: {
@@ -502,7 +501,6 @@ export class HookServer {
       const d = connectorAccess(cfg, agentId, p.tool_name ?? '', p.tool_input, agentId ? (this.roleReadsBooks?.(agentId) ?? false) : false);
       if (!d.ok) {
         console.log(`[connectors] refused ${p.tool_name} for ${agentId ?? 'no agent'}: ${d.reason}`);
-        if (agentId) this.emitControl(agentId, p.tool_name, d.reason);
         this.emit(agentId, event, p);
         return mcpDeny(d.reason);
       }
@@ -518,7 +516,6 @@ export class HookServer {
       const cap = quickbooksCapability(cfg.agentCapabilities?.[agentId]?.quickbooks, this.roleReadsBooks?.(agentId) ?? false);
       const d = quickbooksAccess(cfg.quickbooksClaude === true, cap, p.tool_name ?? '');
       if (!d.ok) {
-        this.emitControl(agentId, p.tool_name, d.reason);
         this.emit(agentId, event, p);
         return {
           hookSpecificOutput: {
@@ -547,7 +544,6 @@ export class HookServer {
       const refs = { forward: named(input.forward), attachFrom: Array.isArray(input.attach_from) && input.attach_from.some(named) };
       const d = op ? mailAccess(cfg, agentId, typeof input.mailbox === 'string' ? input.mailbox : undefined, op, proposal, { refs, present: this.memberPresent }) : { ok: false as const, reason: 'Unknown mail tool.' };
       if (!d.ok) {
-        this.emitControl(agentId, p.tool_name, d.reason);
         this.emit(agentId, event, p);
         return mcpDeny(d.reason);
       }
@@ -572,7 +568,6 @@ export class HookServer {
           caseInsensitive: process.platform !== 'linux'
         });
         if (d.deny) {
-          this.emitControl(agentId, p.tool_name, d.reason);
           this.emit(agentId, event, p);
           return {
             hookSpecificOutput: {
@@ -609,7 +604,6 @@ export class HookServer {
     if (event === 'PreToolUse' && agentId && (FOLDER_READ_TOOLS.has(toolName) || FOLDER_WRITE_TOOLS.has(toolName))) {
       const d = this.folderCheck(agentId, toolName, p.tool_input, p.cwd);
       if (d.deny) {
-        this.emitControl(agentId, toolName, d.reason);
         this.emit(agentId, event, p);
         return {
           hookSpecificOutput: {
@@ -909,12 +903,6 @@ export class HookServer {
     } catch {
       return APP_NAME;
     }
-  }
-
-  /** Tell the renderer a tool call was gated/denied (#7C.1) so it can surface it
-   *  (toast / control strip) — distinct from the avatar hook stream. */
-  private emitControl(agentId: string, tool: string | undefined, reason: string | undefined): void {
-    this.getWebContents()?.send('control:approvalRequest', { agentId, tool, reason });
   }
 
   private emit(agentId: string | undefined, event: string, p: HookPayload, blocked = false): void {
