@@ -183,7 +183,7 @@ test('a mailbox with no saved password is refused in plain words and marked need
 
 // ── send failures ───────────────────────────────────────────────────────────
 
-test('send failures: a refusal says "Not sent" and is not remembered; a timeout not found in Sent is not sent', async () => {
+test('send failures: a refusal says "Not sent" and is not remembered; a timeout not found in Sent is held as maybe sent', async () => {
   const { call, state } = setup();
   state.smtpError = Object.assign(new Error('535 Authentication failed'), { code: 'EAUTH' });
   const msg = { mailbox: 'sales', to: 'a@b.com', subject: 's', body: 'b' };
@@ -203,7 +203,8 @@ test('send failures: a refusal says "Not sent" and is not remembered; a timeout 
   state.sentHit = false;
   const r = await call('dwight', 'send', { mailbox: 'sales', to: 'a@b.com', subject: 's', body: 'b' });
   assert.equal(r.status, 502, 'ETIMEDOUT classifies as network');
-  assert.match(r.body.error, /^Not sent\./);
+  // A drop mid-send may have delivered it (issue 101): held, never reported as not sent.
+  assert.match(r.body.error, /^This email may already have gone out/);
   assert.ok(state.queries.some((q) => q.header && q.header['message-id']), 'Sent was checked first');
   }
 });
