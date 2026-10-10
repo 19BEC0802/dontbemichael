@@ -167,6 +167,8 @@ the module by module layout, and the design system.
 
 ## Good first areas
 
+Issues labelled [good first issue](https://github.com/agentvivekkumar/dontbemichael/labels/good%20first%20issue) are small and ready to pick up: comment on one before you start, so two people do not take the same one. Beyond those:
+
 - **More life from real events.** Real Claude Code hook events drive the studio
   (`src/renderer/src/scene/studio/life.tsx`); the synthetic loop in
   `src/renderer/src/store/mockEvents.ts` runs only in demo mode or when no agent
