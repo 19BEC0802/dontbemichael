@@ -708,20 +708,34 @@ export function onConfigWritten(listener: ConfigWriteListener): () => void {
   return () => { configWriteListeners.delete(listener); };
 }
 
+/** The copy kept of a config.json that could not be read, and the bytes it holds. */
+let keptCopy: { path: string; raw: string } | null = null;
+
 /** A config.json that exists but does not parse reads as the defaults, so the
  *  next save would write over the owner's settings for good (issue 98). Keep a
  *  copy beside it first, so it can be repaired; the app goes on working. If the
- *  copy cannot be made, the save fails rather than lose the file. */
-function keepUnreadableConfig(p: string): void {
+ *  copy cannot be made, the save fails rather than lose the file. Returns the
+ *  copy's path, or null when the file is missing or readable. */
+function keepUnreadableConfig(p: string): string | null {
   let raw: string;
   try { raw = readFileSync(p, 'utf8'); } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return;
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw e;
   }
-  try { JSON.parse(raw); return; } catch { /* damaged: keep it below */ }
+  try { JSON.parse(raw); return null; } catch { /* damaged: keep it below */ }
+  if (keptCopy?.raw === raw) return keptCopy.path;
   const copy = `${p}.damaged-${new Date().toISOString().replace(/[:.]/g, '-')}`;
   copyFileSync(p, copy);
-  console.warn(`[config] config.json could not be read; kept a copy at ${copy} before saving`);
+  keptCopy = { path: copy, raw };
+  console.warn(`[config] config.json could not be read; kept a copy at ${copy}`);
+  return copy;
+}
+
+/** Where the copy of an unreadable config.json is kept, making it now if need
+ *  be, so setup can tell the owner why it starts again (issue 98). Null when
+ *  the file is missing or readable, or the copy could not be made. */
+export function damagedConfigCopy(): string | null {
+  try { return keepUnreadableConfig(configPath()); } catch { return null; }
 }
 
 function persistConfig(next: HarnessConfig): HarnessConfig {

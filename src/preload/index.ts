@@ -785,6 +785,9 @@ const api = {
   // ─── Config ──────────────────────────────────────────────────────────────
   getConfig: (): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:get'),
+  /** Where the copy of an unreadable settings file is kept, or null (issue 98). */
+  damagedConfigCopy: (): Promise<string | null> =>
+    ipcRenderer.invoke('config:damagedCopy'),
   updateConfig: (patch: Partial<HarnessConfig>): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:update', patch),
   /** Set or clear one per-agent token ceiling against main's latest config. */

@@ -130,6 +130,15 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
   // Step 2's legal name starts as the step 1 business name, and follows a
   // rename on step 1 until the owner types a legal name of their own.
   const legalNameFilled = useRef<string | undefined>(undefined);
+  // A settings file that could not be read is why setup starts again: say so,
+  // and where its copy is kept (issue 98).
+  const [damagedCopy, setDamagedCopy] = useState<string | null>(null);
+  useEffect(() => {
+    if (preview) return;
+    let alive = true;
+    void window.cth.damagedConfigCopy?.().then((p) => { if (alive) setDamagedCopy(p); }).catch(() => {});
+    return () => { alive = false; };
+  }, [preview]);
   useEffect(() => {
     if (step !== 'details') return;
     const next = prefillLegalName(profile, businessName, legalNameFilled.current);
@@ -563,6 +572,17 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
             </h1>
           </div>
           <div style={{ padding: '14px 22px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {damagedCopy && (step === 'business' || step === 'resume') && (
+              <div role="status" data-damaged-config style={{
+                borderRadius: 'var(--cth-r-md)', padding: '8px 10px',
+                background: 'var(--cth-amber-soft)', color: 'var(--cth-amber-text)',
+                fontSize: 13, lineHeight: '19px'
+              }}>
+                {t('onboarding.damagedConfig')}{' '}
+                <span dir="ltr" style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{damagedCopy}</span>
+              </div>
+            )}
 
             {step === 'resume' && found && (
               <>
