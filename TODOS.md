@@ -51,17 +51,6 @@
 **Effort:** S
 **Priority:** P1
 
-### Log every mail call
-
-**What:** One broker log line per md-mail call: agent, mailbox, operation, result and duration.
-
-**Why:** Plan Section 8. Today there is no record of which agent used which mailbox. `MailDeps.log` exists in `src/main/mail.ts` and is never called.
-
-**Context:** Deferred from plan: docs/designs/multi-mailbox.md
-
-**Effort:** S
-**Priority:** P1
-
 ### Say "cannot check email" beside a schedule
 
 **What:** When a schedule's agent has email off, show a short note on that schedule ("Pam cannot check email") in the On a schedule section and the office schedule.
@@ -84,15 +73,6 @@
 **Effort:** S
 **Priority:** P1
 
-### Note the Microsoft plan change in the office packs doc
-
-**What:** Update Decision 8 in `docs/designs/business-mode-office-packs.md` to say MB-0 replaced the Microsoft app id in builds.
-
-**Context:** Deferred from plan: docs/designs/multi-mailbox.md
-
-**Effort:** XS
-**Priority:** P1
-
 ### Read one email without downloading its attachments
 
 **What:** `MailService.read` fetches the whole message, attachments included, before trimming the text to 50K. Fetch the body structure plus the text part only, and take attachment names and sizes from the structure.
@@ -109,26 +89,7 @@
 **Effort:** S
 **Priority:** P2
 
-### Close a stale "needs you" card after an edit race
-
-**What:** In `mail:save` (`src/main/index.ts`), close the mailbox's Ask me card whenever a fix succeeds, not only when the mailbox was needs-attention before the login test. A failure during the test can open the card and leave it open.
-
-**Effort:** XS
-**Priority:** P3
-
 ## Mail approvals and Michael replies (deferred from ship of feat/mail-approvals-michael-replies, 2026-10-07)
-
-### Never send a plain email twice across a restart
-
-**What:** A small saved send journal, written before each plain send goes to the mail server and checked before any send, so a retry after a crash returns the first result.
-
-**Why:** Codex review (pass 2, P1). Plain Can send emails are kept from going out twice only in memory (MailService.send's send once map and in-flight map), so if the app stops right after the server accepts an email, the agent's retry sends a second copy with a new Message-ID. Approved proposals already avoid this with the saved `sending` state.
-
-**Context:** Owner decision D11 in the ship: the size cap went in, this was deferred. Start in `src/main/mail.ts` (`send`, `sendOnce`); key on the same hash `send` already computes; keep it app private like mail-proposals.json.
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** None
 
 ### Keep the approvals file in memory
 
@@ -187,15 +148,6 @@
 **Priority:** P4
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
-
-### Sweep leftover secrets temp files
-
-**What:** On first secret-store access, remove `integration-secrets.json.*.tmp` older than a minute.
-
-**Why:** A crash inside the write window leaves a 0600 ciphertext temp file that nothing reads.
-
-**Effort:** S
-**Priority:** P4
 
 ### Say when deleting a secret did nothing
 
@@ -316,15 +268,6 @@
 **What:** Track detail per tool call so one call's PostToolUse does not clear another's.
 
 **Why:** With parallel calls, the row goes blank while a call is still running.
-
-**Effort:** S
-**Priority:** P3
-
-### Visible focus when the list takes focus
-
-**What:** The row list's focus fallback (`tabIndex={-1}`, no outline) is invisible, including after Michael's Remind.
-
-**Why:** Keyboard users lose their place after an action.
 
 **Effort:** S
 **Priority:** P3
@@ -623,18 +566,6 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 **Depends on:** None
 
 ## Documents and security (review items skipped for v0.0.1)
-
-### Refuse a "move" onto a folder that already holds an office, in main
-
-**What:** `config:changeHome` in `src/main/index.ts` refuses mode `move` when the target has `hive/registry.json`.
-
-**Why:** Only the Settings screen prevents copying one office over another today. Owner skipped this at ship review 2026-09-24.
-
-**Context:** Reuse `homeFolderStatus` from `src/main/homeFolder.ts`.
-
-**Effort:** S
-**Priority:** P1
-**Depends on:** None
 
 ### Parse documents off the main thread
 

@@ -16,6 +16,7 @@ import {
 import { defaultMcpDefaults } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { expandTilde, normalizeHiveHome } from './fs';
+import { writeFileAtomic } from './atomicFile';
 import type { IntegrationRecord } from '../shared/integrations';
 import {
   DEFAULT_CONTEXT_TRIGGER,
@@ -227,6 +228,9 @@ export interface HarnessConfig {
   businessTeam?: Array<{ agentId: string; folder: string }>;
   /** Set once the onboarding team has been started, so it is started once. */
   businessTeamStarted?: boolean;
+  /** Team members that failed their first start, tried again (and only they)
+   *  on each later launch until they start. */
+  businessTeamRetry?: string[];
   /** Set once existing team members got today's Role description and Work
    *  style (the one-time rewrite, 2026-09-25). */
   instructionsRewritten?: boolean;
@@ -707,7 +711,7 @@ export function onConfigWritten(listener: ConfigWriteListener): () => void {
 function persistConfig(next: HarnessConfig): HarnessConfig {
   const p = configPath();
   mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, JSON.stringify(next, null, 2), 'utf8');
+  writeFileAtomic(p, JSON.stringify(next, null, 2));
   // Saving one setting stores only that setting, so fill the rest back in first:
   // subscribers must see the same complete config a read gives them, never a
   // half-filled one. Skip the migration — it saves in its own right, and has
