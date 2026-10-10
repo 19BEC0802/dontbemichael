@@ -1511,6 +1511,7 @@
     "created": "أُنشئت",
     "description": "الوصف",
     "notes": "ملاحظات",
+    "result": "النتيجة",
     "question": "سؤال",
     "answer": "إجابة",
     "assignHint": "يرسلها إلى {{godName}} لتوزيعها",

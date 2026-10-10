@@ -13,7 +13,7 @@ import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 export { openQuestion, openQuestions, waitsOnHuman, parseTasks, type HiveTask, type HumanQA } from './hiveTasks';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
-import { waitsOnHuman, type HiveTask, type TaskStatus } from './hiveTasks';
+import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus } from './hiveTasks';
 import { FileText, useAskFileChecks } from './FileChip';
 import { blockedWithNothingAsked, michaelCardState, type WorkHours } from '@shared/ownerRequests';
 import { isAnswered, isWithdrawn } from '@shared/askMeRouting';
@@ -242,6 +242,17 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
             {assigneeName}
           </span>
         )}
+        {/* What came of it, first line of Michael's result (issue 51); a card
+            the owner closed says so below instead. */}
+        {done && task.closedBy !== 'owner' && resultHeadline(task.result) && (
+          <span data-result title={resultHeadline(task.result)} style={{
+            fontSize: 11, lineHeight: '15px', color: 'var(--cth-ink-3)',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+          }}>
+            <span aria-hidden style={{ color: 'var(--cth-green-text)', fontWeight: 600, marginInlineEnd: 4 }}>✓</span>
+            {resultHeadline(task.result)}
+          </span>
+        )}
         {task.status === 'waiting' && (
           <span data-waiting-on title={t('kanban.waitingOnTitle', { godName })} style={{
             alignSelf: 'flex-start', maxWidth: '100%', display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: 999,
@@ -407,6 +418,20 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
               </span>
             </div>
           </div>
+
+          {/* What came of a Done card, in Michael's words, first (issue 51):
+              never checked or invented, and nothing when he wrote none. */}
+          {task.status === 'done' && task.result && (
+            <div data-result>{label(t('kanban.result'))}
+              <div dir={rtl ? 'auto' : undefined} style={{
+                padding: '10px 12px', borderRadius: 'var(--cth-r-lg)', background: 'var(--cth-green-soft)',
+                boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--cth-green) 30%, transparent)',
+                fontSize: 12.5, lineHeight: '18px', color: 'var(--cth-ink)'
+              }}>
+                <FileText source={task.result} who={{ assignee: qaAssignee }} />
+              </div>
+            </div>
+          )}
 
           {/* What the card is for, and the notes kept on it, line by line;
               nothing for either when the card has none. */}

@@ -1511,6 +1511,7 @@
     "created": "Created",
     "description": "Description",
     "notes": "Notes",
+    "result": "Result",
     "question": "Question",
     "answer": "Answer",
     "assignHint": "Sends it to {{godName}} to hand out",

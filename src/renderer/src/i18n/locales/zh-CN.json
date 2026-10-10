@@ -1511,6 +1511,7 @@
     "created": "创建时间",
     "description": "描述",
     "notes": "备注",
+    "result": "结果",
     "question": "问题",
     "answer": "回答",
     "assignHint": "交给 {{godName}} 分派",
