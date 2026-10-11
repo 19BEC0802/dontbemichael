@@ -23,7 +23,7 @@ require.cache[electron] = {
   exports: { Notification: class { show() {} static isSupported() { return false; } } }
 };
 
-const { OfficeBreak, resetFromRateLimits, RESET_GRACE_MS, RETRY_MS, CHECK_TIMEOUT_MS, SETTLE_MS } = loadTs('src/main/officeBreak.ts');
+const { OfficeBreak, resetFromRateLimits, RESET_GRACE_MS, RETRY_MS, CHECK_TIMEOUT_MS } = loadTs('src/main/officeBreak.ts');
 const { heldByBreak } = loadTs('src/shared/officeBreak.ts');
 const { HiveManager } = loadTs('src/main/hive.ts');
 const { HookServer } = loadTs('src/main/hooks.ts');
@@ -75,8 +75,9 @@ test('a break checks after the reset and ends on the first finished turn', () =>
   assert.equal(b.limitReached('god'), 'held', 'a second member hitting the limit is the same break');
   assert.deepEqual(b.current().cutOff, ['sales', 'god']);
 
-  // A reply already on its way when the limit was reached does not end it.
-  c.t += SETTLE_MS - 1;
+  // A reply already on its way when the limit was reached does not end it,
+  // however late it lands.
+  c.t += 10 * 60_000;
   assert.equal(b.turnFinished('books'), null);
   assert.equal(b.tick(), null, 'nothing before the reset');
 
@@ -97,6 +98,37 @@ test('a break checks after the reset and ends on the first finished turn', () =>
   assert.equal(b.view(), null);
   assert.equal(box.state, null, 'the saved break is cleared');
   assert.deepEqual(ended.cutOff, [], 'the member whose turn ended it is not told to carry on');
+});
+
+test('while waiting, only a turn asked for after the limit ends the break', () => {
+  // Value: protects=a reply in flight at the limit does not reopen delivery into dead sessions; fails_when=any late Stop ends the break, or a prompted turn that goes through does not; why_new=adversarial review (issue 124); seam=none
+  const c = clock();
+  const b = new OfficeBreak(memoryStore().store, c.now);
+  b.limitReached('sales');
+  c.t += 5 * 60_000;
+  assert.equal(b.turnFinished('books'), null, 'Books was mid reply when the limit was reached');
+  b.promptSubmitted('books');
+  assert.equal(b.limitReached('books'), 'held', 'its next request hit the limit too');
+  assert.equal(b.turnFinished('books'), null, 'so its prompt no longer counts');
+  b.promptSubmitted('books');
+  const ended = b.turnFinished('books');
+  assert.ok(ended, 'the owner typed to Books and its turn went through: the plan answers');
+  assert.deepEqual(ended.cutOff, ['sales']);
+  assert.equal(b.view(), null);
+});
+
+test('a break that started before any status line takes the reset time when one arrives', () => {
+  // Value: protects=the office checks at the real reset, not 15 minutes of guessing; fails_when=a late reading is ignored, or a known time is replaced; why_new=adversarial review (issue 124); seam=none
+  const c = clock();
+  const b = new OfficeBreak(memoryStore().store, c.now);
+  b.limitReached('god');
+  assert.equal(b.current().due, T0 + RETRY_MS);
+  const reset = T0 + 2 * 60_000;
+  assert.equal(b.noteRateLimits({ five_hour: { used_percentage: 100, resets_at: reset / 1000 } }), true);
+  assert.deepEqual(b.view(), { until: reset, checking: false });
+  assert.equal(b.current().due, reset + RESET_GRACE_MS);
+  assert.equal(b.noteRateLimits({ five_hour: { used_percentage: 100, resets_at: (reset + HOUR) / 1000 } }), false, 'a known time is not replaced by a reading');
+  assert.equal(new OfficeBreak(memoryStore().store, c.now).noteRateLimits({ five_hour: { used_percentage: 1, resets_at: reset / 1000 } }), false, 'no break, nothing to move');
 });
 
 test('a check that hits the limit again waits again; with no reset time it retries', () => {
@@ -190,6 +222,8 @@ test('during a break nothing types into a Claude terminal, and schedules still r
   assert.match(index, /if \(heldByBreak\(officeBreak\.view\(\), a\?\.provider\)\) continue;/);
   assert.match(index, /persist\.open\(\); \} catch[^\n]*\n[^\n]*\n\s*armOfficeBreak\(\);/);
   assert.match(read('src/renderer/src/hooks/useHive.ts'), /if \(heldByBreak\(getOfficeBreak\(\), target\.provider\) && !next\.manual\) return \{ sent: false \};/);
+  // After a restart, the queue holds Claude terminals until main first says whether a saved break is on.
+  assert.match(read('src/renderer/src/components/OfficeBreakNotice.tsx'), /return known \? view : \{ until: null, checking: false \};/);
   // Shown at the top of Needs you and in the top bar, never in the count.
   assert.match(read('src/renderer/src/components/AskMeTab.tsx'), /<OfficeBreakCard \/>\s*<EngineSetupCard/);
   assert.match(read('src/renderer/src/shell/TopBar.tsx'), /<CliUpdateBadge \/>\s*<OfficeBreakChip \/>/);

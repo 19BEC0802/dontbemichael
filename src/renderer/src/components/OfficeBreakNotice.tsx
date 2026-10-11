@@ -12,11 +12,14 @@ import { useStore } from '@/store/store';
 import { InfoTip } from './InfoTip';
 
 let view: OfficeBreakView | null = null;
+/** Main has answered once (or pushed): until then delivery assumes a break. */
+let known = false;
 let started = false;
 const listeners = new Set<() => void>();
 
 function setView(next: OfficeBreakView | null): void {
   view = next ?? null;
+  known = true;
   for (const l of listeners) l();
 }
 
@@ -24,7 +27,8 @@ function start(): void {
   if (started) return;
   started = true;
   window.cth.onOfficeBreak?.(setView);
-  void window.cth.officeBreakView?.().then((v) => setView(v ?? null)).catch(() => { /* the push still arrives */ });
+  if (!window.cth.officeBreakView) { known = true; return; }
+  void window.cth.officeBreakView().then((v) => { if (!known) setView(v ?? null); }).catch(() => { known = true; });
 }
 
 function subscribe(listener: () => void): () => void {
@@ -33,10 +37,12 @@ function subscribe(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
-/** The break right now, outside React (the delivery queue reads it). */
+/** The break right now, outside React (the delivery queue reads it). Until
+ *  main first answers, a break saved before a restart may still be on, so the
+ *  queue holds Claude terminals for that moment rather than type into them. */
 export function getOfficeBreak(): OfficeBreakView | null {
   start();
-  return view;
+  return known ? view : { until: null, checking: false };
 }
 
 export function useOfficeBreak(): OfficeBreakView | null {

@@ -1815,7 +1815,10 @@ function cutOffNames(ids: string[]): string {
 
 function onPlanSignal(signal: PlanSignal): void {
   if (!onClaudePlan(signal.agentId)) return;
-  if (signal.kind === 'limits') { officeBreak.noteRateLimits(signal.rateLimits); return; }
+  if (signal.kind === 'limits') {
+    if (officeBreak.noteRateLimits(signal.rateLimits)) { armOfficeBreak(); publishOfficeBreak(); }
+    return;
+  }
   if (signal.kind === 'prompt') { officeBreak.promptSubmitted(signal.agentId); return; }
   if (signal.kind === 'turn') {
     const ended = officeBreak.turnFinished(signal.agentId);
