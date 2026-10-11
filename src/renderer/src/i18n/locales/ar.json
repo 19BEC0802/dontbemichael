@@ -1487,6 +1487,7 @@
     "colWaiting": "بانتظار",
     "waitingOn": "بانتظار {{who}}",
     "waitingOnUnknown": "بانتظار شخص ما",
+    "nextAt": "التالي: {{when}}",
     "waitingOnTitle": "متوقفة على شخص من خارج المكتب أو زميل. يعيدها {{godName}} إلى قيد العمل عندما يرد.",
     "colBlocked": "معطَّل",
     "colDone": "منجَز",

@@ -71,7 +71,8 @@ test('written calmly: no dashes, no shouting, no dates that would break the prom
 test('a card never waits on its own person; its own step at a set time is todo', () => {
   // Value: protects=the board says who else holds a card, and parked own work sits in To do with the time; fails_when=rule 8 or the board wording drops it; why_new=waiting had no word for the card's own person; seam=none
   assert.match(HOUSE_RULES, /8\. On the task board, "waiting" names who else a card waits on, never the card's own person\./);
-  assert.match(HOUSE_RULES, /the card is "todo", with that time in its notes in the owner's local time\./);
+  assert.match(HOUSE_RULES, /the card is "todo", with "nextAt" set to that time as an ISO date and time with its offset; the app shows it in the owner's local time\./);
+  assert.match(HOUSE_RULES, /Cards carry no running "notes": what you did is already kept in your own conversation and the office log, and what you keep for good goes in your memory\./);
   // 2026-10-11: Erin read rule 8 as covering her scheduled inbox checks and
   // reopened her done card; routines live in Schedules and done stays done.
   assert.match(HOUSE_RULES, /When a card's one off next step is its own person's at a set time/);

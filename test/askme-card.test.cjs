@@ -79,18 +79,27 @@ test('an Ask me card title drops opaque ids and bracketed metadata', () => {
 
 /**
  * Task detail (owner, 2026-10-01): the id and close sit on one row with the
- * title below at full width, and the card's notes show (agents write "notes";
- * the dialog read only "description", so it was empty on every card).
+ * title below at full width. Owner, 2026-10-11: cards carry no running notes
+ * (agents used them as diaries of up to 8,700 characters); an agent's activity
+ * lives in its conversation and the office log, and a To do card's next step
+ * time shows as "Next: ..." in local time.
  */
-test('task detail: title under the id row, and the card\'s notes show', () => {
+test('task detail: title under the id row, no running notes, the next step time shows', () => {
+  // Value: protects=cards read as where the work stands, not a diary; fails_when=notes come back on the card or in the prompts, or nextAt stops showing; why_new=owner, 2026-10-11; seam=source pins
   const src = read('src/renderer/src/components/TasksKanban.tsx');
-  // Both fields: the app's "description" and the agents' "notes" (the parser
-  // lives in hiveTasks.ts, shared with the Needs you feed).
-  assert.match(read('src/renderer/src/components/hiveTasks.ts'), /description: typeof t\.description === 'string' \? t\.description : undefined,\n\s*notes: typeof t\.notes === 'string' \? t\.notes : undefined,/);
-  assert.match(src, /\[\['description', task\.description\], \['notes', task\.notes\]\]/);
+  const model = read('src/renderer/src/components/hiveTasks.ts');
+  assert.doesNotMatch(model, /notes: typeof t\.notes/, 'the parser no longer reads notes');
+  assert.match(model, /nextAt: typeof t\.nextAt === 'string' && !Number\.isNaN\(Date\.parse\(t\.nextAt\)\) \? t\.nextAt : undefined,/);
+  assert.doesNotMatch(src, /task\.notes/);
+  assert.equal((src.match(/t\('kanban\.nextAt', \{ when: nextAtLabel\(task\.nextAt\) \}\)/g) || []).length, 2, 'on the card and in the detail');
+  assert.doesNotMatch(read('src/renderer/src/components/TaskDetailOverlay.tsx'), /task\.notes/);
   assert.doesNotMatch(src, /noDescription/);
   assert.match(src, /<div style=\{\{ marginTop: 10, fontSize: 16, fontWeight: 600[^}]*\}\}>\{askTitle\(task\.title\)\}<\/div>/);
-  assert.match(read('src/main/hive.ts'), /Keep the card\\'s "notes" to what the work is and where it stands/);
+  const hive = read('src/main/hive.ts');
+  assert.doesNotMatch(hive, /Keep the card\\?'s "notes"/);
+  assert.equal((hive.match(/Write no running \\?"notes\\?" on a card \(house rule 8\)/g) || []).length, 2, 'Michael\'s business and legacy prompts');
+  assert.doesNotMatch(read('src/main/closingTime.ts'), /says where the work stands and the next step/);
+  for (const loc of ['en', 'zh-CN', 'ar']) assert.match(JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`)).kanban.nextAt, /\{\{when\}\}/, loc);
 });
 
 /** The answer box grows with the text (owner, 2026-10-01). */

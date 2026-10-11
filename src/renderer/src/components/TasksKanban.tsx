@@ -13,7 +13,7 @@ import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 export { openQuestion, openQuestions, waitsOnHuman, parseTasks, type HiveTask, type HumanQA } from './hiveTasks';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
-import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus } from './hiveTasks';
+import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus, nextAtLabel } from './hiveTasks';
 import { FileText, useAskFileChecks } from './FileChip';
 import { blockedWithNothingAsked, michaelCardState, type WorkHours } from '@shared/ownerRequests';
 import { isAnswered, isWithdrawn } from '@shared/askMeRouting';
@@ -242,6 +242,10 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
             {assigneeName}
           </span>
         )}
+        {/* When its one off next step is due, in the owner's local time (house rule 8). */}
+        {!done && nextAtLabel(task.nextAt) && (
+          <span data-next-at style={{ fontSize: 11, fontWeight: 500, color: 'var(--cth-ink-2)' }}>{t('kanban.nextAt', { when: nextAtLabel(task.nextAt) })}</span>
+        )}
         {/* What came of it, first line of Michael's result (issue 51); a card
             the owner closed says so below instead. */}
         {done && task.closedBy !== 'owner' && resultHeadline(task.result) && (
@@ -433,15 +437,19 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
             </div>
           )}
 
-          {/* What the card is for, and the notes kept on it, line by line;
-              nothing for either when the card has none. */}
-          {([['description', task.description], ['notes', task.notes]] as const).map(([key, text]) => text?.trim() ? (
-            <div key={key}>{label(t(`kanban.${key}`))}
+          {/* What the card is for, when a request gave it one. No running notes:
+              an agent's activity lives in its conversation and the office log
+              (owner, 2026-10-11). */}
+          {task.description?.trim() && (
+            <div>{label(t('kanban.description'))}
               <div style={{ fontSize: 12.5, lineHeight: '19px', color: 'var(--cth-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} dir={rtl ? 'auto' : undefined}>
-                {text.trim()}
+                {task.description.trim()}
               </div>
             </div>
-          ) : null)}
+          )}
+          {task.status !== 'done' && nextAtLabel(task.nextAt) && (
+            <div data-next-at style={{ fontSize: 12.5, color: 'var(--cth-ink)' }}>{t('kanban.nextAt', { when: nextAtLabel(task.nextAt) })}</div>
+          )}
 
           {/* The owner Q&A trail: every decision documented on the card. */}
           {(task.humanQA?.length ?? 0) > 0 && (

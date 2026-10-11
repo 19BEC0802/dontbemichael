@@ -1487,6 +1487,7 @@
     "colWaiting": "Waiting",
     "waitingOn": "Waiting on {{who}}",
     "waitingOnUnknown": "Waiting on someone",
+    "nextAt": "Next: {{when}}",
     "waitingOnTitle": "Held on someone outside the office or a teammate. {{godName}} moves it back to Doing when they answer.",
     "colBlocked": "Blocked",
     "colDone": "Done",

@@ -29,8 +29,10 @@ export interface HiveTask {
   id: string;
   title: string;
   description?: string;
-  /** The running notes agents keep on a card (Michael is told the owner reads them). */
-  notes?: string;
+  /** When a To do card's one off next step is due (ISO). Cards carry no running
+   *  notes: each agent's conversation and the office log keep its activity
+   *  (owner, 2026-10-11). */
+  nextAt?: string;
   assignee?: string;
   status: 'todo' | 'doing' | 'waiting' | 'blocked' | 'done';
   /** Who a Waiting card waits on, in a few words (Michael writes it). */
@@ -96,11 +98,11 @@ export function parseTasks(raw: unknown): HiveTask[] {
         ? t.id
         : stableId(`${typeof t.title === 'string' ? t.title : ''}|${typeof t.createdAt === 'string' ? t.createdAt : ''}|${i}`),
       title: typeof t.title === 'string' ? t.title : '(untitled)',
-      // The app writes "description" (a Slack or webhook request); agents keep
-      // their running "notes" (owner, 2026-10-01: the detail showed neither on
-      // most cards). The detail shows both.
+      // The app writes "description" (a Slack or webhook request). Agents' old
+      // running "notes" are left in the file but not read: an agent's activity
+      // lives in its conversation and the office log (owner, 2026-10-11).
       description: typeof t.description === 'string' ? t.description : undefined,
-      notes: typeof t.notes === 'string' ? t.notes : undefined,
+      nextAt: typeof t.nextAt === 'string' && !Number.isNaN(Date.parse(t.nextAt)) ? t.nextAt : undefined,
       assignee: typeof t.assignee === 'string' ? t.assignee : undefined,
       status: (['todo', 'doing', 'waiting', 'blocked', 'done'] as const).includes(t.status as TaskStatus)
         ? (t.status as TaskStatus) : 'todo',
@@ -133,6 +135,14 @@ export function parseTasks(raw: unknown): HiveTask[] {
       closedReason: typeof t.closedReason === 'string' ? t.closedReason : undefined,
       result: typeof t.result === 'string' && t.result.trim() ? t.result : undefined
     }));
+}
+
+/** A card's next step time in the viewer's local time, like "Mon, 12 Oct, 8:00 AM". */
+export function nextAtLabel(nextAt: string | undefined): string | undefined {
+  if (!nextAt) return undefined;
+  const d = new Date(nextAt);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
 /** The first line of a Done card's result, as plain text for the board: its

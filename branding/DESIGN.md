@@ -860,9 +860,11 @@ Centered overlay over the stage (never over the right column), 528 px wide, `r-2
   current state, since only Michael sets them; a Waiting card reads "Waiting on {who}"
   under it, `amber` text), ASSIGNEE (person chip), PRIORITY (5 dots,
   filled `ink`), CREATED (mono).
-- NOTES: the card's `description`, else the `notes` agents keep on it (owner, 2026-10-01:
-  the dialog read only `description`, so it was empty on every card); Michael is told to
-  keep them to what the work is and where it stands. No section when a card has none.
+- DESCRIPTION: the card's `description` when a request gave it one; no section otherwise.
+  Cards carry no running notes (owner, 2026-10-11: agents used them as diaries; an agent's
+  activity lives in its conversation and the office log). A To do card with a one off
+  step at a set time shows "Next: Mon, 12 Oct, 8:00 AM" (`nextAt`, local time), on the
+  card under the assignee and in the detail.
   QUESTIONS (the Q and A trail; an open question sits
   in a coral soft box with a "Waiting for you" pill; answered ones are plain), DEPENDENCIES
   (rows with a link icon, mono id, title, "waits on this").
