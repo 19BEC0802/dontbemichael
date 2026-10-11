@@ -428,6 +428,15 @@ export interface SpawnInjection {
 
 const HOP_CAP = 12;
 
+/** A id an agent put in its own outbox is UNTRUSTED: it becomes a file name in
+ *  `deliver()` and is typed into another agent's terminal by the wake nudge, so a
+ *  value holding `/`, `\`, `..`, control characters or newlines could escape the
+ *  hive or inject keystrokes. Only accept the shape the harness itself mints
+ *  (`stamp() + '-' + shortRand()`); anything else gets a fresh generated id. */
+function isSafeMessageId(id: unknown): id is string {
+  return typeof id === 'string' && /^[\w.-]+$/.test(id) && id !== '.' && id !== '..';
+}
+
 /** Filesystem- and sort-safe timestamp, e.g. 2026-05-30T14-03-11-123Z. */
 function stamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -1961,7 +1970,7 @@ export class HiveManager {
   private normalize(partial: Partial<HiveMessage>, from: string): HiveMessage {
     const act = (partial.act ?? 'inform') as MessageAct;
     return {
-      id: partial.id ?? `${stamp()}-${shortRand()}`,
+      id: isSafeMessageId(partial.id) ? partial.id : `${stamp()}-${shortRand()}`,
       conversation: partial.conversation ?? `conv-${shortRand()}`,
       in_reply_to: partial.in_reply_to ?? null,
       from: partial.from ?? from,
@@ -1985,6 +1994,10 @@ export class HiveManager {
    *  log the drop rather than let the message vanish. */
   private deliver(msg: HiveMessage, toId: string): boolean {
     if (!this.root()) return false;
+    // Both fields flow into the file path — refuse anything that isn't a plain
+    // id rather than let a crafted `..` write outside the hive (defense in depth:
+    // normalize() already sanitizes, but deliver() is also called directly).
+    if (!isSafeMessageId(msg.id) || !isSafeMessageId(toId)) return false;
     const inbox = join(this.agentDir(toId), 'inbox');
     if (!existsSync(inbox)) return false; // unknown recipient — the caller reports it
     this.atomicWriteJson(join(inbox, `${msg.id}.json`), msg);
