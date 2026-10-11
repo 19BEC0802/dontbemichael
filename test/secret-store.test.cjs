@@ -37,7 +37,7 @@ require.cache[electron] = {
     }
   }
 };
-const { setSecret, getSecret, hasSecret, deleteSecret } = loadTs('src/main/integrations.ts');
+const { setSecret, getSecret, hasSecret, deleteSecret, canStoreSecrets } = loadTs('src/main/integrations.ts');
 const { writeFileAtomic, sweepStaleTemps } = loadTs('src/main/atomicFile.ts');
 const scratch = [userData];
 test.after(() => { for (const d of scratch) fs.rmSync(d, { recursive: true, force: true }); });
@@ -90,6 +90,16 @@ test('with OS encryption off, nothing is written in plaintext and nothing is los
     encryptionOn = true;
   }
   assert.equal(fs.readFileSync(secretsFile, 'utf8'), before, 'the file is untouched');
+});
+
+test('canStoreSecrets follows OS encryption, so a mailbox is refused before its login test', () => {
+  assert.equal(canStoreSecrets(), true);
+  encryptionOn = false;
+  try {
+    assert.equal(canStoreSecrets(), false);
+  } finally {
+    encryptionOn = true;
+  }
 });
 
 test('a write that fails before the rename leaves the old file intact and no temp file', () => {

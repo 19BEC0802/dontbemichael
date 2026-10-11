@@ -23,6 +23,7 @@ import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { simpleParser } from 'mailparser';
 import { writeFileAtomic } from './atomicFile';
+import { SECRETS_FILE_UNREADABLE } from '../shared/secretStore';
 import {
   MAIL_TOOL_OPS,
   agentMailboxes,
@@ -1204,6 +1205,30 @@ export interface MailAdminDeps {
   sendingChanged?(agentId: string, mailbox: string, address: string, sending: SendingMode, handBack: boolean): void;
   /** Whether a team member is on the roster, for a grant's pause. Absent: assumed. */
   present?(agentId: string): boolean;
+  /** Whether this computer can encrypt a password right now. Absent: assumed. */
+  canStoreSecrets?(): boolean;
+}
+
+/** What the owner reads when the password could not be kept encrypted on this
+ *  computer: the OS secret store (Keychain, DPAPI, or a Linux keyring) is
+ *  unavailable or refused. Says what to do, never the raw error. */
+/** Why a password that passed the encryption check was still not saved: the
+ *  keychain went away meanwhile, or the secrets file is damaged (its own plain
+ *  words), or anything else. Never the raw error, which goes to the log. */
+function storeFailedReason(admin: MailAdminDeps, error: string | undefined): string {
+  if (admin.canStoreSecrets && !admin.canStoreSecrets()) return cannotStoreReason();
+  if (error === SECRETS_FILE_UNREADABLE) return error;
+  return "Couldn't store the password securely on this computer, so nothing was saved. Try again.";
+}
+
+export function cannotStoreReason(platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'darwin') {
+    return 'This Mac could not store the password safely in its keychain, so nothing was saved. If macOS asks whether this app may use your keychain, choose Allow. Then try again, and restart the Mac if it keeps happening.';
+  }
+  if (platform === 'linux') {
+    return 'This computer could not store the password safely because no keyring is unlocked, so nothing was saved. Set up a keyring such as GNOME Keyring or KWallet, unlock it, then try again.';
+  }
+  return 'This computer could not store the password safely, so nothing was saved. Restart the computer, then try again.';
 }
 
 export interface AddMailboxInput {
@@ -1234,13 +1259,19 @@ export async function saveMailbox(svc: MailService, admin: MailAdminDeps, preset
   if (existing.some((m) => m.address.toLowerCase() === address.toLowerCase() && m.id !== fixing?.id)) {
     return { ok: false, kind: 'invalid', reason: `${address} is already connected.` };
   }
+  // A password this computer cannot encrypt is never saved, so say so before
+  // logging in to the provider, not after a test that worked.
+  if (admin.canStoreSecrets && !admin.canStoreSecrets()) return { ok: false, kind: 'unsupported', reason: cannotStoreReason() };
   const password = input.password.replace(/\s+/g, '');
   const tested = await svc.test({ address, imap, smtp }, password);
   if (!tested.ok) return { ok: false, kind: tested.kind, reason: tested.reason };
 
   const id = fixing ? fixing.id : mailboxIdFor(address, existing.map((m) => m.id));
   const stored = admin.setSecret(secretRefForMailbox(id), password);
-  if (!stored.ok) return { ok: false, kind: 'unknown', reason: stored.error ?? "Couldn't store the password securely on this computer." };
+  if (!stored.ok) {
+    console.error('[mail] password not stored:', id, stored.error);
+    return { ok: false, kind: 'unknown', reason: storeFailedReason(admin, stored.error) };
+  }
   const now = Date.now();
   const prior = existing.find((m) => m.id === id);
   const record: MailboxRecord = { id, address, provider: input.provider, imap, smtp, status: 'connected', createdAt: prior?.createdAt ?? now, updatedAt: now };

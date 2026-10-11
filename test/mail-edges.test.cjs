@@ -15,7 +15,7 @@ const {
   PROVIDER_PRESETS, guessServers, mailboxIdFor, secretRefForMailbox, mailAccess, agentMailboxes, mailToolsJustAttached
 } = loadTs('src/shared/mailboxes.ts');
 const { emailCalendarAllowed } = loadTs('src/shared/mcpCatalog.ts');
-const { MailService, MailError, handleMailRequest, classifyMailError, saveMailbox, removeMailbox, setAgentCapabilities } = loadTs('src/main/mail.ts');
+const { MailService, MailError, handleMailRequest, classifyMailError, saveMailbox, removeMailbox, setAgentCapabilities, cannotStoreReason } = loadTs('src/main/mail.ts');
 
 const server = { host: 'h', port: 993, secure: true };
 const box = (id, address, provider = 'gmail') => ({ id, address, provider, imap: server, smtp: server, status: 'connected', createdAt: 1, updatedAt: 1 });
@@ -256,7 +256,7 @@ function admin(initial) {
     state,
     getConfig: () => state.cfg,
     saveConfig: (patch) => { state.cfg = { ...state.cfg, ...patch }; },
-    setSecret: (ref, value) => { if (state.setSecretFails) return { ok: false }; state.secrets[ref] = value; return { ok: true }; },
+    setSecret: (ref, value) => { if (state.setSecretFails) return { ok: false, error: typeof state.setSecretFails === 'string' ? state.setSecretFails : 'OS secret encryption is unavailable; refusing to store a secret in plaintext' }; state.secrets[ref] = value; return { ok: true }; },
     deleteSecret: (ref) => { state.deleted.push(ref); delete state.secrets[ref]; }
   };
 }
@@ -334,7 +334,47 @@ test('saveMailbox: when the password cannot be stored, the mailbox is not saved'
   const r = await saveMailbox(svc, a, PROVIDER_PRESETS, { provider: 'gmail', address: 'sales@shop.com', password: 'p' });
   assert.equal(r.ok, false);
   assert.match(r.reason, /store the password/);
+  assert.doesNotMatch(r.reason, /plaintext|refusing/, 'the owner never reads the raw error');
   assert.deepEqual(a.state.cfg.mailboxes, []);
+});
+
+test('saveMailbox: a damaged secrets file keeps its own words, not the keychain message (PR 136)', async () => {
+  // Value: protects=the owner is told what is actually wrong; fails_when=every store failure blames the keychain; why_new=the keychain message covered all failures; seam=fake secret store
+  const { SECRETS_FILE_UNREADABLE } = loadTs('src/shared/secretStore.ts');
+  const { svc } = setup();
+  const a = admin();
+  a.canStoreSecrets = () => true;
+  a.state.setSecretFails = SECRETS_FILE_UNREADABLE;
+  const r = await saveMailbox(svc, a, PROVIDER_PRESETS, { provider: 'gmail', address: 'sales@shop.com', password: 'p' });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, SECRETS_FILE_UNREADABLE);
+  assert.doesNotMatch(r.reason, /keychain|keyring/);
+  assert.deepEqual(a.state.cfg.mailboxes, []);
+});
+
+test('saveMailbox: when this computer cannot encrypt, it says so before any login and saves nothing', async () => {
+  const { svc, state } = setup();
+  const a = admin();
+  a.canStoreSecrets = () => false;
+  const r = await saveMailbox(svc, a, PROVIDER_PRESETS, { provider: 'gmail', address: 'sales@shop.com', password: 'p' });
+  assert.equal(r.ok, false);
+  assert.equal(r.kind, 'unsupported');
+  assert.equal(r.reason, cannotStoreReason());
+  assert.equal(state.connects, undefined, 'nothing tried to log in');
+  assert.deepEqual(a.state.secrets, {});
+  assert.deepEqual(a.state.cfg.mailboxes, []);
+});
+
+test('cannotStoreReason says what to do on each platform, in plain words', () => {
+  assert.match(cannotStoreReason('darwin'), /keychain/);
+  assert.match(cannotStoreReason('linux'), /keyring/);
+  assert.match(cannotStoreReason('win32'), /Restart the computer/);
+  for (const p of ['darwin', 'linux', 'win32']) {
+    const reason = cannotStoreReason(p);
+    assert.match(reason, /nothing was saved/);
+    assert.match(reason, /try again/);
+    assert.doesNotMatch(reason, /[-‐-―−]/, `no dashes: ${reason}`);
+  }
 });
 
 test('removeMailbox takes the mailbox, its password and every grant to it, and names who lost it', () => {

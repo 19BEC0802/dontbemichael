@@ -27,6 +27,7 @@ import {
   secretRefFor
 } from '../shared/integrations';
 import { readConfig, writeConfig } from './config';
+import { SECRETS_FILE_UNREADABLE } from '../shared/secretStore';
 
 // ─── Registry (config-backed) ────────────────────────────────────────────────
 
@@ -116,7 +117,7 @@ function readSecretBlobForWrite(): Record<string, string> {
     parsed = undefined;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('The saved secrets file could not be read, so nothing was saved over it. Try again; if it keeps failing, the file needs repair.');
+    throw new Error(SECRETS_FILE_UNREADABLE);
   }
   return parsed as Record<string, string>;
 }
@@ -127,6 +128,16 @@ function writeSecretBlob(blob: Record<string, string>): void {
   const p = secretsPath();
   mkdirSync(dirname(p), { recursive: true });
   writeFileAtomic(p, JSON.stringify(blob, null, 2), 0o600);
+}
+
+/** Whether the OS can encrypt a secret right now. Asked before a credential is
+ *  tested, so one that could never be stored is refused up front, in words. */
+export function canStoreSecrets(): boolean {
+  try {
+    return safeStorage.isEncryptionAvailable();
+  } catch {
+    return false;
+  }
 }
 
 /** Store a secret ENCRYPTED. Fail closed if OS encryption is unavailable (never
