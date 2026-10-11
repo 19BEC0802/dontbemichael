@@ -189,15 +189,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Status check side effects
-
-**What:** Stop child MCP servers `claude mcp list` starts when the 30 s timeout kills it; avoid overlapping runs.
-
-**Why:** The check starts every configured MCP server; a timeout can leave them running.
-
-**Effort:** S
-**Priority:** P3
-
 ### Show a locally added QuickBooks server in the status
 
 **What:** Read non-`claude.ai` QuickBooks servers from `claude mcp list` too.
