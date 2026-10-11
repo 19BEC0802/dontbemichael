@@ -290,15 +290,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Limit combining marks in the detail line
-
-**What:** Collapse long runs of combining marks, or clip the line's overflow.
-
-**Why:** A line of stacked marks can draw over the neighbouring rows' buttons (visual only).
-
-**Effort:** S
-**Priority:** P3
-
 ## Schedules
 
 ### Starter jobs in an agent's empty Schedules tab
