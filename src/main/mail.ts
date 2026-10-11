@@ -23,6 +23,7 @@ import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { simpleParser } from 'mailparser';
 import { writeFileAtomic } from './atomicFile';
+import { SECRETS_FILE_UNREADABLE } from '../shared/secretStore';
 import {
   MAIL_TOOL_OPS,
   agentMailboxes,
@@ -1211,6 +1212,15 @@ export interface MailAdminDeps {
 /** What the owner reads when the password could not be kept encrypted on this
  *  computer: the OS secret store (Keychain, DPAPI, or a Linux keyring) is
  *  unavailable or refused. Says what to do, never the raw error. */
+/** Why a password that passed the encryption check was still not saved: the
+ *  keychain went away meanwhile, or the secrets file is damaged (its own plain
+ *  words), or anything else. Never the raw error, which goes to the log. */
+function storeFailedReason(admin: MailAdminDeps, error: string | undefined): string {
+  if (admin.canStoreSecrets && !admin.canStoreSecrets()) return cannotStoreReason();
+  if (error === SECRETS_FILE_UNREADABLE) return error;
+  return "Couldn't store the password securely on this computer, so nothing was saved. Try again.";
+}
+
 export function cannotStoreReason(platform: NodeJS.Platform = process.platform): string {
   if (platform === 'darwin') {
     return 'This Mac could not store the password safely in its keychain, so nothing was saved. If macOS asks whether this app may use your keychain, choose Allow. Then try again, and restart the Mac if it keeps happening.';
@@ -1260,7 +1270,7 @@ export async function saveMailbox(svc: MailService, admin: MailAdminDeps, preset
   const stored = admin.setSecret(secretRefForMailbox(id), password);
   if (!stored.ok) {
     console.error('[mail] password not stored:', id, stored.error);
-    return { ok: false, kind: 'unknown', reason: cannotStoreReason() };
+    return { ok: false, kind: 'unknown', reason: storeFailedReason(admin, stored.error) };
   }
   const now = Date.now();
   const prior = existing.find((m) => m.id === id);

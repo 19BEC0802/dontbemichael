@@ -27,6 +27,7 @@ import {
   secretRefFor
 } from '../shared/integrations';
 import { readConfig, writeConfig } from './config';
+import { SECRETS_FILE_UNREADABLE } from '../shared/secretStore';
 
 // ─── Registry (config-backed) ────────────────────────────────────────────────
 
@@ -116,7 +117,7 @@ function readSecretBlobForWrite(): Record<string, string> {
     parsed = undefined;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('The saved secrets file could not be read, so nothing was saved over it. Try again; if it keeps failing, the file needs repair.');
+    throw new Error(SECRETS_FILE_UNREADABLE);
   }
   return parsed as Record<string, string>;
 }

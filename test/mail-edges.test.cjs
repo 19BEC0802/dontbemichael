@@ -256,7 +256,7 @@ function admin(initial) {
     state,
     getConfig: () => state.cfg,
     saveConfig: (patch) => { state.cfg = { ...state.cfg, ...patch }; },
-    setSecret: (ref, value) => { if (state.setSecretFails) return { ok: false, error: 'OS secret encryption is unavailable; refusing to store a secret in plaintext' }; state.secrets[ref] = value; return { ok: true }; },
+    setSecret: (ref, value) => { if (state.setSecretFails) return { ok: false, error: typeof state.setSecretFails === 'string' ? state.setSecretFails : 'OS secret encryption is unavailable; refusing to store a secret in plaintext' }; state.secrets[ref] = value; return { ok: true }; },
     deleteSecret: (ref) => { state.deleted.push(ref); delete state.secrets[ref]; }
   };
 }
@@ -335,6 +335,20 @@ test('saveMailbox: when the password cannot be stored, the mailbox is not saved'
   assert.equal(r.ok, false);
   assert.match(r.reason, /store the password/);
   assert.doesNotMatch(r.reason, /plaintext|refusing/, 'the owner never reads the raw error');
+  assert.deepEqual(a.state.cfg.mailboxes, []);
+});
+
+test('saveMailbox: a damaged secrets file keeps its own words, not the keychain message (PR 136)', async () => {
+  // Value: protects=the owner is told what is actually wrong; fails_when=every store failure blames the keychain; why_new=the keychain message covered all failures; seam=fake secret store
+  const { SECRETS_FILE_UNREADABLE } = loadTs('src/shared/secretStore.ts');
+  const { svc } = setup();
+  const a = admin();
+  a.canStoreSecrets = () => true;
+  a.state.setSecretFails = SECRETS_FILE_UNREADABLE;
+  const r = await saveMailbox(svc, a, PROVIDER_PRESETS, { provider: 'gmail', address: 'sales@shop.com', password: 'p' });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, SECRETS_FILE_UNREADABLE);
+  assert.doesNotMatch(r.reason, /keychain|keyring/);
   assert.deepEqual(a.state.cfg.mailboxes, []);
 });
 
