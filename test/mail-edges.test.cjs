@@ -207,6 +207,14 @@ test('send failures: a refusal says "Not sent" and is not remembered; a timeout 
   assert.match(r.body.error, /^This email may already have gone out/);
   assert.ok(state.queries.some((q) => q.header && q.header['message-id']), 'Sent was checked first');
   }
+  {
+  // The connection closing mid-send may have delivered it too (adversarial review).
+  const { call, state } = setup();
+  state.smtpError = Object.assign(new Error('Connection closed unexpectedly'), { code: 'ECONNECTION' });
+  state.sentHit = false;
+  const r = await call('dwight', 'send', { mailbox: 'sales', to: 'a@b.com', subject: 's', body: 'b' });
+  assert.match(r.body.error, /^This email may already have gone out/);
+  }
   // A server that was never reached took nothing: that is plainly not sent, and a retry may send it.
   for (const never of [
     Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:465'), { code: 'ESOCKET', syscall: 'connect' }),

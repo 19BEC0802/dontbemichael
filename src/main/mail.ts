@@ -75,8 +75,10 @@ export class MailError extends Error {
 }
 
 /** A connection that dropped or timed out after it was made: the server may
- *  have taken the email. A server that was never reached is not uncertain. */
-const MID_SEND_DROP = new Set(['ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'ESOCKET']);
+ *  have taken the email. A server that was never reached is not uncertain
+ *  (neverReachedServer). ECONNECTION is the SMTP library's "Connection closed
+ *  unexpectedly", which can come after the server took the email. */
+const MID_SEND_DROP = new Set(['ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'ESOCKET', 'ECONNECTION']);
 
 /** A failure before the mail server took anything: the connection was never
  *  made (refused, no such host, timed out connecting) or the server never said
