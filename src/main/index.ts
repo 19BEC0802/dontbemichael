@@ -5848,6 +5848,7 @@ ipcMain.handle('app:openExternal', async (_evt, url: unknown) => {
 /** Toggle macOS "Open at Login" — fully programmatic, no permission prompt.
  *  Returns the resulting state so the renderer toggle reflects reality. */
 ipcMain.handle('app:setLoginItem', (_evt, enabled: unknown) => {
+  if (process.platform === 'linux') return false;
   app.setLoginItemSettings({ openAtLogin: enabled === true });
   return app.getLoginItemSettings().openAtLogin;
 });
