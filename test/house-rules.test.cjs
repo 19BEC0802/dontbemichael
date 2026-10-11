@@ -50,6 +50,16 @@ test('every agent reports what its tools cannot do instead of skipping it, and t
   assert.match(mail, /They never delete mail: if you are asked to delete, report it \(house rule 6\)\./);
 });
 
+// 2026-10-11: an IT report for the owner opened with a Sources list of tool
+// names, mail folders, a settings file and UTC; the owner could not use it.
+test('anything the owner reads, files included, is in plain business words', () => {
+  // Value: protects=owner reports and files carry no tool, folder or method talk; fails_when=rule 7 is dropped or rule 1 asks for file names again; why_new=no rule covered files the owner opens; seam=none
+  assert.match(HOUSE_RULES, /7\. Write anything the owner reads, reports and files included, in plain business words/);
+  assert.match(HOUSE_RULES, /Leave out tool names, folder and file names, settings files, message ids, time zones and how you went about the work/);
+  assert.match(HOUSE_RULES, /name the source in words the owner knows/);
+  assert.doesNotMatch(HOUSE_RULES, /\(a file name, a link/);
+});
+
 test('written calmly: no dashes, no shouting, no dates that would break the prompt cache', () => {
   assert.doesNotMatch(HOUSE_RULES, /[–—]/);
   assert.doesNotMatch(HOUSE_RULES.replace(/^HOUSE RULES\./, ''), /\b(MUST|NEVER|ALWAYS|CRITICAL)\b/);
