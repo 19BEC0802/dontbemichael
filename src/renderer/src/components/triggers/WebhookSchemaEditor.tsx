@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from '../PixelButton';
 import { JsonEditor } from './JsonEditor';
+import { schemaParseError } from './schemaParseError';
 import { Callout, MiniButton } from './ui';
 
 /**
@@ -27,14 +28,13 @@ export function WebhookSchemaEditor({ schema, onSave }: { schema: string; onSave
   }, [open]);
 
   const save = () => {
-    try {
-      JSON.parse(text);
-    } catch (e) {
+    const problem = schemaParseError(text);
+    if (problem !== null) {
       // Never persist a schema that cannot be parsed — a broken one would lock
       // the caller out of their own endpoint with nothing on screen to say why.
       // The owner sees plain words; the parser's own message goes to the
       // console so a developer can still find where the mistake was.
-      console.error('[webhooks] body format is not valid JSON:', e instanceof Error ? e.message : String(e));
+      console.error('[webhooks] body format is not valid JSON:', problem);
       setError(true);
       return;
     }
