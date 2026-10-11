@@ -191,3 +191,11 @@ test('focus falls back to the list when the row or its confirm is gone (issue 13
   assert.match(bar, /buttonRef=\{\(el\) => \{ triggers\.current\[id\] = el; \}\}/);
 });
 
+
+test('the still working count reads as a button that opens the list', () => {
+  // Value: protects=the owner sees that the count opens who is still working, with Remind; fails_when=the pill or chevron is dropped back to plain text; why_new=owner, 2026-10-11: plain indigo text did not look clickable; seam=source pin
+  const bar = read('src/renderer/src/components/ClosingTimeBar.tsx');
+  assert.match(bar, /background: 'var\(--cth-indigo-soft\)', padding: '0 8px 0 10px', height: 24, borderRadius: 'var\(--cth-r-pill\)'/);
+  assert.match(bar, /transform: open \? 'rotate\(180deg\)' : 'none'/, 'the chevron flips when the list is open');
+  assert.match(bar, /aria-expanded=\{open\}/);
+});

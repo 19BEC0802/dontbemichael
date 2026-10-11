@@ -113,6 +113,11 @@ export function ClosingTimeBar({ closing, onCancel, onForceQuit, onRetry }: Clos
               {c && !done && waiting > 0 && (
                 <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} style={linkBtn}>
                   {open ? t('closingBar.hideWho') : (waiting === 1 ? t('closingBar.left', { count: waiting }) : t('closingBar.leftPlural', { count: waiting }))}
+                  {/* The list opens upward from the bar: the chevron points up to open it, down to close it. */}
+                  <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms var(--cth-ease)' }}>
+                    <path d="M6 15l6-6 6 6" />
+                  </svg>
                 </button>
               )}
             </div>
@@ -140,8 +145,11 @@ export function ClosingTimeBar({ closing, onCancel, onForceQuit, onRetry }: Clos
   );
 }
 
+// A soft pill with a chevron, so the count reads as something that opens
+// (owner, 2026-10-11: plain indigo text did not look clickable).
 const linkBtn: CSSProperties = {
-  flexShrink: 0, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+  flexShrink: 0, border: 'none', background: 'var(--cth-indigo-soft)', padding: '0 8px 0 10px', height: 24, borderRadius: 'var(--cth-r-pill)', cursor: 'pointer',
+  display: 'inline-flex', alignItems: 'center', gap: 4,
   fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--cth-indigo-text)'
 };
 
