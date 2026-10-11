@@ -105,7 +105,7 @@ test('Word: footnotes and letterhead headers are searchable too, after the body'
 
 // ─── PowerPoint ──────────────────────────────────────────────────────────────
 
-test('PowerPoint: slides in numeric order (2 before 10), then speaker notes', async () => {
+test('PowerPoint: files without a presentation manifest retain numeric order, then speaker notes', async () => {
   const r = await extractDocumentText(zip('deck.pptx', {
     'ppt/slides/slide10.xml': slideXml('Ten'),
     'ppt/slides/slide2.xml': slideXml('Two'),
@@ -114,6 +114,60 @@ test('PowerPoint: slides in numeric order (2 before 10), then speaker notes', as
   }));
   assert.equal(r.kind, 'text');
   assert.equal(r.text, 'Slide 1\nSummer menu\nLaunching June 1\n\nSlide 2\nTwo\n\nSlide 10\nTen\n\nSpeaker notes\nMention the patio');
+});
+
+const P = 'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const SLIDE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide';
+
+function presentation(ids) {
+  return `<p:presentation ${P}><p:sldIdLst>${ids.map((id, i) => `<p:sldId id="${256 + i}" r:id="${id}"/>`).join('')}</p:sldIdLst></p:presentation>`;
+}
+
+test('PowerPoint: reordered slides follow the manifest and use their displayed slide numbers', async () => {
+  const r = await extractDocumentText(zip('reordered.pptx', {
+    'ppt/presentation.xml': presentation(['intro', 'account', 'activate']),
+    'ppt/_rels/presentation.xml.rels': `<Relationships>
+      <Relationship Id="account" Type="${SLIDE_REL}" Target="slides/slide1.xml"/>
+      <Relationship Id="activate" Type="${SLIDE_REL}" Target="slides/slide10.xml"/>
+      <Relationship Id="intro" Type="${SLIDE_REL}" Target="slides/slide2.xml"/></Relationships>`,
+    'ppt/slides/slide1.xml': slideXml('Create an account'),
+    'ppt/slides/slide2.xml': slideXml('Choose a plan'),
+    'ppt/slides/slide10.xml': slideXml('Pay and activate'),
+    'ppt/slides/slide3.xml': slideXml('Unused slide must not be included')
+  }));
+  assert.equal(r.kind, 'text');
+  assert.equal(r.text, 'Slide 1\nChoose a plan\n\nSlide 2\nCreate an account\n\nSlide 3\nPay and activate');
+});
+
+test('PowerPoint: relationship targets resolve as package paths and blank slides keep their position', async () => {
+  const r = await extractDocumentText(zip('slide-paths.pptx', {
+    'ppt/presentation.xml': presentation(['blank', 'second', 'third']),
+    'ppt/_rels/presentation.xml.rels': `<Relationships>
+      <Relationship Id="blank" Type="${SLIDE_REL}" Target="slides/slide9.xml"/>
+      <Relationship Id="second" Type="${SLIDE_REL}" Target="/ppt/slides/slide7.xml"/>
+      <Relationship Id="third" Type="${SLIDE_REL}" Target="slides/../slides/step&amp;summary.xml"/></Relationships>`,
+    'ppt/slides/slide9.xml': `<p:sld ${A}/>`,
+    'ppt/slides/slide7.xml': slideXml('Second slide'),
+    'ppt/slides/step&summary.xml': slideXml('Third slide')
+  }));
+  assert.equal(r.kind, 'text');
+  assert.equal(r.text, 'Slide 2\nSecond slide\n\nSlide 3\nThird slide');
+});
+
+test('PowerPoint: a broken slide reference is refused rather than guessed from filenames', async () => {
+  for (const rels of [
+    '<Relationships/>',
+    `<Relationships><Relationship Id="first" Type="${SLIDE_REL}" Target="slides/missing.xml"/></Relationships>`,
+    `<Relationships><Relationship Id="first" Type="${SLIDE_REL}" Target="slides/slide1.xml" TargetMode="External"/></Relationships>`
+  ]) {
+    const r = await extractDocumentText(zip('broken-slides.pptx', {
+      'ppt/presentation.xml': presentation(['first']),
+      'ppt/_rels/presentation.xml.rels': rels,
+      'ppt/slides/slide1.xml': slideXml('Do not guess this is the first slide')
+    }));
+    assert.equal(r.kind, 'unreadable');
+    assert.match(r.reason, /damaged or missing parts/);
+  }
 });
 
 test('PowerPoint: a deck of pictures is refused with a reason, not stored empty', async () => {
