@@ -353,16 +353,6 @@ review (2026-09-25); needs a check with a mouse-aware prompt.
 
 **Priority:** P3
 
-### Label messages with no usable date
-
-**What:** In the Messages tab, give conversations whose messages have no valid `created_at` a
-heading ("Undated") instead of an empty one (`src/shared/messageView.ts` localDay returns '').
-
-**Why:** Only malformed files hit it, but the section then has no heading. Found by the local
-model review (2026-09-25).
-
-**Priority:** P4
-
 ## Business mode (deferred from plan, v0.0.1 ship)
 
 Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "ship, defer as P1 TODOs" on 2026-09-24).
