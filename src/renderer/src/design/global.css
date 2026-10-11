@@ -337,6 +337,8 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   max-width: 72ch;
   padding: 16px 20px 32px;
 }
+/* An open file tab has the whole pane: no reading cap there (owner 2026-10-11). */
+.cth-file-tab .cth-md-preview { max-width: none; }
 .cth-md-preview h1, .cth-md-preview h2, .cth-md-preview h3,
 .cth-md-preview h4, .cth-md-preview h5 {
   color: var(--cth-ink-900);

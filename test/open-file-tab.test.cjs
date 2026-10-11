@@ -139,6 +139,8 @@ test('wiring: tabs after Who talks to whom, never saved, Ask me beside a file, w
   assert.match(app, /const columnShown = columnOpen && \(floorView === 'office' \|\| floorView === 'file'\);/);
   assert.match(app, /display: floorView === 'office' \|\| floorView === 'file' \? 'flex' : 'none'/, 'the column style too, not only columnShown');
   assert.match(app, /\{floorView === 'file' && <FileTabView \/>\}/);
+  assert.match(read('src/renderer/src/components/FileTabView.tsx'), /<div ref=\{scroller\} className="cth-file-tab"/);
+  assert.match(read('src/renderer/src/design/global.css'), /\.cth-file-tab \.cth-md-preview \{ max-width: none; \}/, 'a report fills the file tab, no 72ch cap');
   const bar = read('src/renderer/src/shell/TopBar.tsx');
   assert.match(bar, /\{tab\('graph', t\('floorView\.graph'\)\)\}\n[\s\S]*?\{fileTabs\.map/, 'file tabs come after Who talks to whom');
   assert.match(bar, /aria-label=\{t\('fileTab\.close', \{ name: f\.title \}\)\}/, 'close is its own labelled button');
