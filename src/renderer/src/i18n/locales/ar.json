@@ -1939,6 +1939,7 @@
     "connectorsTurnOn": "شغّل الموصلات من الإعدادات",
     "canUseConnector": "يمكن لـ {{name}} استخدام {{connector}}",
     "needsSignIn": "سجّل الدخول في claude.ai أولًا",
+    "unreachable": "تعذّر الوصول إليه الآن",
     "booksRoleDefault": "مشغّل لأدوار المحاسبة",
     "connectorsPending": "يُعاد تشغيل {{name}} عند الخمول لتطبيق التغيير.",
     "restartNow": "أعد التشغيل الآن",
@@ -2093,6 +2094,7 @@
     "removed": "أُزيل من حساب Claude الخاص بك",
     "clear": "مسح",
     "signIn": "سجّل الدخول في claude.ai",
+    "unreachable": "تعذّر الوصول إليه، جرّب تحديث لاحقًا",
     "connected": "متصل",
     "allow": "السماح بمنح {{name}}"
   },

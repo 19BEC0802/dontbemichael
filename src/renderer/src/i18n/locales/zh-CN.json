@@ -1939,6 +1939,7 @@
     "connectorsTurnOn": "在设置中打开连接器",
     "canUseConnector": "{{name}} 可以使用 {{connector}}",
     "needsSignIn": "请先到 claude.ai 登录",
+    "unreachable": "暂时无法连接",
     "booksRoleDefault": "记账角色默认打开",
     "connectorsPending": "{{name}} 空闲时会重启以生效。",
     "restartNow": "立即重启",
@@ -2093,6 +2094,7 @@
     "removed": "已从你的 Claude 账户移除",
     "clear": "清除",
     "signIn": "到 claude.ai 登录",
+    "unreachable": "暂时无法连接，请稍后刷新",
     "connected": "已连接",
     "allow": "允许把 {{name}} 交给团队成员"
   },

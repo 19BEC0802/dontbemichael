@@ -992,9 +992,10 @@ const api = {
   },
   /** Agents that may use QuickBooks, Read only, before the owner chooses (Oscar). */
   quickbooksRoleDefaults: (): Promise<string[]> => ipcRenderer.invoke('quickbooks:roleDefaults'),
-  /** Save one agent's QuickBooks capability (through the owner's Claude account). */
-  quickbooksSetAccess: (agentId: string, cap: { enabled: boolean; changes: boolean }): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke('quickbooks:setAccess', agentId, cap),
+  /** Save one agent's QuickBooks capability (through the owner's Claude account).
+   *  Refused for an id not on the team, unless `hiring` says it is a new hire's. */
+  quickbooksSetAccess: (agentId: string, cap: { enabled: boolean; changes: boolean }, opts?: { hiring?: boolean }): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('quickbooks:setAccess', agentId, cap, opts),
   /** Received and sent messages for an agent's Messages tab, newest first, redacted. */
   hiveHistory: (id: string): Promise<Array<VoiceMessage & { dir: 'in' | 'out' }>> => ipcRenderer.invoke('hive:history', id),
   /** Voice read-layer: recent message CONTENT (inbox/outbox bodies), REDACTED in

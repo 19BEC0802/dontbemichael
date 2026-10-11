@@ -85,9 +85,10 @@ export interface Agent {
    *  `detail`: Claude's description of a command, a file name). Set and
    *  cleared by hook events only; the closing-time rows show it. */
   actionDetail?: string;
-  /** When the current tool call (or idle spell) started, epoch ms. Hook
-   *  events only: the terminal parser rewrites `action` constantly and must
-   *  not restart the clock. */
+  /** When the agent's current step started, epoch ms. Hook events restart it:
+   *  a tool call starting, the turn carrying on after a tool ends or a prompt
+   *  lands, compacting, a wait at a prompt, an idle spell. The terminal parser
+   *  rewrites `action` constantly and never touches it. */
   actionAt?: number;
   /** populated when status === 'blocked' */
   blockReason?: BlockReason;

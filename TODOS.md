@@ -32,7 +32,7 @@
 
 **Why:** The secret store refuses to write without OS encryption — "a secret is never written unless `safeStorage.isEncryptionAvailable()`" (`src/main/integrations.ts:12`, enforced at `:111`). That is the correct security behavior, but no screen explains it. On Linux without a keyring, or a Mac with a damaged keychain, the owner clicks Connect and nothing happens.
 
-**Context:** Surfaced by the outside-voice pass during the 2026-09-15 engineering review. The onboarding failure table in the design doc covers cancelled sign-ins, wrong accounts, denied scopes and expired tokens, but not this one. Cheapest fix: check availability before opening the sign-in window in the Connector Center, say what is wrong and what to do, and gate any credential write on the same check. One test for the unavailable case.
+**Context:** Surfaced by the outside-voice pass during the 2026-09-15 engineering review. The onboarding failure table in the design doc covers cancelled sign-ins, wrong accounts, denied scopes and expired tokens, but not this one. Cheapest fix: check availability before opening the sign-in window in the Connector Center, say what is wrong and what to do, and gate any credential write on the same check. One test for the unavailable case. Mailboxes are done (PR #136): `canStoreSecrets` is checked before the login test, and `cannotStoreReason` in `src/main/mail.ts` says what to do on each platform. Still open: connected apps in the Connector Center and saved AI keys, which can reuse both.
 
 **Effort:** S
 **Priority:** P2
@@ -161,15 +161,6 @@
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
 
-### Say when deleting a secret did nothing
-
-**What:** `deleteSecret` stays lenient on an unreadable file (right for callers without error handling), but callers report success while the old ciphertext stays.
-
-**Why:** A removed mailbox or key can look deleted while its encrypted secret remains in the file.
-
-**Effort:** S
-**Priority:** P3
-
 ## QuickBooks through the Claude account (deferred from ship of feat/qbo-claude-channel, 2026-09-30)
 
 ### Stop a nested Claude from reaching the account's connectors
@@ -192,15 +183,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Say "couldn't reach QuickBooks" when the connector failed
-
-**What:** Show a separate message for `✘ Failed to connect` instead of "needs you to sign in again".
-
-**Why:** A network or server failure tells the owner to sign in.
-
-**Effort:** S
-**Priority:** P3
-
 ### Status check side effects
 
 **What:** Stop child MCP servers `claude mcp list` starts when the 30 s timeout kills it; avoid overlapping runs.
@@ -218,15 +200,6 @@
 
 **Effort:** S
 **Priority:** P3
-
-### Validate the agent id when saving QuickBooks access
-
-**What:** Refuse ids that are not on the roster in `quickbooks:setAccess`.
-
-**Why:** Any string is written into `agentCapabilities` and would apply to a future agent with that id.
-
-**Effort:** S
-**Priority:** P4
 
 ## Closing time (deferred from ship of feat/closing-time-progress, 2026-09-29)
 
@@ -284,15 +257,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Tests for the focus fallback and a post-tool row
-
-**What:** Add tests for the listRef focus fallback and a describeRow case after PostToolUse; fix the stale `actionAt` docstring.
-
-**Why:** Both paths are untested.
-
-**Effort:** S
-**Priority:** P3
-
 ### Replace the source-regex dialog tests with pure helpers
 
 **What:** Move the checks in `test/closing-time-dialog.test.cjs` that grep component source into tested helpers.
@@ -316,15 +280,6 @@
 **What:** The detail is agent-written text shown where the owner decides to close without someone.
 
 **Why:** An agent can write "safe to close without me"; the owner's choice is steered by untrusted text.
-
-**Effort:** S
-**Priority:** P3
-
-### Limit combining marks in the detail line
-
-**What:** Collapse long runs of combining marks, or clip the line's overflow.
-
-**Why:** A line of stacked marks can draw over the neighbouring rows' buttons (visual only).
 
 **Effort:** S
 **Priority:** P3
