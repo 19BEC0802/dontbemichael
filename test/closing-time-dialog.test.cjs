@@ -164,3 +164,30 @@ test('the list that takes focus from code shows the focus ring to the keyboard, 
   assert.doesNotMatch(list, /outline/, 'an inline outline would hide the ring from the keyboard');
   assert.match(read('src/renderer/src/design/global.css'), /\.cth-closing-list:focus-visible \{ outline-offset: -2px; \}/);
 });
+
+test('focus falls back to the list when the row or its confirm is gone (issue 135)', () => {
+  // Value: protects=keyboard focus always lands somewhere after Remind or a refused Close without them, even when that row has left; fails_when=the refocus effect drops its listRef fallback, or the list stops being focusable; why_new=the fallback had no test; seam=the effect's own expression, run against stand-in elements (no DOM here)
+  const bar = read('src/renderer/src/components/ClosingTimeBar.tsx');
+  const effect = bar.match(/\n\s*(\(\(refocus === 'keep' \? keepButton\.current : triggers\.current\[refocus\]\) \?\? listRef\.current\)\?\.focus\(\);)/);
+  assert.ok(effect, 'the refocus effect');
+  const refocusTo = new Function('refocus', 'keepButton', 'triggers', 'listRef', effect[1]);
+  const el = () => ({ focused: 0, focus() { this.focused++; } });
+  const run = (refocus, { trigger, keep }) => {
+    const list = el();
+    refocusTo(refocus, { current: keep ?? null }, { current: trigger === undefined ? {} : { pam: trigger } }, { current: list });
+    return list;
+  };
+  const button = el();
+  assert.equal(run('pam', { trigger: button }).focused, 0);
+  assert.equal(button.focused, 1, "back on the row's Close without them");
+  assert.equal(run('pam', { trigger: null }).focused, 1, 'the row left (its ref was cleared): the list');
+  assert.equal(run('pam', {}).focused, 1, 'no ref for that row at all: the list');
+  const keep = el();
+  assert.equal(run('keep', { keep }).focused, 0);
+  assert.equal(keep.focused, 1, "a refused Close without them: back on the confirm's Keep waiting");
+  assert.equal(run('keep', { keep: null }).focused, 1, 'the confirm is gone by the time the refusal lands: the list');
+  // The list can take focus from code, and a row's ref is cleared when it leaves.
+  assert.match(bar, /<div ref=\{listRef\} className="cth-closing-list" tabIndex=\{-1\}/);
+  assert.match(bar, /buttonRef=\{\(el\) => \{ triggers\.current\[id\] = el; \}\}/);
+});
+
