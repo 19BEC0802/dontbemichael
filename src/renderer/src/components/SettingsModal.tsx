@@ -908,7 +908,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 880, maxWidth: '92vw', maxHeight: '88vh',
+          width: 880, maxWidth: '92vw', maxHeight: '88vh', height: "80vh",
           display: 'flex', flexDirection: 'column', overflow: 'hidden', outline: 'none',
           background: 'var(--cth-card)', borderRadius: 'var(--cth-r-2xl)',
           boxShadow: 'inset 0 0 0 1px var(--cth-line), var(--cth-shadow-lg)'
