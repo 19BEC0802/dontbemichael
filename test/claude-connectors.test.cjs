@@ -268,6 +268,7 @@ test('Settings: the connector list folds, starts closed, opens for something new
   assert.match(ui, /<Toggle on=\{on\} label=\{t\('connectors\.allow', \{ name: c\.key \}\)\}/);
   assert.ok(ui.indexOf('{removed.map(') < ui.indexOf('{list.map('), 'removed ones first');
   assert.match(ui, /t\('connectors\.signIn'\)/, 'needs sign in shows the way (E3)');
+  assert.match(ui, /\) : unreachable \? \(\s*<span style=\{hint\}>\{t\('connectors\.unreachable'\)\}<\/span>/, 'a connector that failed to connect is not sent to sign in');
 });
 
 test('Access tab: one Claude connectors card with a row per connector that is on (design D4)', () => {
@@ -276,12 +277,13 @@ test('Access tab: one Claude connectors card with a row per connector that is on
   assert.match(cap, /<Toggle on=\{on\} label=\{t\('capabilities\.canUseConnector', \{ name, connector: c\.key \}\)\}/);
   assert.match(cap, /\{t\('capabilities\.connectorsNone'\)\}\{' '\}\s*<button type="button" onClick=\{openSettings\} style=\{link\}>\{t\('capabilities\.connectorsTurnOn'\)\}<\/button>/);
   assert.ok(cap.indexOf("title={t('capabilities.email')}") < cap.indexOf("title={t('capabilities.connectors')}"), 'the app\'s own Email card stays above');
+  assert.match(cap, /\{c\.status === 'unreachable' && <span style=\{hint\}>\{t\('capabilities\.unreachable'\)\}<\/span>\}/, 'a failed connection says so, not sign in');
 });
 
 test('connector copy exists in every language and has no dashes', () => {
   const keys = {
-    connectors: ['title', 'intro', 'reading', 'summaryNone', 'summaryOne', 'summaryCount', 'removedCount', 'refresh', 'refreshing', 'readFailed', 'readFailedSince', 'tryAgain', 'empty', 'addAtClaude', 'removed', 'clear', 'signIn', 'connected', 'allow'],
-    capabilities: ['connectors', 'connectorsBlurb', 'connectorsSummary', 'connectorsNone', 'connectorsTurnOn', 'canUseConnector', 'needsSignIn', 'booksRoleDefault', 'connectorsPending', 'restartNow']
+    connectors: ['title', 'intro', 'reading', 'summaryNone', 'summaryOne', 'summaryCount', 'removedCount', 'refresh', 'refreshing', 'readFailed', 'readFailedSince', 'tryAgain', 'empty', 'addAtClaude', 'removed', 'clear', 'signIn', 'unreachable', 'connected', 'allow'],
+    capabilities: ['connectors', 'connectorsBlurb', 'connectorsSummary', 'connectorsNone', 'connectorsTurnOn', 'canUseConnector', 'needsSignIn', 'unreachable', 'booksRoleDefault', 'connectorsPending', 'restartNow']
   };
   for (const loc of ['en', 'zh-CN', 'ar']) {
     const j = JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`));
@@ -367,8 +369,11 @@ test('`claude mcp list` status words: only a real Connected counts', () => {
   const one = (st) => C.parseMcpList(`claude.ai Intuit QuickBooks: https://ai-inc.quickbooks.intuit.com/v1/mcp - ${st}`).connectors[0].status;
   assert.equal(one('✔ Connected'), 'connected');
   assert.equal(one('Not connected'), 'needs-sign-in');
-  assert.equal(one('✘ Failed to connect'), 'needs-sign-in');
+  assert.equal(one('✘ Failed to connect'), 'unreachable', 'a failed connection is not a sign in problem');
+  assert.equal(one('✘ Failed to connect — CONNECTION_CLOSED: Connection closed'), 'unreachable');
+  assert.equal(one('✗ Error: fetch failed'), 'unreachable');
   assert.equal(one('! Needs authentication'), 'needs-sign-in');
+  assert.equal(one('✘ Needs authentication'), 'needs-sign-in', 'a sign in problem stays one whatever the mark');
   const twice = C.parseMcpList('claude.ai HubSpot: https://a - ✔ Connected\nclaude.ai HubSpot: https://a - ✔ Connected');
   assert.equal(twice.connectors.length, 1, 'a repeated line is one connector');
   const { claudeBinFor } = loadTs('src/main/claudeMcpList.ts');

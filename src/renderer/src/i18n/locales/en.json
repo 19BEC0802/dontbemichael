@@ -1926,6 +1926,7 @@
     "connectorsTurnOn": "Turn connectors on in Settings",
     "canUseConnector": "{{name}} can use {{connector}}",
     "needsSignIn": "sign in at claude.ai first",
+    "unreachable": "couldn't reach it right now",
     "booksRoleDefault": "on for bookkeeping roles",
     "connectorsPending": "Restarts when {{name}} is idle to apply.",
     "restartNow": "Restart now",
@@ -2080,6 +2081,7 @@
     "removed": "Removed from your Claude account",
     "clear": "Clear",
     "signIn": "Sign in at claude.ai",
+    "unreachable": "couldn't reach it, try Refresh later",
     "connected": "connected",
     "allow": "Allow {{name}} to be granted"
   },
