@@ -227,7 +227,9 @@ export function classifyMailError(e: unknown): MailError {
   if (/application-specific password required|web login required|basic auth(entication)? (is )?(disabled|blocked)|app passwords? (are |is )?(not allowed|disabled)|please log ?in via your web browser/i.test(text)) {
     return new MailError('provider-blocked', 'This provider no longer accepts the app password for this mailbox.');
   }
-  if (err?.authenticationFailed || err?.code === 'EAUTH' || /AUTHENTICATIONFAILED|invalid credentials|authentication failed|535/i.test(text)) {
+  // 535 is the SMTP reply code for a refused login. It counts only as a reply
+  // code, never inside an address or a number a rejection quotes (ann1535@...).
+  if (err?.authenticationFailed || err?.code === 'EAUTH' || /AUTHENTICATIONFAILED|invalid credentials|authentication failed|(?:^|\s)535[\s-]/i.test(text)) {
     return new MailError('auth', "The mailbox didn't accept that password. Check it's an app password, not your normal one.");
   }
   if (['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH', 'ESOCKET', 'ECONNECTION', 'EPIPE', 'NoConnection'].includes(err?.code ?? '')) {
