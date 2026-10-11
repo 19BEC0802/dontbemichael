@@ -91,18 +91,6 @@
 
 ## Mail approvals and Michael replies (deferred from ship of feat/mail-approvals-michael-replies, 2026-10-07)
 
-### Never send a plain email twice across a restart
-
-**What:** A small saved send journal, written before each plain send goes to the mail server and checked before any send, so a retry after a crash returns the first result.
-
-**Why:** Codex review (pass 2, P1). Plain Can send emails are kept from going out twice only in memory (MailService.send's send once map and in-flight map), so if the app stops right after the server accepts an email, the agent's retry sends a second copy with a new Message-ID. Approved proposals already avoid this with the saved `sending` state.
-
-**Context:** Owner decision D11 in the ship: the size cap went in, this was deferred. Start in `src/main/mail.ts` (`send`, `sendOnce`); key on the same hash `send` already computes; keep it app private like mail-proposals.json.
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** None
-
 ### Keep the approvals file in memory
 
 **What:** Load mail-proposals.json once, keep it in memory, write through with an atomic rename, and read again only when its time stamp changes.
@@ -161,15 +149,6 @@
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
 
-### Say when deleting a secret did nothing
-
-**What:** `deleteSecret` stays lenient on an unreadable file (right for callers without error handling), but callers report success while the old ciphertext stays.
-
-**Why:** A removed mailbox or key can look deleted while its encrypted secret remains in the file.
-
-**Effort:** S
-**Priority:** P3
-
 ## QuickBooks through the Claude account (deferred from ship of feat/qbo-claude-channel, 2026-09-30)
 
 ### Stop a nested Claude from reaching the account's connectors
@@ -218,15 +197,6 @@
 
 **Effort:** S
 **Priority:** P3
-
-### Validate the agent id when saving QuickBooks access
-
-**What:** Refuse ids that are not on the roster in `quickbooks:setAccess`.
-
-**Why:** Any string is written into `agentCapabilities` and would apply to a future agent with that id.
-
-**Effort:** S
-**Priority:** P4
 
 ## Closing time (deferred from ship of feat/closing-time-progress, 2026-09-29)
 
@@ -284,15 +254,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Tests for the focus fallback and a post-tool row
-
-**What:** Add tests for the listRef focus fallback and a describeRow case after PostToolUse; fix the stale `actionAt` docstring.
-
-**Why:** Both paths are untested.
-
-**Effort:** S
-**Priority:** P3
-
 ### Replace the source-regex dialog tests with pure helpers
 
 **What:** Move the checks in `test/closing-time-dialog.test.cjs` that grep component source into tested helpers.
@@ -316,15 +277,6 @@
 **What:** The detail is agent-written text shown where the owner decides to close without someone.
 
 **Why:** An agent can write "safe to close without me"; the owner's choice is steered by untrusted text.
-
-**Effort:** S
-**Priority:** P3
-
-### Limit combining marks in the detail line
-
-**What:** Collapse long runs of combining marks, or clip the line's overflow.
-
-**Why:** A line of stacked marks can draw over the neighbouring rows' buttons (visual only).
 
 **Effort:** S
 **Priority:** P3

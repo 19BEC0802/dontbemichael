@@ -665,7 +665,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
       if (binding?.mailboxId) void window.cth.mailSetCapabilities(id, { email: { enabled: false, mailboxes: [], send: false } }).catch(() => undefined);
       if (binding?.connectorKey) {
         void (isQuickBooksKey(binding.connectorKey)
-          ? window.cth.quickbooksSetAccess(id, { enabled: false, changes: false })
+          ? window.cth.quickbooksSetAccess(id, { enabled: false, changes: false }, { hiring: true })
           : window.cth.connectorsSetGrant(id, binding.connectorKey, false)).catch(() => undefined);
       }
     };
@@ -677,7 +677,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
     // So is a connection binding: the agent starts holding that one connector.
     if (binding?.connectorKey) {
       const res = await (isQuickBooksKey(binding.connectorKey)
-        ? window.cth.quickbooksSetAccess(id, { enabled: true, changes: false })
+        ? window.cth.quickbooksSetAccess(id, { enabled: true, changes: false }, { hiring: true })
         : window.cth.connectorsSetGrant(id, binding.connectorKey, true)).catch(() => null);
       if (!res?.ok) {
         releaseBindingAccess();
