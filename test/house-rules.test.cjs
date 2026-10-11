@@ -66,6 +66,16 @@ test('written calmly: no dashes, no shouting, no dates that would break the prom
   assert.doesNotMatch(HOUSE_RULES, /\b20\d\d\b/);
 });
 
+// 2026-10-11: Michael parked a card in Waiting as "Waiting on Dwight, sends
+// Mon 12 Oct 13:00 to 15:00 UTC": Dwight's own step at a set time.
+test('a card never waits on its own person; its own step at a set time is todo', () => {
+  // Value: protects=the board says who else holds a card, and parked own work sits in To do with the time; fails_when=rule 8 or the board wording drops it; why_new=waiting had no word for the card's own person; seam=none
+  assert.match(HOUSE_RULES, /8\. On the task board, "waiting" names who else a card waits on, never the card's own person\./);
+  assert.match(HOUSE_RULES, /the card is "todo", with that time in its notes in the owner's local time\./);
+  const hive = fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8');
+  assert.equal((hive.match(/never the card\\'s own person/g) || []).length, 4, 'rule 8, Michael\'s two board texts and the protocol');
+});
+
 // 2026-10-11: Nick resumed his conversation with rule 7 in his instructions,
 // was asked to extend his earlier report, and copied its Sources list anyway.
 test('a resumed agent is told the house rules that changed, once; a fresh one is not', async (t) => {
@@ -81,7 +91,7 @@ test('a resumed agent is told the house rules that changed, once; a fresh one is
     .map((f) => JSON.parse(fs.readFileSync(path.join(hive.root(), 'agents', id, 'inbox', f), 'utf8')))
     .filter((m) => m.subject === N.HOUSE_RULES_CHANGED_SUBJECT);
   const all = N.houseRuleLines(HOUSE_RULES);
-  assert.equal(all.length, 7);
+  assert.equal(all.length, 8);
 
   assert.deepEqual(hive.tellHouseRules('oscar', false), [], 'a fresh conversation reads them in its instructions');
   assert.equal(inbox('oscar').length, 0);
