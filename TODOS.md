@@ -149,15 +149,6 @@
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
 
-### Say when deleting a secret did nothing
-
-**What:** `deleteSecret` stays lenient on an unreadable file (right for callers without error handling), but callers report success while the old ciphertext stays.
-
-**Why:** A removed mailbox or key can look deleted while its encrypted secret remains in the file.
-
-**Effort:** S
-**Priority:** P3
-
 ## QuickBooks through the Claude account (deferred from ship of feat/qbo-claude-channel, 2026-09-30)
 
 ### Stop a nested Claude from reaching the account's connectors
@@ -206,15 +197,6 @@
 
 **Effort:** S
 **Priority:** P3
-
-### Validate the agent id when saving QuickBooks access
-
-**What:** Refuse ids that are not on the roster in `quickbooks:setAccess`.
-
-**Why:** Any string is written into `agentCapabilities` and would apply to a future agent with that id.
-
-**Effort:** S
-**Priority:** P4
 
 ## Closing time (deferred from ship of feat/closing-time-progress, 2026-09-29)
 
@@ -272,15 +254,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Tests for the focus fallback and a post-tool row
-
-**What:** Add tests for the listRef focus fallback and a describeRow case after PostToolUse; fix the stale `actionAt` docstring.
-
-**Why:** Both paths are untested.
-
-**Effort:** S
-**Priority:** P3
-
 ### Replace the source-regex dialog tests with pure helpers
 
 **What:** Move the checks in `test/closing-time-dialog.test.cjs` that grep component source into tested helpers.
@@ -304,15 +277,6 @@
 **What:** The detail is agent-written text shown where the owner decides to close without someone.
 
 **Why:** An agent can write "safe to close without me"; the owner's choice is steered by untrusted text.
-
-**Effort:** S
-**Priority:** P3
-
-### Limit combining marks in the detail line
-
-**What:** Collapse long runs of combining marks, or clip the line's overflow.
-
-**Why:** A line of stacked marks can draw over the neighbouring rows' buttons (visual only).
 
 **Effort:** S
 **Priority:** P3

@@ -95,6 +95,7 @@ import { PROVIDER_PRESETS, grantPaused, hasMailTools, mailAccess, mailboxAddress
 import { levelFor } from '../shared/agentDefinition';
 import { claudeBinFor, readClaudeMcpList } from './claudeMcpList';
 import { connectorCarryOver, isEmailCalendarKey, isQuickBooksKey, renamedKeys, spawnConnectorPlan, usableConnectors, type SpawnConnectorPlan } from '../shared/claudeConnectors';
+import { quickbooksAccessToSave } from '../shared/quickbooks';
 import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -4008,7 +4009,8 @@ ipcMain.handle('providerKey:has', (_evt, backend: unknown) =>
 ipcMain.handle('providerKey:clear', (_evt, backend: unknown) => {
   if (typeof backend !== 'string' || !(backend in BACKEND_KEY_ENV)) return { ok: false, error: 'unknown backend' };
   try {
-    integrations.deleteSecret(providerKeyRef(backend));
+    // deleteSecret never throws: false means the key may still be stored.
+    if (!integrations.deleteSecret(providerKeyRef(backend))) return { ok: false, error: 'The saved key could not be removed. Try again; if it keeps failing, the saved secrets file needs repair.' };
     if (backend === 'anthropic' && readConfig().claudeAuth === 'apiKey') noticeEngineSetup('api-key');
     return { ok: true };
   }
@@ -4460,14 +4462,16 @@ ipcMain.handle('mail:setSendOnly', (_evt, agentId: unknown, grant: unknown) => {
 /** Roles that may use QuickBooks, Read only, before the owner chooses. */
 ipcMain.handle('quickbooks:roleDefaults', () => [...booksReadRoleIds()]);
 /** Save one agent's QuickBooks capability. The hook reads it on the agent's
- *  next call, so nothing restarts. */
-ipcMain.handle('quickbooks:setAccess', (_evt, agentId: unknown, cap: unknown) => {
-  if (typeof agentId !== 'string' || !cap || typeof cap !== 'object') return { ok: false };
-  const c = cap as { enabled?: unknown; changes?: unknown };
-  const quickbooks = { enabled: c.enabled === true, changes: c.enabled === true && c.changes === true };
+ *  next call, so nothing restarts. Only for a team member, or the new id of a
+ *  hire in progress (issue 132); anything else writes nothing. */
+ipcMain.handle('quickbooks:setAccess', (_evt, agentId: unknown, cap: unknown, opts: unknown) => {
+  const onTeam = (id: string): boolean => { try { return Object.prototype.hasOwnProperty.call(hive.registry().agents, id); } catch { return false; } };
+  const quickbooks = quickbooksAccessToSave(agentId, cap, onTeam, (opts as { hiring?: unknown } | undefined)?.hiring === true);
+  if (!quickbooks) return { ok: false };
+  const id = agentId as string;
   const cfg = readConfig();
   const caps = cfg.agentCapabilities ?? {};
-  writeConfig({ agentCapabilities: { ...caps, [agentId]: { ...(caps[agentId] ?? {}), quickbooks } } });
+  writeConfig({ agentCapabilities: { ...caps, [id]: { ...(caps[id] ?? {}), quickbooks } } });
   return { ok: true };
 });
 // ─── Claude connectors (docs/designs/claude-connectors.md, owner 2026-10-02) ───
@@ -5845,6 +5849,7 @@ ipcMain.handle('app:openExternal', async (_evt, url: unknown) => {
 /** Toggle macOS "Open at Login" — fully programmatic, no permission prompt.
  *  Returns the resulting state so the renderer toggle reflects reality. */
 ipcMain.handle('app:setLoginItem', (_evt, enabled: unknown) => {
+  if (process.platform === 'linux') return false;
   app.setLoginItemSettings({ openAtLogin: enabled === true });
   return app.getLoginItemSettings().openAtLogin;
 });

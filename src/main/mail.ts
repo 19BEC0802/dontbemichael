@@ -1192,7 +1192,8 @@ export interface MailAdminDeps {
   getConfig(): MailAccessConfig & { mailboxes?: MailboxRecord[] };
   saveConfig(patch: { mailboxes?: MailboxRecord[]; agentCapabilities?: MailAccessConfig['agentCapabilities'] }): void;
   setSecret(ref: string, value: string): { ok: boolean; error?: string };
-  deleteSecret(ref: string): void;
+  /** False when the secret may still be stored (the file could not be read or written). */
+  deleteSecret(ref: string): boolean;
   /** A Send only grant ended: withdraw its emails, revoke its standing
    *  approvals (D13). Optional so tests can leave it out. */
   endGrant?(agentId: string, mailbox: string, reason: string): void;
@@ -1300,7 +1301,7 @@ export function removeMailbox(svc: MailService, admin: MailAdminDeps, id: string
   for (const agentId of ended) {
     try { admin.endGrant?.(agentId, id, `${address} was removed in Settings.`); } catch (e) { console.error('[mail] end grant:', e); }
   }
-  admin.deleteSecret(secretRefForMailbox(id));
+  if (admin.deleteSecret(secretRefForMailbox(id)) === false) console.error('[mail] the mailbox was removed, but its saved password could not be:', id);
   svc.close(id);
   return { ok: true, affected };
 }
