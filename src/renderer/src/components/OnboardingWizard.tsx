@@ -1141,15 +1141,17 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                   onChange={toggleNotifications}
                 />
 
-                <ToggleRow
-                  icon="play"
-                  label={t('onboarding.permissions.openAtLogin')}
-                  desc={t('onboarding.permissions.openAtLoginDesc')}
-                  on={openAtLogin}
-                  tint="var(--cth-sky-light)"
-                  edge="var(--cth-sky)"
-                  onChange={toggleOpenAtLogin}
-                />
+                {platform !== 'linux' && (
+                  <ToggleRow
+                    icon="play"
+                    label={t('onboarding.permissions.openAtLogin')}
+                    desc={t('onboarding.permissions.openAtLoginDesc')}
+                    on={openAtLogin}
+                    tint="var(--cth-sky-light)"
+                    edge="var(--cth-sky)"
+                    onChange={toggleOpenAtLogin}
+                  />
+                )}
 
                 {COLLECT_USAGE_STATS && (
                   <ToggleRow
