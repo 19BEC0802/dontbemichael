@@ -171,15 +171,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Say "couldn't reach QuickBooks" when the connector failed
-
-**What:** Show a separate message for `✘ Failed to connect` instead of "needs you to sign in again".
-
-**Why:** A network or server failure tells the owner to sign in.
-
-**Effort:** S
-**Priority:** P3
-
 ### Status check side effects
 
 **What:** Stop child MCP servers `claude mcp list` starts when the 30 s timeout kills it; avoid overlapping runs.
