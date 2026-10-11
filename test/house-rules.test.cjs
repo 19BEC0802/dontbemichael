@@ -72,6 +72,11 @@ test('a card never waits on its own person; its own step at a set time is todo',
   // Value: protects=the board says who else holds a card, and parked own work sits in To do with the time; fails_when=rule 8 or the board wording drops it; why_new=waiting had no word for the card's own person; seam=none
   assert.match(HOUSE_RULES, /8\. On the task board, "waiting" names who else a card waits on, never the card's own person\./);
   assert.match(HOUSE_RULES, /the card is "todo", with that time in its notes in the owner's local time\./);
+  // 2026-10-11: Erin read rule 8 as covering her scheduled inbox checks and
+  // reopened her done card; routines live in Schedules and done stays done.
+  assert.match(HOUSE_RULES, /When a card's one off next step is its own person's at a set time/);
+  assert.match(HOUSE_RULES, /Work that repeats on a schedule needs no card: its runs live in Schedules, and a done card stays done\./);
+  assert.equal((fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8').match(/scheduled routines get no card/g) || []).length, 3, 'Michael\'s two board texts and the protocol');
   const hive = fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8');
   assert.equal((hive.match(/never the card\\'s own person/g) || []).length, 4, 'rule 8, Michael\'s two board texts and the protocol');
 });
