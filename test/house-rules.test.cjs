@@ -65,3 +65,39 @@ test('written calmly: no dashes, no shouting, no dates that would break the prom
   assert.doesNotMatch(HOUSE_RULES.replace(/^HOUSE RULES\./, ''), /\b(MUST|NEVER|ALWAYS|CRITICAL)\b/);
   assert.doesNotMatch(HOUSE_RULES, /\b20\d\d\b/);
 });
+
+// 2026-10-11: Nick resumed his conversation with rule 7 in his instructions,
+// was asked to extend his earlier report, and copied its Sources list anyway.
+test('a resumed agent is told the house rules that changed, once; a fresh one is not', async (t) => {
+  // Value: protects=a new or reworded rule reaches agents that resume an old conversation; fails_when=the note never sends, repeats every start, or goes to a fresh conversation; why_new=rules only rode the start instructions; seam=none
+  const N = loadTs('src/shared/houseRulesNotice.ts');
+  assert.match(HOUSE_RULES, /When you extend or update an earlier file, rewrite its parts that break this rule\./);
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-rules-notice-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  await hive.ensureAgent({ id: 'nick', name: 'Nick', provider: 'claude', cwd: home, role: 'IT' });
+  await hive.ensureAgent({ id: 'oscar', name: 'Oscar', provider: 'claude', cwd: home, role: 'Finance' });
+  const inbox = (id) => fs.readdirSync(path.join(hive.root(), 'agents', id, 'inbox')).filter((f) => f.endsWith('.json'))
+    .map((f) => JSON.parse(fs.readFileSync(path.join(hive.root(), 'agents', id, 'inbox', f), 'utf8')))
+    .filter((m) => m.subject === N.HOUSE_RULES_CHANGED_SUBJECT);
+  const all = N.houseRuleLines(HOUSE_RULES);
+  assert.equal(all.length, 7);
+
+  assert.deepEqual(hive.tellHouseRules('oscar', false), [], 'a fresh conversation reads them in its instructions');
+  assert.equal(inbox('oscar').length, 0);
+  assert.deepEqual(hive.tellHouseRules('nick', true), all, 'a resumed one with no record hears every rule once');
+  assert.equal(inbox('nick').length, 1);
+  assert.match(inbox('nick')[0].body, /including a file you extend or update/);
+  assert.doesNotMatch(inbox('nick')[0].body, /[–—]/);
+  assert.deepEqual(hive.tellHouseRules('nick', true), [], 'not again while nothing changed');
+  assert.equal(inbox('nick').length, 1);
+
+  // A rule reworded since Nick last started: only that one is told.
+  const seenFile = path.join(home, 'private', 'house-rules-seen.json');
+  const seen = JSON.parse(fs.readFileSync(seenFile, 'utf8'));
+  seen.nick = seen.nick.filter((k) => k !== N.ruleKey(all[6]));
+  fs.writeFileSync(seenFile, JSON.stringify(seen));
+  assert.deepEqual(hive.tellHouseRules('nick', true), [all[6]]);
+  assert.equal(inbox('nick').length, 2);
+  assert.deepEqual(hive.tellHouseRules('oscar', true), [], 'oscar was recorded at his fresh start');
+});

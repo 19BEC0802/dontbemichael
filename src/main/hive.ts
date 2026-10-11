@@ -65,8 +65,9 @@ import { APP_NAME } from '../shared/appName';
 import { isPeerAssignment, rerouteToMichael, hopDropNotice } from '../shared/handoffRule';
 import {
   legacyOwnerSentDir, legacyOwnerStatePath, pluginsDisabledForSession,
-  privateOwnerSentDir, privateOwnerStatePath
+  privateOwnerSentDir, privateOwnerStatePath, privateRoot
 } from '../shared/agentPrivatePaths';
+import { HOUSE_RULES_CHANGED_SUBJECT, houseRulesNoticeBody, houseRulesToTell } from '../shared/houseRulesNotice';
 import { sleepSync } from './atomicFile';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
@@ -225,7 +226,7 @@ export const HOUSE_RULES = [
   '4. Report outcomes as they are: what is done and checked, what failed and why, and what you skipped. Call work finished only when it is.',
   '5. Use real people, customers, quotes and messages only. Make up an example only when the owner asks for a sample, and label it as one.',
   '6. When your instructions or a request ask for something your tools cannot do, because no tool does it or a tool refuses, report it instead of skipping it: what you could not do, for which task, and why. A team member tells Michael; Michael tells the owner on the Ask me board. Do not work around a missing or refused tool. Your instructions can describe work you have no tool for, so check before you call that step done. Say what the tool did or refused; offer the owner a setting or a fix only when a tool result or your instructions name it, because a guessed setting sends the owner looking for something that is not there.',
-  '7. Write anything the owner reads, reports and files included, in plain business words a busy owner follows on the first read. Leave out tool names, folder and file names, settings files, message ids, time zones and how you went about the work, unless the owner asked how it was done. Name a source the way the owner knows it ("your IT mailbox", "your notes from 9 Oct", "the supplier\'s invoice"), give times in the owner\'s local time, and name a file only so the owner can open it.'
+  '7. Write anything the owner reads, reports and files included, in plain business words a busy owner follows on the first read. Leave out tool names, folder and file names, settings files, message ids, time zones and how you went about the work, unless the owner asked how it was done. Name a source the way the owner knows it ("your IT mailbox", "your notes from 9 Oct", "the supplier\'s invoice"), give times in the owner\'s local time, and name a file only so the owner can open it. When you extend or update an earlier file, rewrite its parts that break this rule.'
 ].join('\n');
 
 /**
@@ -2015,6 +2016,26 @@ export class HiveManager {
   }
 
   /** Inject a message directly (used by the orchestrator / UI / tests). */
+  /**
+   * As an agent starts, tell it the house rules that changed since its last
+   * start (shared/houseRulesNotice.ts). The keys it has seen are app-private,
+   * beside the owner state, so no agent can mark a rule as read. Returns the
+   * rules it was told.
+   */
+  tellHouseRules(agentId: string, resumed: boolean): string[] {
+    const home = this.getHome();
+    const agent = this.registry().agents[agentId];
+    if (!home || !this.root() || !agent || agent.isAssistant) return [];
+    const file = join(privateRoot(home), 'house-rules-seen.json');
+    let seenAll: Record<string, string[]> = {};
+    try { seenAll = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string[]>; } catch { /* first start */ }
+    const { tell, keys } = houseRulesToTell(HOUSE_RULES, Array.isArray(seenAll[agentId]) ? seenAll[agentId] : undefined, resumed);
+    if (tell.length) this.send({ to: agentId, act: 'inform', subject: HOUSE_RULES_CHANGED_SUBJECT, body: houseRulesNoticeBody(tell) }, 'human');
+    mkdirSync(dirname(file), { recursive: true });
+    this.atomicWriteJson(file, { ...seenAll, [agentId]: keys });
+    return tell;
+  }
+
   send(partial: Partial<HiveMessage>, from = 'system'): HiveMessage {
     const msg = this.normalize(partial, from);
     this.routeMessage(msg);

@@ -3962,6 +3962,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // `cwd` echoes back the TILDE-EXPANDED absolute path so the renderer's agent
   // record matches what the registry and the PTY actually used.
   if (res.ok && opts.hive?.id) tellOfficeOpen(opts.hive.id);
+  if (res.ok && opts.hive?.id && hive.enabled()) {
+    try { hive.tellHouseRules(opts.hive.id, didResume); } catch (e) { console.error('[house-rules]', e); }
+  }
   if (res.ok && opts.hive?.isGod) { standupOnOfficeOpen(); catchUpOwnerAnswers(); }
   return { ...res, cwd: opts.cwd, ...(worktreePath ? { worktreePath } : {}), ...(resumeNotFound ? { resumeNotFound: true } : {}), ...(didResume ? { resumed: true } : {}), ...(seedPrompt ? { seedPrompt } : {}) };
 }
