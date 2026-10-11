@@ -126,7 +126,7 @@ test('the claude hook + statusLine commands run through the launcher', async (t)
   await hive.ensureAgent({ id: 'a1', name: 'A', provider: 'claude', cwd: home });
 
   const launcher = launcherIn(home);
-  const settings = JSON.parse(fs.readFileSync(path.join(home, 'hive/agents/a1/settings.json'), 'utf8'));
+  const settings = JSON.parse(fs.readFileSync(path.join(home, 'agent-settings/a1.json'), 'utf8'));
   const commands = [
     ...Object.values(settings.hooks).flatMap((matchers) => matchers.flatMap((m) => m.hooks.map((h) => h.command))),
     settings.statusLine.command
@@ -454,7 +454,7 @@ test('a hook fires with NO node on PATH, and its payload reaches HIVE_SOCK', { s
   // NOTE: async spawn, not spawnSync — the shim connects back to a socket THIS
   // process is serving, so a sync call would block our own event loop and
   // deadlock the handshake.
-  const settings = JSON.parse(fs.readFileSync(path.join(home, 'hive/agents/a1/settings.json'), 'utf8'));
+  const settings = JSON.parse(fs.readFileSync(path.join(home, 'agent-settings/a1.json'), 'utf8'));
   const after = await run(settings.hooks.Stop[0].hooks[0].command, env);
   assert.equal(after.code, 0, `hook failed under a stripped PATH: ${after.stderr}`);
 

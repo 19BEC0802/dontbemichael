@@ -45,6 +45,9 @@ export interface HiveTask {
    *  D2): shown as "Closed by owner". */
   closedBy?: 'owner';
   closedReason?: string;
+  /** What came of the card, in Michael's words: he writes it when he marks the
+   *  card Done (issue 51). Shown on the card, never checked or invented. */
+  result?: string;
 }
 
 /** The card's open questions for the human, oldest first: every ask with no
@@ -127,6 +130,19 @@ export function parseTasks(raw: unknown): HiveTask[] {
           }))
         : undefined,
       closedBy: t.closedBy === 'owner' ? 'owner' as const : undefined,
-      closedReason: typeof t.closedReason === 'string' ? t.closedReason : undefined
+      closedReason: typeof t.closedReason === 'string' ? t.closedReason : undefined,
+      result: typeof t.result === 'string' && t.result.trim() ? t.result : undefined
     }));
+}
+
+/** The first line of a Done card's result, as plain text for the board: its
+ *  markdown heading, bullet, emphasis and code marks taken off. Empty when the
+ *  card has no result. */
+export function resultHeadline(result: string | undefined): string {
+  const line = (result ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  return line
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^(?:[-*+]|\d+[.)])\s+/, '')
+    .replace(/(\*\*|__|\*|_|`)(.+?)\1/g, '$2')
+    .trim();
 }

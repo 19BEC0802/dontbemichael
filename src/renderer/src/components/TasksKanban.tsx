@@ -13,8 +13,8 @@ import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 export { openQuestion, openQuestions, waitsOnHuman, parseTasks, type HiveTask, type HumanQA } from './hiveTasks';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
-import { waitsOnHuman, type HiveTask, type TaskStatus } from './hiveTasks';
-import { AskFileRows, useAskFileVerdicts } from './AskFileRows';
+import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus } from './hiveTasks';
+import { FileText, useAskFileChecks } from './FileChip';
 import { blockedWithNothingAsked, michaelCardState, type WorkHours } from '@shared/ownerRequests';
 import { isAnswered, isWithdrawn } from '@shared/askMeRouting';
 
@@ -242,6 +242,17 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
             {assigneeName}
           </span>
         )}
+        {/* What came of it, first line of Michael's result (issue 51); a card
+            the owner closed says so below instead. */}
+        {done && task.closedBy !== 'owner' && resultHeadline(task.result) && (
+          <span data-result title={resultHeadline(task.result)} style={{
+            fontSize: 11, lineHeight: '15px', color: 'var(--cth-ink-3)',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+          }}>
+            <span aria-hidden style={{ color: 'var(--cth-green-text)', fontWeight: 600, marginInlineEnd: 4 }}>✓</span>
+            {resultHeadline(task.result)}
+          </span>
+        )}
         {task.status === 'waiting' && (
           <span data-waiting-on title={t('kanban.waitingOnTitle', { godName })} style={{
             alignSelf: 'flex-start', maxWidth: '100%', display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: 999,
@@ -323,7 +334,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
   const detailGodName = useResolvedGodName();
   // Every file the Q&A trail names, checked in one go rather than per question.
   const qaAssignee = typeof task.assignee === 'string' ? task.assignee : undefined;
-  const qaFiles = useAskFileVerdicts(task.humanQA, qaAssignee);
+  const qaFiles = useAskFileChecks(task.humanQA, qaAssignee);
   const col = COLUMNS.find((c) => c.key === task.status) ?? COLUMNS[0];
   // Belt + suspenders: parseTasks normalizes these, but the ledger is a
   // hand-written file — never trust a card's shape at the point of use.
@@ -408,6 +419,20 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
             </div>
           </div>
 
+          {/* What came of a Done card, in Michael's words, first (issue 51):
+              never checked or invented, and nothing when he wrote none. */}
+          {task.status === 'done' && task.result && (
+            <div data-result>{label(t('kanban.result'))}
+              <div dir={rtl ? 'auto' : undefined} style={{
+                padding: '10px 12px', borderRadius: 'var(--cth-r-lg)', background: 'var(--cth-green-soft)',
+                boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--cth-green) 30%, transparent)',
+                fontSize: 12.5, lineHeight: '18px', color: 'var(--cth-ink)'
+              }}>
+                <FileText source={task.result} who={{ assignee: qaAssignee }} />
+              </div>
+            </div>
+          )}
+
           {/* What the card is for, and the notes kept on it, line by line;
               nothing for either when the card has none. */}
           {([['description', task.description], ['notes', task.notes]] as const).map(([key, text]) => text?.trim() ? (
@@ -435,8 +460,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
                         <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--cth-ink-2)' }}>{t('kanban.question')}</span>
                         {open && <span style={{ marginInlineStart: 'auto', padding: '1px 8px', borderRadius: 999, background: 'var(--cth-coral-strong)', color: 'var(--cth-on-coral)', fontSize: 10.5, fontWeight: 600 }}>{t('kanban.awaitingAnswer')}</span>}
                       </div>
-                      <MarkdownPreview source={e.q} variant="card" />
-                      <AskFileRows question={e.q} raisedBy={e.raisedBy} assignee={qaAssignee} verdicts={qaFiles[e.raisedBy ?? ''] ?? {}} endRule={!isAnswered(e)} style={{ marginTop: 8 }} />
+                      <FileText source={e.q} who={{ raisedBy: e.raisedBy, assignee: qaAssignee }} checks={qaFiles[e.raisedBy ?? ''] ?? {}} />
                       {isAnswered(e) ? (
                         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--cth-line)' }}>
                           <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--cth-green-text)', marginBottom: 2 }}>{t('kanban.answer')}</div>
