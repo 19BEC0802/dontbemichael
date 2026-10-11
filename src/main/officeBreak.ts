@@ -5,13 +5,13 @@
  * resets (`rate_limits.<window>.resets_at`, epoch seconds). This class turns
  * those signals into one office state:
  *
- *  - waiting: the limit is reached. Schedules hold their jobs (one held run per
- *    job), and nothing types into a Claude terminal.
+ *  - waiting: the limit is reached. Nothing types into a Claude terminal.
+ *    Schedules still run as configured: their jobs wait in the inboxes.
  *  - checking: the reset time has passed (a minute later, so Claude Code's own
  *    automatic continue goes first). Delivery opens again and Michael is told,
  *    so one turn can show whether work can start.
- *  - over: a Claude turn finished. Held jobs go out once, and team members who
- *    were cut off are told to carry on.
+ *  - over: a Claude turn finished. Team members who were cut off are told to
+ *    carry on, and the waiting inbox mail is delivered as usual.
  *
  * A limit hit while checking goes back to waiting. With no reset time known,
  * the app checks again every RETRY_MS. The state is saved, so a restart during
@@ -40,8 +40,6 @@ export interface OfficeBreakState {
   due: number;
   /** Claude team members whose turn the limit cut off. */
   cutOff: string[];
-  /** Schedule ids held during the break, each once. */
-  held: string[];
 }
 
 type Window = { used_percentage?: unknown; resets_at?: unknown };
@@ -83,7 +81,7 @@ export class OfficeBreak {
       let s: OfficeBreakState | null = null;
       try { s = this.store.load(); } catch { /* unreadable: no break */ }
       this.saved = s && (s.phase === 'waiting' || s.phase === 'checking') && typeof s.since === 'number' && typeof s.due === 'number'
-        ? { ...s, until: typeof s.until === 'number' ? s.until : null, cutOff: Array.isArray(s.cutOff) ? s.cutOff : [], held: Array.isArray(s.held) ? s.held : [] }
+        ? { ...s, until: typeof s.until === 'number' ? s.until : null, cutOff: Array.isArray(s.cutOff) ? s.cutOff : [] }
         : null;
     }
     return this.saved;
@@ -96,7 +94,7 @@ export class OfficeBreak {
 
   /** The full state, for the timer and for tests. */
   current(): OfficeBreakState | null {
-    return this.state ? { ...this.state, cutOff: [...this.state.cutOff], held: [...this.state.held] } : null;
+    return this.state ? { ...this.state, cutOff: [...this.state.cutOff] } : null;
   }
 
   /** Whether Claude terminals and schedules are held right now. */
@@ -119,7 +117,7 @@ export class OfficeBreak {
     const prev = this.state;
     const cutOff = prev ? (prev.cutOff.includes(agentId) ? prev.cutOff : [...prev.cutOff, agentId]) : [agentId];
     if (!prev) {
-      this.set({ phase: 'waiting', since: now, until, due, cutOff, held: [] });
+      this.set({ phase: 'waiting', since: now, until, due, cutOff });
       return 'started';
     }
     const again = prev.phase === 'checking';
@@ -146,13 +144,6 @@ export class OfficeBreak {
     const ended = { ...s, cutOff: s.cutOff.filter((id) => id !== agentId) };
     this.set(null);
     return ended;
-  }
-
-  /** Hold one schedule run. Returns false when that job already waits. */
-  hold(missionId: string): boolean {
-    if (!this.state || this.state.held.includes(missionId)) return false;
-    this.set({ ...this.state, held: [...this.state.held, missionId] });
-    return true;
   }
 
   /** The timer ran out. Waiting moves to checking ('check'); a check that

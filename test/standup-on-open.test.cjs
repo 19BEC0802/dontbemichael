@@ -35,7 +35,7 @@ const launchCode = ts.transpileModule(launchFunction.getText(source), {
 }).outputText;
 const now = Date.UTC(2026, 9, 11, 12); // Sunday: no weekday slot is due.
 
-function office(overrides = {}, enabled = true, onBreak = false) {
+function office(overrides = {}, enabled = true) {
   let mission = {
     id: 'ops-standup', label: 'Standup', intervalMs: 3_600_000,
     to: 'god', body: '', enabled: true, focus: 'Check open work', ...overrides
@@ -43,10 +43,7 @@ function office(overrides = {}, enabled = true, onBreak = false) {
   const sent = [];
   const writes = [];
   let rearmed = 0;
-  const held = [];
   const context = vm.createContext({
-    missionHeldByBreak: () => onBreak,
-    holdMission: (id) => held.push(id),
     standupFiredThisLaunch: false,
     hive: { enabled: () => enabled, send: (...args) => sent.push(args) },
     OPS_STANDUP_MISSION: { id: 'ops-standup' },
@@ -61,7 +58,7 @@ function office(overrides = {}, enabled = true, onBreak = false) {
   vm.runInContext(launchCode, context);
   return {
     run: () => vm.runInContext('standupOnOfficeOpen()', context),
-    sent, writes, held,
+    sent, writes,
     mission: () => mission,
     rearmed: () => rearmed
   };
@@ -78,15 +75,6 @@ test('an interval standup dispatches once and restarts its cadence', () => {
   assert.equal(state.writes.length, 1);
   assert.equal(state.mission().lastFiredAt, now);
   assert.equal(state.rearmed(), 1);
-});
-
-test('on a break the launch standup waits for the break to end, once (issue 124)', () => {
-  const state = office({ lastFiredAt: now - 1000 }, true, true);
-  state.run();
-  state.run();
-  assert.equal(state.sent.length, 0);
-  assert.equal(state.writes.length, 0, 'not stamped: it has not run');
-  assert.deepEqual(state.held, ['ops-standup']);
 });
 
 for (const [name, overrides, enabled] of [

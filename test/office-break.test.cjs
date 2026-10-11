@@ -59,8 +59,8 @@ test('the reset time is the fullest window\'s, read from the status line', () =>
   }
 });
 
-test('a break holds, checks after the reset, and ends on the first finished turn', () => {
-  // Value: protects=schedules wait and the office starts again by itself; fails_when=the break never ends, ends too soon, or holds a job twice; why_new=issue 124; seam=none
+test('a break checks after the reset and ends on the first finished turn', () => {
+  // Value: protects=the office starts again by itself; fails_when=the break never ends or ends too soon; why_new=issue 124; seam=none
   const c = clock();
   const { box, store } = memoryStore();
   const b = new OfficeBreak(store, c.now);
@@ -75,10 +75,6 @@ test('a break holds, checks after the reset, and ends on the first finished turn
   assert.equal(b.limitReached('god'), 'held', 'a second member hitting the limit is the same break');
   assert.deepEqual(b.current().cutOff, ['sales', 'god']);
 
-  assert.equal(b.hold('standup'), true);
-  assert.equal(b.hold('standup'), false, 'an hourly job does not pile up');
-  assert.equal(b.hold('weekly-report'), true);
-
   // A reply already on its way when the limit was reached does not end it.
   c.t += SETTLE_MS - 1;
   assert.equal(b.turnFinished('books'), null);
@@ -87,7 +83,7 @@ test('a break holds, checks after the reset, and ends on the first finished turn
   // Saved: a restart during the break still shows it.
   const again = new OfficeBreak(store, c.now);
   assert.deepEqual(again.view(), { until: reset, checking: false });
-  assert.deepEqual(again.current().held, ['standup', 'weekly-report']);
+  assert.deepEqual(again.current().cutOff, ['sales', 'god']);
 
   c.t = reset + RESET_GRACE_MS;
   assert.deepEqual(b.tick(), { step: 'check' });
@@ -100,7 +96,6 @@ test('a break holds, checks after the reset, and ends on the first finished turn
   const ended = b.turnFinished('god');
   assert.equal(b.view(), null);
   assert.equal(box.state, null, 'the saved break is cleared');
-  assert.deepEqual(ended.held, ['standup', 'weekly-report'], 'each held job goes out once');
   assert.deepEqual(ended.cutOff, [], 'the member whose turn ended it is not told to carry on');
 });
 
@@ -180,14 +175,18 @@ test('the hook server passes on the usage limit, the reset times and finished tu
   const settingsPath = inj.args[inj.args.indexOf('--settings') + 1];
   const hooks = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).hooks;
   assert.equal(hooks.StopFailure[0].matcher, 'rate_limit');
+  // Claude Code continues the task by itself at the reset, whatever the
+  // owner's own Claude settings say (issue 36 terms).
+  assert.equal(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).autoContinueAtUsageLimit, true);
 });
 
-test('the app holds schedules and terminals during a break and shows it', () => {
-  // Value: protects=every path that types into a terminal or sends a job honours the break; fails_when=a schedule, the wake beat, the heartbeat, the standup or the queue ignores it; why_new=issue 124; seam=none
+test('during a break nothing types into a Claude terminal, and schedules still run as configured', () => {
+  // Value: protects=the break holds terminal nudges only, never a scheduled run (owner rule); fails_when=the wake beat or the queue types during a break, or a schedule is held or skipped; why_new=issue 124, aligned to the issue 36 terms; seam=source pin
   const index = read('src/main/index.ts');
-  assert.match(index, /const fire = \(\): void => \{\s*try \{[\s\S]{0,200}if \(missionHeldByBreak\(m\)\) \{ holdMission\(m\.id\); return; \}\s*sendMission\(m\);/);
-  assert.match(index, /standupFiredThisLaunch = true;\s*if \(missionHeldByBreak\(m\)\) \{ holdMission\(m\.id\); return; \}/);
-  assert.match(index, /if \(officeBreak\.holding\(\) && agentHeldByBreak\(hive\.registry\(\)\.godId \?\? 'god'\)\) \{/);
+  assert.match(index, /const fire = \(\): void => \{\s*try \{[\s\S]{0,200}sendMission\(m\);/);
+  assert.doesNotMatch(index, /missionHeldByBreak|holdMission|officeBreak\.hold\(/, 'no schedule run is held, skipped or reshaped');
+  assert.doesNotMatch(index.slice(index.indexOf('function armHeartbeat('), index.indexOf('function liveWebContents(')), /officeBreak/, 'the heartbeat runs as configured');
+  assert.doesNotMatch(index.slice(index.indexOf('function standupOnOfficeOpen('), index.indexOf('function migrateMissionOwners(')), /officeBreak|Break/, 'the launch standup runs as configured');
   assert.match(index, /if \(heldByBreak\(officeBreak\.view\(\), a\?\.provider\)\) continue;/);
   assert.match(index, /persist\.open\(\); \} catch[^\n]*\n[^\n]*\n\s*armOfficeBreak\(\);/);
   assert.match(read('src/renderer/src/hooks/useHive.ts'), /if \(heldByBreak\(getOfficeBreak\(\), target\.provider\) && !next\.manual\) return \{ sent: false \};/);

@@ -1066,9 +1066,8 @@ function syncMissions(): void {
     if (plan.type === 'heartbeat') { armHeartbeat(m); continue; }
     const fire = (): void => {
       try {
-        // On a break (issue 124) the job waits, once, and goes out when the
-        // break ends. Not stamped: it has not run.
-        if (missionHeldByBreak(m)) { holdMission(m.id); return; }
+        // Runs as configured, a break included (owner): the job lands in the
+        // inbox, and the break only holds the nudge that delivers it.
         sendMission(m);
       } catch (e) {
         console.error('[scheduler] mission', m.id, e);
@@ -1246,7 +1245,6 @@ function standupOnOfficeOpen(): void {
   const m = (readConfig().missions ?? []).find((x) => x.id === OPS_STANDUP_MISSION.id);
   if (!m || !m.enabled || normalizeTimes(m.times) || normalizeWeekly(m.weekly) || !(m.intervalMs > 0)) return;
   standupFiredThisLaunch = true;
-  if (missionHeldByBreak(m)) { holdMission(m.id); return; }
   try {
     hive.send({ to: m.to, act: 'inform', subject: m.label, body: scheduledRunBody(m.label, m.body, m.focus) }, 'scheduler');
     const next = (readConfig().missions ?? []).map((x) => (x.id === m.id ? { ...x, lastFiredAt: Date.now() } : x));
@@ -1789,24 +1787,6 @@ const officeBreak = new OfficeBreak({
 });
 let officeBreakTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Whether this agent runs on the Claude plan, so the break holds it. */
-function agentHeldByBreak(agentId: string): boolean {
-  try {
-    const reg = hive.registry();
-    return heldByBreak(officeBreak.view(), reg.agents[agentId === 'god' ? reg.godId ?? 'god' : agentId]?.provider);
-  } catch { return officeBreak.holding(); }
-}
-
-/** A schedule run waits during the break when it sends work to a Claude agent. */
-function missionHeldByBreak(m: ScheduledMission): boolean {
-  const payload = firePayload(m);
-  return !!payload && officeBreak.holding() && agentHeldByBreak(payload.to);
-}
-
-function holdMission(id: string): void {
-  if (officeBreak.hold(id)) { try { hive.appendLog({ kind: 'office-break', step: 'hold', mission: id }); } catch { /* best-effort */ } }
-}
-
 function breakClock(at: number): string {
   return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
@@ -1877,8 +1857,9 @@ function runOfficeBreakTick(): void {
   publishOfficeBreak();
 }
 
-/** The plan answers again: send each held job once, tell the team members who
- *  were cut off to carry on (Michael first), and tell the owner. */
+/** The plan answers again: tell the team members who were cut off to carry on
+ *  (Michael first), and tell the owner. Schedules were never held: their runs
+ *  waited in the inboxes, whose delivery opens again now. */
 function endOfficeBreak(ended: OfficeBreakState): void {
   if (officeBreakTimer) clearTimeout(officeBreakTimer);
   officeBreakTimer = null;
@@ -1894,12 +1875,7 @@ function endOfficeBreak(ended: OfficeBreakState): void {
         }, 'system');
       }
     }
-    const missions = readConfig().missions ?? [];
-    for (const id of ended.held) {
-      const m = missions.find((x) => x.id === id);
-      if (m?.enabled) sendMission(m);
-    }
-    hive.appendLog({ kind: 'office-break', step: 'over', cutOff: cutOff.length, held: ended.held.length });
+    hive.appendLog({ kind: 'office-break', step: 'over', cutOff: cutOff.length });
   } catch (e) { console.error('[office break] end', e); }
   ownerToast(michaelName(), 'The break is over. The team is back at work.');
   publishOfficeBreak();
@@ -2053,14 +2029,6 @@ function armHeartbeat(m: ScheduledMission): void {
       // waiting in god's inbox — the latter is independent of floor-quiet so a
       // worker's reply doesn't sit unread while other agents keep the floor busy.
       const actionable = godActionableInboxCount();
-      // On a break nothing types into Michael's terminal; the break's own
-      // check tells him when it may be over (issue 124).
-      if (officeBreak.holding() && agentHeldByBreak(hive.registry().godId ?? 'god')) {
-        const entry = missionTimers.get(m.id) ?? {};
-        entry.timeout = setTimeout(beat, base);
-        missionTimers.set(m.id, entry);
-        return;
-      }
       if (isFloorQuiet(quiet) || actionable > 0) {
         reengageGod(buildHeartbeatDigest(quiet, actionable));
         next = Math.round(base * 2.5);            // back off after re-engaging

@@ -1540,6 +1540,11 @@ export class HiveManager {
       // No `shell` field here: Claude Code runs it in its default shell, which
       // the pinned Git Bash (or its absence) makes the same as `shell`.
       statusLine: { type: 'command', command: shellCommand(shell, node, shim, '--status'), padding: 0 },
+      // After a plan usage limit, Claude Code waits in the session and continues
+      // the task by itself at the reset (issue 124, the office break). On by
+      // default; set here so the owner's own Claude settings can't turn it off
+      // for the team. Read from --settings (user scope), never ~/.claude.
+      autoContinueAtUsageLimit: true,
       // Native OS sandbox for Bash subprocesses (macOS Seatbelt / Linux bubblewrap).
       // Auto mode spawns with `--permission-mode bypassPermissions`, which only
       // silences PROMPTS; the sandbox is a separate, opt-in layer that was never
