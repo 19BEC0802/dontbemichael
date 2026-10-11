@@ -39,12 +39,11 @@ own memory, working on your computer.
 > brings you only the calls that need you.
 
 > [!TIP]
-> **New in 0.1.7: a clear Microsoft 365 message, and safer large files.**
-> A mailbox on your own domain that runs on Microsoft 365 now says it cannot be connected yet,
-> instead of a misleading error. A Word, Excel or PowerPoint file too big to read is refused before
-> it can use up memory, an email is no longer sent twice after a restart, and web links open in your
-> browser. In 0.1.6, Can send stopped putting emails on Ask me.
-> [Every feature, release by release](./docs/FEATURES.md).
+> **New in 0.1.8: the office takes a break at your Claude plan limit, and files open inside it.**
+> When the plan runs out, Ask me and the top bar say when work starts again, nothing is typed into
+> a session that cannot answer, and the team carries on by itself at the reset. A file Michael
+> names opens in an office tab. Done cards show the result, and an email that may have gone out is
+> never sent twice. In 0.1.7, Microsoft 365 mailboxes got a clear message.
 
 ## Contents
 

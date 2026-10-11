@@ -1,6 +1,6 @@
 # Don't Be Michael: features and changes
 
-Everything the app does today, and every release that got it here (0.0.1 to 0.1.7). Part 1 is
+Everything the app does today, and every release that got it here (0.0.1 to 0.1.8). Part 1 is
 written to be lifted onto the GitHub page and the website as it is; Part 2 is the full list, release
 by release.
 
@@ -112,6 +112,30 @@ moving, and brings you only the decisions that need you.
   the file was kept.
 
 ## Part 2: Every change, release by release
+
+### 0.1.8 (2026-10-11)
+- Office break: when the Claude plan reaches its usage limit, Ask me, the top bar and the floor say
+  so and when work starts again. Nothing is typed into a Claude terminal meanwhile; scheduled jobs
+  still go out on time and wait in the inbox. At the reset Michael is told, and the team members
+  who stopped mid task carry on once a turn goes through.
+- Files Michael names in replies, Ask me cards and tasks are chips. Markdown, text, JSON, CSV and
+  pictures open in an office tab that refreshes on change; PDF and Office files open in their own
+  app. Only files in the office and team folders open.
+- A Done card shows the first line of Michael's result; the owner's message flies to Michael as a
+  paper plane; setup says why it starts again when the settings file was damaged.
+- No team member, Michael included, can change the hook program or any agent's settings. The
+  webhook and Slack listeners answer this computer only.
+- Mail: a send that may have gone out is held, never sent twice; a server never reached reads Not
+  sent; a damaged approvals file is refused, not emptied.
+- A config.json that cannot be read is copied aside before any save, and a failed save keeps the
+  old file.
+- Contributor fixes: connectors say when they cannot be reached and stop everything a hung check
+  started; team members that failed their first start are tried again; messages are not typed
+  twice; the standup keeps to its times at launch; one webhook cannot use up the others' limit;
+  memory notes use your local day; setup text is 14 px or larger; Settings folds animate; Open at
+  login is hidden on Linux; Windows reads "this computer"; tab rows scroll with the wheel; Skills
+  search has a Clear button; and smaller fixes to secrets, QuickBooks access and the closing time
+  list.
 
 ### 0.1.7 (2026-10-09)
 - Microsoft 365 on your own domain: testing such a mailbox looks up where the domain's mail goes and
