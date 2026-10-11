@@ -207,15 +207,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Validate the agent id when saving QuickBooks access
-
-**What:** Refuse ids that are not on the roster in `quickbooks:setAccess`.
-
-**Why:** Any string is written into `agentCapabilities` and would apply to a future agent with that id.
-
-**Effort:** S
-**Priority:** P4
-
 ## Closing time (deferred from ship of feat/closing-time-progress, 2026-09-29)
 
 ### Feed each row's latest line from the agent's transcript
