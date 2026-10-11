@@ -115,6 +115,19 @@ function TalkToMichael() {
       <MichaelDock dock={dock} refresh={refresh} godId={godId} composerRef={composerRef}
         onFillComposer={(v) => { setDraft(godId, v); composerRef.current?.querySelector('textarea')?.focus(); }}
         onReply={(target) => { setReplyTo(target); composerRef.current?.querySelector('textarea')?.focus(); }} />
+      {/* The way back to the saved conversation once every reply is read (21A: the owner's action). */}
+      {dock.items.length > 0 && (
+        <button onClick={() => (dockOpen ? setDock(false) : openAt())} aria-expanded={dockOpen}
+          aria-label={t('dock.label', { godName })} title={t('dock.label', { godName })} style={{
+            width: 34, height: 34, flexShrink: 0, border: 'none', borderRadius: 'var(--cth-r-md)', cursor: 'pointer',
+            display: 'grid', placeItems: 'center',
+            background: dockOpen ? 'var(--cth-ink)' : 'var(--cth-neutral-soft)', color: dockOpen ? 'var(--cth-bg)' : 'var(--cth-ink-2)'
+          }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z" />
+          </svg>
+        </button>
+      )}
       <button onClick={() => void pick()} aria-label={t('shell.attach')} title={t('shell.attach')} style={{
         width: 34, height: 34, flexShrink: 0, border: 'none', borderRadius: 'var(--cth-r-md)', cursor: 'pointer',
         display: 'grid', placeItems: 'center', background: 'var(--cth-neutral-soft)', color: 'var(--cth-ink-2)'

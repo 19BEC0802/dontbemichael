@@ -212,6 +212,8 @@ test('the dock and its count follow the design', () => {
   const bar = read('src/renderer/src/shell/BottomBar.tsx');
   assert.match(bar, /background: waiting \? 'var\(--cth-coral-strong\)' : 'var\(--cth-indigo\)'/);
   assert.doesNotMatch(bar, /shell\.queued/, 'the queue chip is gone (2A)');
+  assert.match(bar, /\{dock\.items\.length > 0 && \(\n\s*<button onClick=\{\(\) => \(dockOpen \? setDock\(false\) : openAt\(\)\)\} aria-expanded=\{dockOpen\}/,
+    'with every reply read (after a restart, say) the conversation still opens from its own button');
   const main = read('src/main/index.ts');
   assert.match(main, /n\.on\('click', \(\) => \{/);
   assert.match(main, /if \(inFront \|\| !hive\.ownerNotify\(msg\.in_reply_to, msg\.id\)\) return;/);
