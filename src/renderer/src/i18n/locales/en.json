@@ -58,7 +58,8 @@
     "ghost": "Gone",
     "compacting": "Tidying up",
     "looping": "Stuck",
-    "typing": "Your draft"
+    "typing": "Your draft",
+    "onBreak": "On a break"
   },
   "agentControl": {
     "deliveryPaused": "queued messages held (whole floor)",
@@ -2192,5 +2193,13 @@
     },
     "signInUnknown": "Could not check sign in. Sign in if Claude asks.",
     "cardTitleTeam": "Some of your team can't start yet"
+  },
+  "officeBreak": {
+    "title": "The office is on a break",
+    "body": "Your Claude plan reached its limit. Work starts again around {{time}}.",
+    "bodyUnknown": "Your Claude plan reached its limit. Work starts again when it resets.",
+    "info": "Your Claude plan reached its usage limit, so the team cannot work. Scheduled jobs wait, and each runs once when the break ends. The team starts again on its own. A bigger Claude plan means fewer breaks.",
+    "chip": "On a break until {{time}}",
+    "chipUnknown": "On a break"
   }
 }

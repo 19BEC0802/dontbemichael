@@ -17,6 +17,7 @@ import { ScheduleRequestCards } from './ScheduleRequestCards';
 import { WorkStyleUpdateCards } from './WorkStyleUpdateCards';
 import { MailProposalCards } from './MailProposalCards';
 import { EngineSetupCard } from './EngineSetupCard';
+import { OfficeBreakCard, useOfficeBreak } from './OfficeBreakNotice';
 import { FileText } from './FileChip';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
@@ -67,6 +68,7 @@ export function AskMeTab() {
   // One shared read with the pill, the strip and the chips (D3, eng R4).
   const { tasks, requests: scheduleRequests, offers, proposals, engineSetup } = useNeedsYou();
   const engineCard = !!(engineSetup?.applies && engineSetup.needed);
+  const onBreak = !!useOfficeBreak();
   const refreshScheduleRequests = refreshNeedsYou;
   // Drafts live in the STORE (keyed by row) — switching tabs unmounts this
   // view, and a half-typed answer must survive the round trip.
@@ -195,13 +197,14 @@ export function AskMeTab() {
     // a one row answer, and what is stuck behind it. Scrolls on its own so the
     // board heading stays put.
     <div ref={rootRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '2px 2px 10px', margin: '-2px -2px 0' }}>
+      <OfficeBreakCard />
       <EngineSetupCard status={engineSetup} />
       <ScheduleRequestCards requests={scheduleRequests} refresh={refreshScheduleRequests} />
       <WorkStyleUpdateCards offers={offers} />
       <MailProposalCards proposals={proposals} refresh={refreshNeedsYou} />
       {/* Nothing left (D4, D8): All clear, one light line, and what was just
           answered. The column closes on the next click outside it. */}
-      {!engineCard && waiting.length === 0 && scheduleRequests.length === 0 && offers.length === 0 && proposals.length === 0 && (
+      {!engineCard && !onBreak && waiting.length === 0 && scheduleRequests.length === 0 && offers.length === 0 && proposals.length === 0 && (
         <div style={{ padding: '4px 2px 2px' }}>
           <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--cth-ink)' }}>{translate('shell.allClear')}</div>
           <div style={{ marginTop: 4, fontSize: 13, lineHeight: '19px', color: 'var(--cth-ink-3)' }}>{translate(`shell.allClearLine${line}`, { godName })}</div>

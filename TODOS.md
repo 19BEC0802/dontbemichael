@@ -20,7 +20,7 @@
 
 **Why:** The broker forwards a write with no dedupe behind a 30 second timeout (`src/main/integrationBroker.ts`, `UPSTREAM_TIMEOUT_MS`). If the provider accepts it but the answer is lost, or the app stops before it comes back, the agent's retry creates a second invoice, booking or contact. Plain mail sends got this in PR #126; connected app writes did not.
 
-**Context:** Reuse PR #126's pattern inside the broker, not a new store: an app private journal like `mail-send-journal.json`, keyed on the agent, integration, method, path and a hash of the body, written as pending before the upstream call and settled after. Pass the key upstream where the provider takes one (an `Idempotency-Key` header, QuickBooks `requestid`). A write left pending after a stop that the app cannot check is refused with a plain reason telling the agent to tell Michael, as PR #126 does for mail; the app never makes or moves a card for it (Michael owns every card). Issue #54 also proposed a per task work record for engine hand off and proof of done; those stay with "Plan-limit handling", "Make a second engine (Codex first) ready for an office", #36, #48 and #51.
+**Context:** Reuse PR #126's pattern inside the broker, not a new store: an app private journal like `mail-send-journal.json`, keyed on the agent, integration, method, path and a hash of the body, written as pending before the upstream call and settled after. Pass the key upstream where the provider takes one (an `Idempotency-Key` header, QuickBooks `requestid`). A write left pending after a stop that the app cannot check is refused with a plain reason telling the agent to tell Michael, as PR #126 does for mail; the app never makes or moves a card for it (Michael owns every card). Issue #54 also proposed a per task work record for engine hand off and proof of done; those stay with "Make a second engine (Codex first) ready for an office", #36, #48 and #51.
 
 **Effort:** M
 **Priority:** P2
@@ -480,18 +480,6 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 **Effort:** M
 **Priority:** P1
 **Depends on:** None
-
-### Plan-limit handling
-
-**What:** Detect Claude usage limits (StopFailure `rate_limit`, quota hooks), show an office break state and a banner.
-
-**Why:** On smaller Claude plans the office stops mid-day with no explanation; setup now tells owners a Max plan is needed, but nothing handles hitting the limit.
-
-**Context:** Hooks arrive in `src/main/hooks.ts`.
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** Attention strip
 
 ### Attention strip and owner floor layout (Decisions 25, 27)
 

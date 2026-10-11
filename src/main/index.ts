@@ -48,7 +48,9 @@ import {
 } from './git';
 import { linkWorktreeDeps, unlinkWorktreeDeps } from './worktreeDeps';
 import { HiveManager, type AgentMeta, type HiveMessage, type HiveTask } from './hive';
-import { HookServer } from './hooks';
+import { HookServer, type PlanSignal } from './hooks';
+import { OfficeBreak, type OfficeBreakState } from './officeBreak';
+import { heldByBreak } from '../shared/officeBreak';
 import { loadBundledPacks, packsResourceDir } from './packs';
 import { businessFolderRoot, ensureFolder, safeFolderName } from './agentFolders';
 import { CircuitBreaker, type BreakerInput } from './breaker';
@@ -428,7 +430,8 @@ const hookServer = new HookServer(
   () => ({ ...knowledge.agentAccess(), meaning: meaningSearch() }),
   companyProfileForAgents,
   (agentId) => booksReadRoleIds().has(agentId),
-  memberPresent
+  memberPresent,
+  (signal) => onPlanSignal(signal)
 );
 const memory = new MemoryManager(
   () => readConfig().harnessHome,
@@ -1024,6 +1027,25 @@ function clearMissionTimers(): void {
   missionTimers.clear();
 }
 
+/** Send one schedule run to its agent and stamp lastFiredAt. A 'compact'
+ *  maintenance mission carries no dispatch (firePayload is null), so only the
+ *  stamp happens. */
+function sendMission(m: ScheduledMission): void {
+  const payload = firePayload(m);
+  if (payload && hive.enabled()) {
+    hive.send({ to: payload.to, act: 'inform', subject: payload.subject, body: payload.body }, 'scheduler');
+  }
+  // No compaction here: that is Claude Code's own auto compact now, with its
+  // window set per agent at spawn (AUTO_COMPACT_WINDOW_TOKENS).
+  const current = readConfig().missions ?? [];
+  const next = current.map((x) =>
+    x.id === m.id ? { ...x, lastFiredAt: Date.now() } : x
+  );
+  writeConfig({ missions: next });
+  // Let the SCHEDULES panel refresh its "last fired" without a reload (#2.3).
+  try { liveWebContents()?.send('missions:updated'); } catch { /* window gone */ }
+}
+
 /** Rebuild the scheduler from persisted config: clear every existing timer,
  *  then arm each enabled mission honoring its lastFiredAt — a setTimeout for the
  *  time remaining until its next due fire, which then settles into a steady
@@ -1044,21 +1066,10 @@ function syncMissions(): void {
     if (plan.type === 'heartbeat') { armHeartbeat(m); continue; }
     const fire = (): void => {
       try {
-        // A 'compact' maintenance mission carries no dispatch (firePayload is
-        // null), so only the stamp below happens.
-        const payload = firePayload(m);
-        if (payload && hive.enabled()) {
-          hive.send({ to: payload.to, act: 'inform', subject: payload.subject, body: payload.body }, 'scheduler');
-        }
-        // No compaction here: that is Claude Code's own auto compact now, with its
-        // window set per agent at spawn (AUTO_COMPACT_WINDOW_TOKENS).
-        const current = readConfig().missions ?? [];
-        const next = current.map((x) =>
-          x.id === m.id ? { ...x, lastFiredAt: Date.now() } : x
-        );
-        writeConfig({ missions: next });
-        // Let the SCHEDULES panel refresh its "last fired" without a reload (#2.3).
-        try { liveWebContents()?.send('missions:updated'); } catch { /* window gone */ }
+        // On a break (issue 124) the job waits, once, and goes out when the
+        // break ends. Not stamped: it has not run.
+        if (missionHeldByBreak(m)) { holdMission(m.id); return; }
+        sendMission(m);
       } catch (e) {
         console.error('[scheduler] mission', m.id, e);
       }
@@ -1235,6 +1246,7 @@ function standupOnOfficeOpen(): void {
   const m = (readConfig().missions ?? []).find((x) => x.id === OPS_STANDUP_MISSION.id);
   if (!m || !m.enabled || normalizeTimes(m.times) || normalizeWeekly(m.weekly) || !(m.intervalMs > 0)) return;
   standupFiredThisLaunch = true;
+  if (missionHeldByBreak(m)) { holdMission(m.id); return; }
   try {
     hive.send({ to: m.to, act: 'inform', subject: m.label, body: scheduledRunBody(m.label, m.body, m.focus) }, 'scheduler');
     const next = (readConfig().missions ?? []).map((x) => (x.id === m.id ? { ...x, lastFiredAt: Date.now() } : x));
@@ -1766,6 +1778,135 @@ function ownerToast(title: string, body: string): void {
   catch { /* unsupported platform */ }
 }
 
+// ─── Office break (issue 124) ────────────────────────────────────────────────
+// The Claude plan reached its usage limit: the office says so, holds its
+// schedules and stops typing into Claude terminals, and starts again by itself.
+// The state and its steps are OfficeBreak's (src/main/officeBreak.ts).
+const OFFICE_BREAK_KV_KEY = 'office.break';
+const officeBreak = new OfficeBreak({
+  load: () => persist.getKv<OfficeBreakState>(OFFICE_BREAK_KV_KEY) ?? null,
+  save: (state) => persist.setKv(OFFICE_BREAK_KV_KEY, state)
+});
+let officeBreakTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Whether this agent runs on the Claude plan, so the break holds it. */
+function agentHeldByBreak(agentId: string): boolean {
+  try {
+    const reg = hive.registry();
+    return heldByBreak(officeBreak.view(), reg.agents[agentId === 'god' ? reg.godId ?? 'god' : agentId]?.provider);
+  } catch { return officeBreak.holding(); }
+}
+
+/** A schedule run waits during the break when it sends work to a Claude agent. */
+function missionHeldByBreak(m: ScheduledMission): boolean {
+  const payload = firePayload(m);
+  return !!payload && officeBreak.holding() && agentHeldByBreak(payload.to);
+}
+
+function holdMission(id: string): void {
+  if (officeBreak.hold(id)) { try { hive.appendLog({ kind: 'office-break', step: 'hold', mission: id }); } catch { /* best-effort */ } }
+}
+
+function breakClock(at: number): string {
+  return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function publishOfficeBreak(): void {
+  try { liveWebContents()?.send('office:break', officeBreak.view()); } catch { /* window gone */ }
+}
+
+function armOfficeBreak(): void {
+  if (officeBreakTimer) clearTimeout(officeBreakTimer);
+  officeBreakTimer = null;
+  const s = officeBreak.current();
+  if (!s) return;
+  officeBreakTimer = setTimeout(runOfficeBreakTick, Math.max(1_000, s.due - Date.now()));
+  officeBreakTimer.unref?.();
+}
+
+/** Team member names for Michael, his own id left out. */
+function cutOffNames(ids: string[]): string {
+  const reg = hive.registry();
+  return ids.filter((id) => id !== reg.godId).map((id) => reg.agents[id]?.name ?? id).join(', ');
+}
+
+function onPlanSignal(signal: PlanSignal): void {
+  if (!onClaudePlan(signal.agentId)) return;
+  if (signal.kind === 'limits') { officeBreak.noteRateLimits(signal.rateLimits); return; }
+  if (signal.kind === 'prompt') { officeBreak.promptSubmitted(signal.agentId); return; }
+  if (signal.kind === 'turn') {
+    const ended = officeBreak.turnFinished(signal.agentId);
+    if (ended) endOfficeBreak(ended);
+    return;
+  }
+  const step = officeBreak.limitReached(signal.agentId);
+  const view = officeBreak.view();
+  try { hive.appendLog({ kind: 'office-break', step, agentId: signal.agentId, until: view?.until ?? null }); } catch { /* best-effort */ }
+  if (step === 'started') {
+    ownerToast(michaelName(), view?.until
+      ? `The office is on a break. Your Claude plan reached its limit. Work starts again around ${breakClock(view.until)}.`
+      : 'The office is on a break. Your Claude plan reached its limit. Work starts again when it resets.');
+  }
+  armOfficeBreak();
+  publishOfficeBreak();
+}
+
+/** Whether the agent runs on the Claude plan, whatever the break state. */
+function onClaudePlan(agentId: string): boolean {
+  try { return (hive.registry().agents[agentId]?.provider ?? 'claude') === 'claude'; } catch { return true; }
+}
+
+function runOfficeBreakTick(): void {
+  officeBreakTimer = null;
+  const r = officeBreak.tick();
+  if (!r) { armOfficeBreak(); return; }
+  if (r.step === 'over') { endOfficeBreak(r.ended); return; }
+  // The reset time has passed: delivery is open again, and Michael's turn on
+  // this message shows whether the plan answers.
+  const cut = cutOffNames(officeBreak.current()?.cutOff ?? []);
+  try {
+    if (hive.enabled()) {
+      hive.send({
+        to: 'god', act: 'inform', subject: 'Usage limit reset',
+        body: `The Claude plan's usage limit should have reset, so the office's break may be over. Carry on with what was waiting.${cut ? ` ${cut} stopped mid task when the limit was reached; they are told to carry on once a turn goes through.` : ''}`
+      }, 'system');
+    }
+    hive.appendLog({ kind: 'office-break', step: 'check' });
+  } catch (e) { console.error('[office break] check', e); }
+  armOfficeBreak();
+  publishOfficeBreak();
+}
+
+/** The plan answers again: send each held job once, tell the team members who
+ *  were cut off to carry on (Michael first), and tell the owner. */
+function endOfficeBreak(ended: OfficeBreakState): void {
+  if (officeBreakTimer) clearTimeout(officeBreakTimer);
+  officeBreakTimer = null;
+  try {
+    const reg = hive.registry();
+    const godId = reg.godId ?? 'god';
+    const cutOff = [...ended.cutOff].sort((a, b) => (a === godId ? -1 : b === godId ? 1 : 0));
+    if (hive.enabled()) {
+      for (const id of cutOff) {
+        hive.send({
+          to: id, act: 'inform', subject: 'Usage limit reset',
+          body: 'The Claude plan\'s usage limit has reset. Continue the task you were working on when it was reached; do not repeat work that is already done.'
+        }, 'system');
+      }
+    }
+    const missions = readConfig().missions ?? [];
+    for (const id of ended.held) {
+      const m = missions.find((x) => x.id === id);
+      if (m?.enabled) sendMission(m);
+    }
+    hive.appendLog({ kind: 'office-break', step: 'over', cutOff: cutOff.length, held: ended.held.length });
+  } catch (e) { console.error('[office break] end', e); }
+  ownerToast(michaelName(), 'The break is over. The team is back at work.');
+  publishOfficeBreak();
+}
+
+ipcMain.handle('office:breakView', () => officeBreak.view());
+
 /** One circuit-breaker beat: pull a fresh usage sample per active agent, append
  *  it to the durable cost ledger (the SOLE durable cost store), tick the breaker,
  *  emit each BreakerState on control:breakerState (Seam 2), and enforce any
@@ -1912,6 +2053,14 @@ function armHeartbeat(m: ScheduledMission): void {
       // waiting in god's inbox — the latter is independent of floor-quiet so a
       // worker's reply doesn't sit unread while other agents keep the floor busy.
       const actionable = godActionableInboxCount();
+      // On a break nothing types into Michael's terminal; the break's own
+      // check tells him when it may be over (issue 124).
+      if (officeBreak.holding() && agentHeldByBreak(hive.registry().godId ?? 'god')) {
+        const entry = missionTimers.get(m.id) ?? {};
+        entry.timeout = setTimeout(beat, base);
+        missionTimers.set(m.id, entry);
+        return;
+      }
       if (isFloorQuiet(quiet) || actionable > 0) {
         reengageGod(buildHeartbeatDigest(quiet, actionable));
         next = Math.round(base * 2.5);            // back off after re-engaging
@@ -7139,6 +7288,8 @@ function runWorkerWakeBeat(): void {
   const facts: WorkerWakeFacts[] = [];
   for (const [agentId, a] of Object.entries(reg.agents)) {
     if (agentId === reg.godId || a?.archived) continue;
+    // Nothing types into a terminal the usage limit has stopped (issue 124).
+    if (heldByBreak(officeBreak.view(), a?.provider)) continue;
     const ptyId = ptyForAgent(agentId);
     if (!ptyId) continue;
     const snap = control.snapshot(agentId);
@@ -7188,6 +7339,8 @@ function armAlwaysOnBeats(): void {
   if (safeClearTimer) clearInterval(safeClearTimer);
   safeClearTimer = setInterval(() => { try { safeClearer.beat(); } catch (e) { console.error('[safe-clear beat]', e); } }, 60_000);
   runWorkerWakeBeat(); // catch-up on arm — power-resume re-arms and drains the backlog
+  // A break's timer freezes in system sleep like the beats above.
+  armOfficeBreak();
 }
 
 /** Wall-clock instant we last observed the machine suspend or lock, so a resume
@@ -7309,6 +7462,8 @@ app.whenReady().then(() => {
   // Guarded: a DB failure (e.g. a bad native build) must degrade to defaults,
   // never block app startup.
   try { persist.open(); } catch (e) { console.error('[db] open failed:', e); }
+  // A break saved before quitting is still on (issue 124).
+  armOfficeBreak();
   // Auto-update from GitHub releases (installed builds only; always on since
   // 2026-10-02). Download-in-background + restart-to-apply toast;
   // never restarts on its own. Falls back to a notify-only releases/latest

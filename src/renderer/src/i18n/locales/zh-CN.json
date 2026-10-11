@@ -58,7 +58,8 @@
     "ghost": "已退出",
     "compacting": "压缩中",
     "looping": "循环中",
-    "typing": "你的草稿"
+    "typing": "你的草稿",
+    "onBreak": "休息中"
   },
   "agentControl": {
     "deliveryPaused": "队列消息已暂停投递（整个楼层）",
@@ -2192,5 +2193,13 @@
     },
     "signInUnknown": "无法检查登录状态。如果 Claude 提示，请登录。",
     "cardTitleTeam": "你的部分团队成员还无法启动"
+  },
+  "officeBreak": {
+    "title": "办公室正在休息",
+    "body": "你的 Claude 套餐已达到用量上限。大约 {{time}} 恢复工作。",
+    "bodyUnknown": "你的 Claude 套餐已达到用量上限。额度重置后恢复工作。",
+    "info": "你的 Claude 套餐已达到用量上限，团队暂时无法工作。定时任务会等待，休息结束后每项只运行一次。团队会自动恢复工作。更大的 Claude 套餐意味着更少的休息。",
+    "chip": "休息至 {{time}}",
+    "chipUnknown": "休息中"
   }
 }

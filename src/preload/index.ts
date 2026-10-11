@@ -13,6 +13,7 @@ import type { IntegrationRecord, IntegrationTemplate } from '../shared/integrati
 export type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
 import type { UpdateStatus } from '../shared/updateState';
 import type { CliUpdateStatus } from '../shared/cliUpdate';
+import type { OfficeBreakView } from '../shared/officeBreak';
 export type { UpdateStatus } from '../shared/updateState';
 import type { ToolStatus } from '../shared/toolCatalog';
 export type { ToolStatus } from '../shared/toolCatalog';
@@ -1713,6 +1714,13 @@ const api = {
   },
   /** The last known status, for a window that subscribed after the push. */
   cliUpdateCurrent: (): Promise<CliUpdateStatus | null> => ipcRenderer.invoke('cliUpdate:current'),
+  /** The office break (issue 124): null while the office works. */
+  officeBreakView: (): Promise<OfficeBreakView | null> => ipcRenderer.invoke('office:breakView'),
+  onOfficeBreak: (cb: (view: OfficeBreakView | null) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, payload: OfficeBreakView | null) => cb(payload);
+    ipcRenderer.on('office:break', listener);
+    return () => ipcRenderer.removeListener('office:break', listener);
+  },
   /** Quit and install the downloaded update — only ever called from an explicit
    *  "restart to update" click. */
   updateRestartAndInstall: (): Promise<{ ok: boolean; error?: string }> =>

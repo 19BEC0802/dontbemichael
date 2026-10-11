@@ -108,6 +108,11 @@ interface HookPayload {
   transcript_path?: string;
   /** Status-line payloads only: the session's live context accounting. */
   context_window?: { total_input_tokens?: number; context_window_size?: number };
+  /** Status-line payloads only, on a Claude plan: each usage window's fill and
+   *  reset time (`five_hour`, `seven_day`, ...). */
+  rate_limits?: unknown;
+  /** StopFailure only: why the turn ended (`rate_limit` is the usage limit). */
+  error?: string;
   cwd?: string;
   tool_name?: string;
   tool_input?: unknown;
@@ -126,6 +131,13 @@ interface HookPayload {
   cache_read?: number;
   cache_creation?: number;
 }
+
+/** What the hook stream tells the office break (src/main/officeBreak.ts). */
+export type PlanSignal =
+  | { kind: 'limits'; agentId: string; rateLimits: unknown }
+  | { kind: 'limit'; agentId: string }
+  | { kind: 'prompt'; agentId: string }
+  | { kind: 'turn'; agentId: string };
 
 export class HookServer {
   private server: Server | null = null;
@@ -230,7 +242,11 @@ export class HookServer {
     /** Whether a member is on the team now (roster agents or restorable), so a
      *  Send only grant pauses when nobody reads its mailbox (shared-mailboxes.md,
      *  EV1). Optional so tests can omit it: then the config alone decides. */
-    private memberPresent?: (agentId: string) => boolean
+    private memberPresent?: (agentId: string) => boolean,
+    /** The office break's signals (issue 124): a status line's usage windows,
+     *  a turn cut off by the usage limit, a prompt taken, a turn finished.
+     *  Optional so tests can omit it. */
+    private onPlan?: (signal: PlanSignal) => void
   ) {}
 
   start(): void {
@@ -372,8 +388,19 @@ export class HookServer {
           limit: cw.context_window_size
         });
       }
+      if (agentId && p.rate_limits) this.plan({ kind: 'limits', agentId, rateLimits: p.rate_limits });
       return {};
     }
+
+    // A turn that ended on an API error (issue 124). Claude Code ignores the
+    // answer; the usage limit starts the office break. Registered with the
+    // `rate_limit` matcher, and checked again here.
+    if (event === 'StopFailure') {
+      if (agentId && !subagent && p.error === 'rate_limit') this.plan({ kind: 'limit', agentId });
+      return {};
+    }
+    if (event === 'UserPromptSubmit' && agentId && !subagent) this.plan({ kind: 'prompt', agentId });
+    if (event === 'Stop' && agentId && !subagent && !p.stop_hook_active) this.plan({ kind: 'turn', agentId });
 
     // 7C.3 — a graceful operator HALT overrides everything (incl. the inbox
     // drain below): stop the agent CLEANLY at this hook boundary rather than
@@ -820,6 +847,11 @@ export class HookServer {
       new Notification({ title: this.displayName(agentId), body }).show();
       return true;
     } catch { return false; /* notifications unsupported on this platform — ignore */ }
+  }
+
+  /** Hands a signal to the office break; it never breaks the hook. */
+  private plan(signal: PlanSignal): void {
+    try { this.onPlan?.(signal); } catch (e) { console.error('[office break]', e); }
   }
 
   /** Is the owner in 1:1 with this agent (registry `onHold`)? */

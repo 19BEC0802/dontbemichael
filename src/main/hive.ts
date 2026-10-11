@@ -1591,7 +1591,9 @@ export class HiveManager {
         // #5C: surface mid-`/compact` so an agent boxing up its context reads as
         // 'compacting' on the floor instead of looking frozen.
         PreCompact: [entry()],
-        PostCompact: [entry()]
+        PostCompact: [entry()],
+        // A turn cut off by the usage limit starts the office break (issue 124).
+        StopFailure: [entry('rate_limit')]
       }
     };
   }

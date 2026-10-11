@@ -8,6 +8,7 @@ import { notifyThemeChangeAll } from '@/components/terminalPool';
 import { UpdateBadge } from '@/components/UpdateBadge';
 import { BetaPill } from '@/components/BetaPill';
 import { CliUpdateBadge } from '@/components/CliUpdateNotice';
+import { OfficeBreakChip } from '@/components/OfficeBreakNotice';
 import { pillState, useNeedsYou, useNeedsYouCount } from './useNeedsYou';
 import { NEEDS_YOU_PILL_ID } from './rightColumn';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
@@ -71,6 +72,7 @@ export function TopBar({ onOpenSettings }: { onOpenSettings: () => void }) {
             <BetaPill info={t('shell.betaInfo')} align="end" />
           </span>
           <CliUpdateBadge />
+          <OfficeBreakChip />
         </span>
         <IconButton label={theme === 'dark' ? t('shell.themeLight') : t('shell.themeDark')} onClick={toggleTheme}>
           {theme === 'dark' ? <SunGlyph /> : <MoonGlyph />}
