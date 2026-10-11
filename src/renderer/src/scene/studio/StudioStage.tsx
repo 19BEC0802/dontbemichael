@@ -6,7 +6,7 @@
  * type floor. Everything shown comes from real state: agent status and action,
  * the task ledger, the mailboxes in config, live hive messages.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { useStore, actionText, liveActivity, ACTION_CLOCKING_IN, type Agent } from '@/store/store';
@@ -133,7 +133,7 @@ function deskState(a: Agent): DeskState {
  * light and tint reach under the panel; the scene still fits the space left
  * of it.
  */
-export function StudioStage({ config: initialConfig, bleed = 0, quietCards = false }: {
+export const StudioStage = memo(function StudioStage({ config: initialConfig, bleed = 0, quietCards = false }: {
   config: HarnessConfig; bleed?: number;
   /** Demo mode (tools/studio-lab; owner, 2026-10-01): every pod shows its chip,
    *  even while people work; a card pops up only on hover, or for a few
@@ -613,7 +613,7 @@ export function StudioStage({ config: initialConfig, bleed = 0, quietCards = fal
       </div>
     </div>
   );
-}
+});
 
 /* ── Label card (DESIGN.md 7.14) ──────────────────────────────────────────── */
 
