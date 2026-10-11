@@ -56,6 +56,9 @@ const SEND_TIMEOUT_MS = 60_000;
 const MX_LOOKUP_TIMEOUT_MS = 5_000;
 const SEARCH_DEFAULT = 20;
 const SEARCH_MAX = 50;
+/** How long a search's ids are kept for its next pages, and how many searches. */
+const SEARCH_KEEP_MS = 60_000;
+const SEARCHES_KEPT = 20;
 const BODY_MAX_CHARS = 50_000;
 const IDLE_CLOSE_MS = 5 * 60_000;
 const SEND_MEMORY_MS = 10 * 60_000;
@@ -268,6 +271,9 @@ export class MailService {
   /** Sends in progress by the same key, so an identical send that overlaps
    *  waits for the first and gets its result instead of sending again. */
   private readonly inFlight = new Map<string, Promise<{ sent: boolean; messageId: string }>>();
+  /** Recent searches' ids, newest first, so a later page doesn't search the
+   *  whole folder again. Page one always searches. */
+  private readonly searches = new Map<string, { mailbox: string; at: number; uids: number[] }>();
   private readonly createImap: NonNullable<MailDeps['createImap']>;
   private readonly createSmtp: NonNullable<MailDeps['createSmtp']>;
   private readonly resolveMx: NonNullable<MailDeps['resolveMx']>;
@@ -471,8 +477,7 @@ export class MailService {
       if (!Object.keys(query).length) query.all = true;
       // Never the owner's unsent drafts: Gmail's All Mail (the archive) holds them too.
       query.draft = false;
-      const uids = (await c.search(query, { uid: true })) || [];
-      const newest = [...uids].sort((a, b) => b - a);
+      const newest = await this.searchIds(c, id, key, query, page);
       const slice = newest.slice(page * limit, page * limit + limit);
       const messages: Array<{ id: string; from: string; subject: string; date: string; unread: boolean }> = [];
       if (slice.length) {
@@ -498,6 +503,21 @@ export class MailService {
     }, 'Searching the mailbox');
   }
 
+  /** The ids a query matches, newest first. A later page reuses what its
+   *  first page found, for up to SEARCH_KEEP_MS. */
+  private async searchIds(c: ImapLike, id: string, key: FolderKey, query: Record<string, unknown>, page: number): Promise<number[]> {
+    const now = Date.now();
+    for (const [k, v] of this.searches) if (now - v.at > SEARCH_KEEP_MS) this.searches.delete(k);
+    const cacheKey = JSON.stringify([id, key, query]);
+    const kept = this.searches.get(cacheKey);
+    if (page > 0 && kept) return kept.uids;
+    const uids = [...((await c.search(query, { uid: true })) || [])].sort((a, b) => b - a);
+    this.searches.delete(cacheKey);
+    this.searches.set(cacheKey, { mailbox: id, at: now, uids });
+    if (this.searches.size > SEARCHES_KEPT) this.searches.delete(this.searches.keys().next().value!);
+    return uids;
+  }
+
   /**
    * Inbox zero (owner, 2026-10-03): take messages out of the inbox without
    * deleting any. `archive` marks them read and moves them to the archive, or,
@@ -508,6 +528,8 @@ export class MailService {
    */
   async organize(id: string, action: 'archive' | 'mark_read' | 'mark_junk', uids: number[], label?: string) {
     if (!uids.length) throw new MailError('bad-request', `${action} needs the message ids from search.`);
+    // Moved or marked mail changes what a search finds: search again.
+    for (const [k, v] of this.searches) if (v.mailbox === id) this.searches.delete(k);
     return this.inFolder(id, MailService.inbox, async (c) => {
       if (!c.messageFlagsAdd || !c.messageMove) throw new MailError('unsupported', 'This mailbox cannot move messages.');
       // Only the asked-for ids are searched, not the whole inbox.
