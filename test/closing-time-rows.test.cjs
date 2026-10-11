@@ -35,6 +35,19 @@ test('each row says what the agent is doing and for how long', () => {
   for (const [agent, want] of cases) assert.deepEqual(row(agent), want, JSON.stringify(agent));
 });
 
+test('after a tool call ends, the row drops its detail and counts from when it ended (issue 135)', () => {
+  // Value: protects=the owner never reads a finished tool call as still running, and its minutes start when it ended; fails_when=describeRow keeps a stale detail or the clock keeps counting from the tool's start; why_new=only the PostToolUse patch itself was source-checked; seam=none
+  const during = { status: 'working', action: 'using Bash', actionDetail: 'Run the full test suite', actionAt: NOW - 9 * 60_000 };
+  assert.equal(row(during).line, 'Run the full test suite · 9 min');
+  // What useHive's PostToolUse patch leaves (pinned in closing-time-dialog.test.cjs).
+  const after = { ...during, status: 'working', actionDetail: undefined, actionAt: NOW - 2 * 60_000 };
+  const r = row(after);
+  assert.equal(r.state, 'stillWorking');
+  assert.doesNotMatch(r.line, /Run the full test suite/, 'the finished call is gone');
+  assert.match(r.line, / · 2 min$/, 'minutes since it ended, not since it started');
+  assert.doesNotMatch(row({ ...after, actionAt: NOW - 30_000 }).line, /min/, 'under a minute: no minutes yet');
+});
+
 test('a refused or failed action shows a message; one that went through shows none', () => {
   // Value: protects=a refused Remind or Close without them is never taken as success; fails_when=actionMessage ignores ok:false; why_new=the dialog only handled a throw; seam=none
   assert.equal(actionMessage({ ok: true }, 'fallback'), undefined);
