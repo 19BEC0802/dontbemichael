@@ -203,7 +203,8 @@ is the primary control surface — tune the prompt, not the code.
 | Two agents ping-ponging | Only request/query/propose obligate replies; hop cap → god escalates |
 | Reprocessing messages | Per-agent `cursor.json`; processed messages move to `inbox/.done/` |
 | `memory.md` unbounded growth | App kept index with a size budget, tidied in the background (`memoryTidy.ts`) |
-| Modifying the user's repo with hooks | Write hooks to `<cwd>/.claude/settings.local.json` (gitignored convention) |
+| Modifying the user's repo with hooks | Hooks ride in a per-agent settings file passed with `--settings`, kept at `<harnessHome>/agent-settings/<id>.json`; nothing is written into the user's repo or `~/.claude` |
+| An agent rewriting its own hooks or sandbox | The hook program (`<harnessHome>/hive/bin`) and `agent-settings` are locked for every agent, Michael included: shell deny-write, an `Edit` deny rule, and the hook's own folder check. Reading stays open (issue 100). Windows has no shell sandbox, so there only the file tool rules hold |
 
 ---
 
