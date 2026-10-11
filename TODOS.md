@@ -272,15 +272,6 @@
 **Effort:** S
 **Priority:** P3
 
-### Tests for the focus fallback and a post-tool row
-
-**What:** Add tests for the listRef focus fallback and a describeRow case after PostToolUse; fix the stale `actionAt` docstring.
-
-**Why:** Both paths are untested.
-
-**Effort:** S
-**Priority:** P3
-
 ### Replace the source-regex dialog tests with pure helpers
 
 **What:** Move the checks in `test/closing-time-dialog.test.cjs` that grep component source into tested helpers.
