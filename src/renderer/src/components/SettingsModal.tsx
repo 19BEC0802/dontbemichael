@@ -1671,7 +1671,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                               {/* Connection status: clear, always-visible. */}
                               <span style={{
                                 fontSize: 12, lineHeight: '16px',
-                                color: running ? 'var(--cth-mint-700, #1f7a4d)' : 'var(--cth-ink-500)'
+                                color: running ? 'var(--cth-green-text)' : 'var(--cth-ink-500)'
                               }}>
                                 {running ? t('settings.connections.connected') : t('settings.connections.notConnected')}
                               </span>
@@ -1846,7 +1846,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{
                               fontSize: 12, lineHeight: '16px',
-                              color: webhookRunning ? 'var(--cth-mint-700, #1f7a4d)' : 'var(--cth-ink-500)'
+                              color: webhookRunning ? 'var(--cth-green-text)' : 'var(--cth-ink-500)'
                             }}>
                               {webhookRunning ? t('settings.connections.listeningOn') : t('settings.connections.notListening')}
                             </span>
