@@ -1779,8 +1779,9 @@ function ownerToast(title: string, body: string): void {
 }
 
 // ─── Office break (issue 124) ────────────────────────────────────────────────
-// The Claude plan reached its usage limit: the office says so, holds its
-// schedules and stops typing into Claude terminals, and starts again by itself.
+// The Claude plan reached its usage limit: the office says so and stops typing
+// into Claude terminals, and starts again by itself. Schedules still run on
+// time; their jobs wait in the inboxes until the break ends.
 // The state and its steps are OfficeBreak's (src/main/officeBreak.ts).
 const OFFICE_BREAK_KV_KEY = 'office.break';
 const officeBreak = new OfficeBreak({
@@ -4470,10 +4471,22 @@ ipcMain.handle('fs:watchAskFile', async (evt, id: unknown, p: unknown, who: unkn
     const forWindow = new Map<string, { close: () => void }>();
     askFileWatches.set(wc.id, forWindow);
     mine = forWindow;
-    const drop = () => { for (const w of forWindow.values()) w.close(); forWindow.clear(); askFileWatches.delete(wc.id); };
+    // Each drop removes its own listeners, so a window that reloads many times
+    // never stacks them, and an old drop never clears a newer map.
+    const onNavigate = (details: { isMainFrame: boolean; isSameDocument: boolean }) => {
+      if (details.isMainFrame && !details.isSameDocument) drop();
+    };
+    const drop = () => {
+      for (const w of forWindow.values()) w.close();
+      forWindow.clear();
+      if (askFileWatches.get(wc.id) === forWindow) askFileWatches.delete(wc.id);
+      wc.off('destroyed', drop);
+      wc.off('render-process-gone', drop);
+      wc.off('did-start-navigation', onNavigate);
+    };
     wc.once('destroyed', drop);
     wc.once('render-process-gone', drop);
-    wc.on('did-start-navigation', (details) => { if (details.isMainFrame && !details.isSameDocument) drop(); });
+    wc.on('did-start-navigation', onNavigate);
   }
   mine.get(id)?.close();
   if (mine.size >= MAX_ASK_FILE_WATCHES) {

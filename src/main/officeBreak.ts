@@ -97,7 +97,7 @@ export class OfficeBreak {
     return this.state ? { ...this.state, cutOff: [...this.state.cutOff] } : null;
   }
 
-  /** Whether Claude terminals and schedules are held right now. */
+  /** Whether Claude terminals are held right now (schedules never are). */
   holding(): boolean {
     return this.state?.phase === 'waiting';
   }
