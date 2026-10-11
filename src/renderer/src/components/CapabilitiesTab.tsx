@@ -368,6 +368,7 @@ export function CapabilitiesTab({ agent }: { agent: Agent }) {
                   <div key={c.key} role="listitem" style={{ ...row, flexWrap: 'wrap', borderTop: i === 0 ? 'none' : row.borderTop }}>
                     <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600 }}>{c.key}</span>
                     {c.status === 'needs-sign-in' && <span style={hint}>{t('capabilities.needsSignIn')}</span>}
+                    {c.status === 'unreachable' && <span style={hint}>{t('capabilities.unreachable')}</span>}
                     {roleDefault && <span style={hint}>{t('capabilities.booksRoleDefault')}</span>}
                     <Toggle on={on} label={t('capabilities.canUseConnector', { name, connector: c.key })} onClick={() => { if (qbo) toggleBooks(); else void setGrant(c.key, !on); }} />
                     {qbo && on && (

@@ -27,6 +27,7 @@ import {
   secretRefFor
 } from '../shared/integrations';
 import { readConfig, writeConfig } from './config';
+import { SECRETS_FILE_UNREADABLE } from '../shared/secretStore';
 
 // ─── Registry (config-backed) ────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export function upsertRecord(input: unknown): { ok: true; record: IntegrationRec
 export function removeRecord(id: string): { ok: boolean } {
   const next = listRecords().filter((r) => r.id !== id);
   writeConfig({ integrations: next });
-  deleteSecret(secretRefFor(id));
+  if (!deleteSecret(secretRefFor(id))) console.error('[integrations] the record was removed, but its stored secret could not be:', id);
   return { ok: true };
 }
 
@@ -116,7 +117,7 @@ function readSecretBlobForWrite(): Record<string, string> {
     parsed = undefined;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('The saved secrets file could not be read, so nothing was saved over it. Try again; if it keeps failing, the file needs repair.');
+    throw new Error(SECRETS_FILE_UNREADABLE);
   }
   return parsed as Record<string, string>;
 }
@@ -127,6 +128,16 @@ function writeSecretBlob(blob: Record<string, string>): void {
   const p = secretsPath();
   mkdirSync(dirname(p), { recursive: true });
   writeFileAtomic(p, JSON.stringify(blob, null, 2), 0o600);
+}
+
+/** Whether the OS can encrypt a secret right now. Asked before a credential is
+ *  tested, so one that could never be stored is refused up front, in words. */
+export function canStoreSecrets(): boolean {
+  try {
+    return safeStorage.isEncryptionAvailable();
+  } catch {
+    return false;
+  }
 }
 
 /** Store a secret ENCRYPTED. Fail closed if OS encryption is unavailable (never
@@ -168,16 +179,21 @@ export function hasSecret(secretRef: string | undefined): boolean {
   return !!readSecretBlob()[secretRef];
 }
 
-/** Delete a stored secret. Idempotent. */
-export function deleteSecret(secretRef: string | undefined): void {
-  if (!secretRef) return;
-  const blob = readSecretBlob();
-  if (secretRef in blob) {
+/** Delete a stored secret. Idempotent, and never throws. True when it is not
+ *  stored any more (removed now, or never there); false when it may still be
+ *  in the file, because the file could not be read or written. */
+export function deleteSecret(secretRef: string | undefined): boolean {
+  if (!secretRef) return true;
+  try {
+    // An unreadable file throws here instead of reading as empty, which
+    // would report the secret gone while it is still on disk.
+    const blob = readSecretBlobForWrite();
+    if (!(secretRef in blob)) return true;
     delete blob[secretRef];
-    if (Object.keys(blob).length === 0) {
-      try { rmSync(secretsPath(), { force: true }); } catch { /* best-effort */ }
-    } else {
-      writeSecretBlob(blob);
-    }
+    if (Object.keys(blob).length === 0) rmSync(secretsPath(), { force: true });
+    else writeSecretBlob(blob);
+    return true;
+  } catch {
+    return false;
   }
 }
