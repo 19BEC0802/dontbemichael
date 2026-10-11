@@ -105,7 +105,13 @@ export function MailboxesSettings() {
         gridTemplateRows: open ? '1fr' : '0fr',
         transition: 'grid-template-rows var(--cth-dur-base) var(--cth-ease)',
       }}>
-        <div style={{ overflow: 'hidden', minHeight: 0 }}>
+        {/* Closed, the rows leave the Tab order and screen readers too, as the
+            `hidden` attribute did; visibility flips after the slide. */}
+        <div style={{
+          overflow: 'hidden', minHeight: 0,
+          visibility: open ? 'visible' : 'hidden',
+          transition: `visibility 0s linear ${open ? '0s' : 'var(--cth-dur-base)'}`
+        }}>
           <div id={listId}>
             {mailboxes.length > 0 && (
               <div role="list">
