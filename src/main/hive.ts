@@ -1575,7 +1575,7 @@ export class HiveManager {
                 allowWrite: writableDirs,
                 // The hook program runs outside the sandbox on every tool call,
                 // so no agent's shell may rewrite its folder (issue 100).
-                denyWrite: [dirname(shim), ...(folders?.sandbox.denyWrite ?? [])],
+                denyWrite: Array.from(new Set([dirname(shim), ...(folders?.sandbox.denyWrite ?? [])])),
                 ...(folders?.sandbox.denyRead.length ? { denyRead: folders.sandbox.denyRead } : {}),
                 ...(folders?.sandbox.allowRead.length ? { allowRead: folders.sandbox.allowRead } : {})
               }
