@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import {
-  rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
+  rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync,
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
   readlinkSync, symlinkSync
 } from 'node:fs';
@@ -126,7 +126,7 @@ import { loadModelCatalog } from './modelCatalog';
 import { claudeCliVersion } from './claudeCliVersion';
 import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { APP_NAME, APP_DATA_DIR, APP_URL_SCHEME } from '../shared/appName';
-import { homeFolderStatus, homeReadyAtLaunch } from './homeFolder';
+import { copyOfficeData, homeFolderStatus, homeReadyAtLaunch } from './homeFolder';
 import { backfillOfficeRecord, findOffice, folderLayoutFor, isUsableTeamFolder, syncOfficeRecord } from './officeFile';
 import { folderPolicy, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
 import { legacyBusinessFolder, touchesOffice } from '../shared/officeRecord';
@@ -4154,18 +4154,7 @@ ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
 
   if (mode === 'move' && oldHome) {
     try {
-      // roster.json + its backups ride along with hive/palace: the roster is the
-      // renderer's half of the same state, and leaving it behind would move the
-      // agents' sessions and memory to the new home while their names, notes and
-      // worktree paths stayed at the old one.
-      for (const sub of ['hive', 'palace', 'roster.json', 'roster-backups']) {
-        const src = join(oldHome, sub);
-        if (!existsSync(src)) continue;
-        // cpSync copies the whole tree incl. .git and is cross-device safe (unlike
-        // renameSync, which throws EXDEV across volumes). We COPY, never delete —
-        // the old folder stays as a safety net the user removes manually.
-        cpSync(src, join(newHome, sub), { recursive: true, force: true, dereference: false });
-      }
+      copyOfficeData(oldHome, newHome);
     } catch (e) {
       // Copy failed: recover IN PLACE against the unchanged old home (config never
       // repointed) so the user loses nothing, and surface the error — no relaunch.
