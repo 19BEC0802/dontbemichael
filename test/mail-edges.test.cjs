@@ -355,6 +355,30 @@ test('removeMailbox takes the mailbox, its password and every grant to it, and n
   assert.deepEqual(a.state.deleted, ['mail:sales']);
 });
 
+test('removeMailbox logs when the saved password could not be removed, and still removes the mailbox (issue 133)', () => {
+  // Value: protects=a mailbox removal never passes silently while its password is still on disk; fails_when=removeMailbox ignores deleteSecret's answer; why_new=the removal path reported nothing; seam=console.error captured
+  const { svc } = setup();
+  const removeWith = (secretGone) => {
+    const a = admin({ mailboxes: [box('sales', 's@x.com')] });
+    a.deleteSecret = (ref) => { a.state.deleted.push(ref); return secretGone; };
+    const logged = [];
+    const real = console.error;
+    console.error = (...args) => { logged.push(args.join(' ')); };
+    let r;
+    try { r = removeMailbox(svc, a, 'sales'); } finally { console.error = real; }
+    return { r, logged, a };
+  };
+  const gone = removeWith(true);
+  assert.deepEqual(gone.r, { ok: true, affected: [] });
+  assert.deepEqual(gone.logged, [], 'removed: nothing logged');
+  const kept = removeWith(false);
+  assert.deepEqual(kept.r, { ok: true, affected: [] }, 'the mailbox still goes');
+  assert.deepEqual(kept.a.state.cfg.mailboxes, []);
+  assert.deepEqual(kept.a.state.deleted, ['mail:sales']);
+  assert.equal(kept.logged.length, 1);
+  assert.match(kept.logged[0], /^\[mail\] .*saved password could not be: sales$/);
+});
+
 test('setAgentCapabilities: unknown mailboxes are dropped; restart only on first enable', () => {
   const a = admin({ mailboxes: [box('sales', 's@x.com')] });
   const first = setAgentCapabilities(a, 'dwight', { email: { enabled: true, mailboxes: ['ghost'], send: 1 } });
