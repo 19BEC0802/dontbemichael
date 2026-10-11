@@ -135,11 +135,14 @@ export function ClaudeConnectorsSettings() {
                 {list.map((c) => {
                   const on = connectorOn(config, c.key);
                   const signIn = c.status === 'needs-sign-in';
+                  const unreachable = c.status === 'unreachable';
                   return (
                     <div key={c.key} role="listitem" style={row}>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: signIn ? 'var(--cth-ink-500)' : undefined }}>{c.key}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: signIn || unreachable ? 'var(--cth-ink-500)' : undefined }}>{c.key}</span>
                       {signIn ? (
                         <button type="button" style={link} onClick={() => { void window.cth.openExternal(CLAUDE_CONNECTORS_URL); }}>{t('connectors.signIn')}</button>
+                      ) : unreachable ? (
+                        <span style={hint}>{t('connectors.unreachable')}</span>
                       ) : (
                         <span style={hint}>{t('connectors.connected')}</span>
                       )}
