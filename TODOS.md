@@ -149,15 +149,6 @@
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
 
-### Say when deleting a secret did nothing
-
-**What:** `deleteSecret` stays lenient on an unreadable file (right for callers without error handling), but callers report success while the old ciphertext stays.
-
-**Why:** A removed mailbox or key can look deleted while its encrypted secret remains in the file.
-
-**Effort:** S
-**Priority:** P3
-
 ## QuickBooks through the Claude account (deferred from ship of feat/qbo-claude-channel, 2026-09-30)
 
 ### Stop a nested Claude from reaching the account's connectors

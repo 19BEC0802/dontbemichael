@@ -71,7 +71,7 @@ export function upsertRecord(input: unknown): { ok: true; record: IntegrationRec
 export function removeRecord(id: string): { ok: boolean } {
   const next = listRecords().filter((r) => r.id !== id);
   writeConfig({ integrations: next });
-  deleteSecret(secretRefFor(id));
+  if (!deleteSecret(secretRefFor(id))) console.error('[integrations] the record was removed, but its stored secret could not be:', id);
   return { ok: true };
 }
 
@@ -168,16 +168,21 @@ export function hasSecret(secretRef: string | undefined): boolean {
   return !!readSecretBlob()[secretRef];
 }
 
-/** Delete a stored secret. Idempotent. */
-export function deleteSecret(secretRef: string | undefined): void {
-  if (!secretRef) return;
-  const blob = readSecretBlob();
-  if (secretRef in blob) {
+/** Delete a stored secret. Idempotent, and never throws. True when it is not
+ *  stored any more (removed now, or never there); false when it may still be
+ *  in the file, because the file could not be read or written. */
+export function deleteSecret(secretRef: string | undefined): boolean {
+  if (!secretRef) return true;
+  try {
+    // An unreadable file throws here instead of reading as empty, which
+    // would report the secret gone while it is still on disk.
+    const blob = readSecretBlobForWrite();
+    if (!(secretRef in blob)) return true;
     delete blob[secretRef];
-    if (Object.keys(blob).length === 0) {
-      try { rmSync(secretsPath(), { force: true }); } catch { /* best-effort */ }
-    } else {
-      writeSecretBlob(blob);
-    }
+    if (Object.keys(blob).length === 0) rmSync(secretsPath(), { force: true });
+    else writeSecretBlob(blob);
+    return true;
+  } catch {
+    return false;
   }
 }
