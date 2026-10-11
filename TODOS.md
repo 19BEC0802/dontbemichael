@@ -543,11 +543,11 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 
 ### 14px text floor on the remaining setup screens (Decision 36)
 
-**What:** Raise the business and team setup screens' 10 to 13px text to 14px or more.
+**What:** Raise the last setup text under 14px to 14px or more.
 
-**Why:** The owner's standing rule; the surfaces added later in the branch were already fixed.
+**Why:** The owner's standing rule. The Business and Team steps (with TeamCard and PackTile) were raised in PR #138.
 
-**Context:** `src/renderer/src/components/OnboardingWizard.tsx` (business, team steps; TeamCard, PackTile).
+**Context:** Still under 14px: the company profile labels in `src/renderer/src/components/CompanyProfileFields.tsx` (shared with other screens; the PR #138 author offered to do these), and the Welcome and Permissions steps in `src/renderer/src/components/OnboardingWizard.tsx` (12 and 13px titles and notes).
 
 **Effort:** S
 **Priority:** P1
