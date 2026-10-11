@@ -199,3 +199,10 @@ test('the still working count reads as a button that opens the list', () => {
   assert.match(bar, /transform: open \? 'rotate\(180deg\)' : 'none'/, 'the chevron flips when the list is open');
   assert.match(bar, /aria-expanded=\{open\}/);
 });
+
+test('the who list has one scrollbar', () => {
+  // Value: protects=a long who list scrolls in one place; fails_when=the panel around the list scrolls too and shows a second scrollbar; why_new=owner, 2026-10-11: two nested scrollers showed two scrollbars; seam=source pin
+  const bar = read('src/renderer/src/components/ClosingTimeBar.tsx');
+  assert.equal((bar.match(/overflowY: 'auto'/g) || []).length, 1, 'only the list scrolls');
+  assert.match(bar.match(/<div ref=\{listRef\}[^\n]*/)[0], /maxHeight: 300, overflowY: 'auto'/);
+});

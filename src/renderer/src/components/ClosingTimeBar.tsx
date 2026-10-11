@@ -84,7 +84,8 @@ export function ClosingTimeBar({ closing, onCancel, onForceQuit, onRetry }: Clos
     }}>
       {/* Who is still working, above the bar so it opens upward from it. */}
       {open && c && !error && (
-        <div style={{ padding: '6px 16px 2px', maxHeight: 300, overflowY: 'auto', borderBottom: '1px solid var(--cth-line)' }}>
+        // The list below is the one scroller; a second one here showed two scrollbars (owner, 2026-10-11).
+        <div style={{ padding: '6px 16px 2px', borderBottom: '1px solid var(--cth-line)' }}>
           {c.phase === 'timeout' && c.godLive !== false && (
             <div style={{ fontSize: 12.5, lineHeight: '18px', color: 'var(--cth-ink-2)', padding: '6px 0' }}>{t('quit.slow')}</div>
           )}
@@ -235,7 +236,7 @@ function ClosingTimeRows({ closing }: { closing: ClosingTimeState }) {
   // Michael's terminal ended: nobody can finish the close (review, owner 2026-09-29).
   const godGone = closing.godLive === false;
   return (
-    <div ref={listRef} className="cth-closing-list" tabIndex={-1} role="list" aria-label={t('closingTime.listLabel')} style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+    <div ref={listRef} className="cth-closing-list" tabIndex={-1} role="list" aria-label={t('closingTime.listLabel')} style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       {waiting.map((id) => {
         const d = doing(byId(id));
         return (
