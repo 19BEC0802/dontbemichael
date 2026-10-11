@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const loadTs = require('./load-ts.cjs');
 
-const { describeRow, actionMessage, headerLine } = loadTs('src/renderer/src/components/closingTimeRows.ts');
+const { describeRow, actionMessage, headerLine, limitCombiningMarks } = loadTs('src/renderer/src/components/closingTimeRows.ts');
 const { CLOSING_TIME_REMIND_MS } = loadTs('src/shared/closingTime.ts');
 
 const AT_PROMPT = 'waiting at a prompt';
@@ -70,4 +70,34 @@ test('the action line is clipped and wraps anywhere: marks stay in their row, lo
   const bar = fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/components/ClosingTimeBar.tsx'), 'utf8');
   assert.match(bar, /const detailStyle: CSSProperties = \{[^}]*overflow: 'hidden'[^}]*overflowWrap: 'anywhere'[^}]*\};/);
   assert.match(bar, /\{d\.line && <div style=\{detailStyle\}>\{d\.line\}<\/div>\}/, 'each worker row');
+});
+
+test('a long run of combining marks in the detail line is cut, and real text is kept as is (issue 134)', () => {
+  // Value: protects=a stacked run of marks cannot draw over the rows above and below; fails_when=the run is not cut, or ordinary accented or right-to-left text changes; why_new=only the overflow clip held it; seam=none
+  const marks = (n, mark = '̶') => mark.repeat(n);
+  assert.equal(limitCombiningMarks(`Z${marks(40)}algo`), `Z${marks(4)}algo`, 'a run is cut to four');
+  assert.equal(limitCombiningMarks(`a${marks(6, '́')}b${marks(9, '҉')}c`), `a${marks(4, '́')}b${marks(4, '҉')}c`, 'every run, enclosing marks too');
+  // Marks outside the Basic Multilingual Plane count by code point and are never split in half.
+  const tremolo = '\u{1D167}';
+  assert.equal(limitCombiningMarks(`x${tremolo.repeat(7)}`), `x${tremolo.repeat(4)}`);
+  for (const real of [
+    'Run the full test suite',
+    'café crème, naïve résumé',
+    'café (decomposed)',
+    'Tiếng Việt',
+    'Tiếng Việt (decomposed)',
+    'नमस्ते दुनिया',
+    'مَرْحَبًا بالعالم',
+    'שָׁלוֹם עוֹלָם',
+    'สวัสดีครับ น้ำ',
+    'Ship it ❤️ 1️⃣ 👍🏽',
+    ''
+  ]) assert.equal(limitCombiningMarks(real), real, JSON.stringify(real));
+});
+
+test('the row cuts a run of marks in the agent\'s detail, and leaves the app\'s own caption alone (issue 134)', () => {
+  // Value: protects=the closing-time row uses the cut text; fails_when=describeRow shows actionDetail raw; why_new=describeRow passed it through; seam=none
+  const zalgo = `Deploy${'̶'.repeat(60)} now`;
+  assert.deepEqual(row({ status: 'working', action: 'using Bash', actionDetail: zalgo, actionAt: NOW - 2 * 60_000 }), { state: 'stillWorking', line: `Deploy${'̶'.repeat(4)} now · 2 min` });
+  assert.deepEqual(row({ status: 'working', action: 'using Read', actionAt: NOW }), { state: 'stillWorking', line: 'using Read' });
 });
