@@ -4007,7 +4007,8 @@ ipcMain.handle('providerKey:has', (_evt, backend: unknown) =>
 ipcMain.handle('providerKey:clear', (_evt, backend: unknown) => {
   if (typeof backend !== 'string' || !(backend in BACKEND_KEY_ENV)) return { ok: false, error: 'unknown backend' };
   try {
-    integrations.deleteSecret(providerKeyRef(backend));
+    // deleteSecret never throws: false means the key may still be stored.
+    if (!integrations.deleteSecret(providerKeyRef(backend))) return { ok: false, error: 'The saved key could not be removed. Try again; if it keeps failing, the saved secrets file needs repair.' };
     if (backend === 'anthropic' && readConfig().claudeAuth === 'apiKey') noticeEngineSetup('api-key');
     return { ok: true };
   }
