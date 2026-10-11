@@ -608,6 +608,18 @@ A live end-to-end run is required before adding an engine: Gemini has never been
 **Priority:** P3
 **Depends on:** A decision to offer a second engine.
 
+### A backup engine through a plan limit (issue #129)
+
+**What:** An optional backup engine per team member, set by the owner (default none). When the office break starts (issue #124), a member with a backup restarts on it with a handoff note as its first message (its task, recent context, files touched) and keeps the same folder, memory and mailbox. At the reset it goes back to its own engine at its next idle point. The floor shows it ("Pam is on Codex until 3:40 PM"); members without a backup keep the break.
+
+**Why:** On a Pro plan the break can last hours of a business day. An owner who also has a ChatGPT plan could keep work moving.
+
+**Context:** The trigger is the office break (`src/main/officeBreak.ts`); the handoff can reuse `hive.takeHandoff`. Two facts shape the design. The usage limit is per Claude account, so every Claude member, Michael included, reaches it at once: there is no member with headroom left, and failover has to cover Michael (a Codex Michael needs gaps 5 and 7 of the second engine item), or the moved members work with nobody to report to until the reset. The backup is the owner's own choice per member, never picked by the app (the model choice rule). Behind a `buildFeatures.ts` flag until it has run live.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** Make a second engine (Codex first) ready for an office, in full: the access policy (#48) and hook authentication (#61) above all, so a member that fails over keeps the owner's folder and connector limits.
+
 ## Onboarding
 
 ### Retry team members that failed their first start
