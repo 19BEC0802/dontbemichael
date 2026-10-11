@@ -207,6 +207,20 @@ test('send failures: a refusal says "Not sent" and is not remembered; a timeout 
   assert.match(r.body.error, /^This email may already have gone out/);
   assert.ok(state.queries.some((q) => q.header && q.header['message-id']), 'Sent was checked first');
   }
+  // A server that was never reached took nothing: that is plainly not sent, and a retry may send it.
+  for (const never of [
+    Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:465'), { code: 'ESOCKET', syscall: 'connect' }),
+    Object.assign(new Error('Connection timeout'), { code: 'ETIMEDOUT' }),
+    Object.assign(new Error('Greeting never received'), { code: 'ETIMEDOUT' })
+  ]) {
+    const { call, state } = setup();
+    state.smtpError = never;
+    state.sentHit = false;
+    const r = await call('dwight', 'send', { mailbox: 'sales', to: 'a@b.com', subject: 's', body: 'b' });
+    assert.match(r.body.error, /^Not sent\./, never.message);
+    state.smtpError = null;
+    assert.equal((await call('dwight', 'send', { mailbox: 'sales', to: 'a@b.com', subject: 's', body: 'b' })).status, 200, `${never.message}: the retry sends`);
+  }
 });
 
 test('a send from a non Gmail mailbox files a copy in Sent; Gmail does not', async () => {

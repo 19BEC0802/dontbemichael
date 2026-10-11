@@ -78,6 +78,17 @@ export class MailError extends Error {
  *  have taken the email. A server that was never reached is not uncertain. */
 const MID_SEND_DROP = new Set(['ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'ESOCKET']);
 
+/** A failure before the mail server took anything: the connection was never
+ *  made (refused, no such host, timed out connecting) or the server never said
+ *  hello. The SMTP library tags every socket error and timeout as the
+ *  connection phase, so the original connect error and its own messages for
+ *  these two timeouts are what tell them apart. */
+export function neverReachedServer(e: unknown): boolean {
+  const err = e as { syscall?: unknown; message?: unknown } | null;
+  if (err?.syscall === 'connect' || err?.syscall === 'getaddrinfo') return true;
+  return typeof err?.message === 'string' && /^(Connection timeout|Greeting never received)\b/.test(err.message);
+}
+
 /** The slice of ImapFlow this module uses (so tests can inject a fake). */
 export interface ImapLike {
   usable?: boolean;
@@ -754,7 +765,7 @@ export class MailService {
         // (issue 101): it stays recorded as pending, so a repeat is checked in
         // Sent instead of sent, and an approved card stays sending.
         const code = (e as { code?: unknown } | null)?.code;
-        if (err.kind === 'timeout' || (typeof code === 'string' && MID_SEND_DROP.has(code))) {
+        if ((err.kind === 'timeout' || (typeof code === 'string' && MID_SEND_DROP.has(code))) && !neverReachedServer(e)) {
           this.note(id, err);
           throw new MailError(err.kind, 'This email may already have gone out: the connection dropped before the mail server answered, and it is not in Sent yet. Do not send it again; tell Michael, so the owner can check Sent.', true);
         }
