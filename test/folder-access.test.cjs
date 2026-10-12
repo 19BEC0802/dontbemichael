@@ -180,6 +180,28 @@ test('the hook judges the real path too, so a link out of an agent\'s folder is 
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('a link to a file not there yet is judged by where it leads, so a Write cannot plant a file in a teammate\'s folder (#231)', () => {
+  const { realPathOf } = loadTs('src/main/hooks.ts');
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'md-dangling link-')));
+  const biz = path.join(dir, 'Biz'), sales = path.join(biz, 'Sales'), finance = path.join(biz, 'Finance');
+  fs.mkdirSync(sales, { recursive: true });
+  fs.mkdirSync(finance);
+  fs.symlinkSync(path.join(finance, 'planted.txt'), path.join(sales, 'notes.txt'));
+  fs.symlinkSync(path.join('..', 'Finance', 'rel.txt'), path.join(sales, 'rel.txt'));
+  fs.symlinkSync(path.join(finance, 'new'), path.join(sales, 'drafts'));
+  fs.symlinkSync(path.join(sales, 'b'), path.join(sales, 'a'));
+  fs.symlinkSync(path.join(sales, 'a'), path.join(sales, 'b'));
+  assert.equal(realPathOf(path.join(sales, 'notes.txt')), path.join(finance, 'planted.txt'));
+  assert.equal(realPathOf(path.join(sales, 'rel.txt')), path.join(finance, 'rel.txt'), 'a relative link is read from its own folder');
+  assert.equal(realPathOf(path.join(sales, 'drafts', 'june.txt')), path.join(finance, 'new', 'june.txt'), 'a link to a folder not there yet');
+  assert.equal(realPathOf(path.join(sales, 'a')), null, 'links that go round end');
+  assert.equal(realPathOf(path.join(sales, 'plain.txt')), path.join(sales, 'plain.txt'), 'a new file with no link stays where it is');
+  const l = { business: biz, teamFolders: [sales, finance] };
+  const me = { isGod: false, cwd: sales };
+  assert.equal(folderDecision(me, l, 'Write', realPathOf(path.join(sales, 'notes.txt')), true).deny, true);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('a Glob with a path is judged by where its pattern points', () => {
   assert.equal(folderToolTarget('Glob', { pattern: '../Admin/**', path: path.join(B, 'Finance') }, path.join(B, 'Finance')), path.join(B, 'Admin'));
   assert.equal(folderToolTarget('Glob', { pattern: '**/*.md', path: path.join(B, 'Finance', 'docs') }, path.join(B, 'Finance')), path.join(B, 'Finance', 'docs'));
