@@ -495,7 +495,7 @@ export class HookServer {
     if (event === 'PreToolUse' && agentId && this.control) {
       const d = this.control.toolDecision(agentId, p.tool_name ?? '');
       if (d.deny) {
-        this.emit(agentId, event, p);
+        this.emitRefused(agentId, event, p);
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -521,7 +521,7 @@ export class HookServer {
       const d = connectorAccess(cfg, agentId, p.tool_name ?? '', p.tool_input, agentId ? (this.roleReadsBooks?.(agentId) ?? false) : false);
       if (!d.ok) {
         console.log(`[connectors] refused ${p.tool_name} for ${agentId ?? 'no agent'}: ${d.reason}`);
-        this.emit(agentId, event, p);
+        this.emitRefused(agentId, event, p);
         return mcpDeny(d.reason);
       }
     }
@@ -536,7 +536,7 @@ export class HookServer {
       const cap = quickbooksCapability(cfg.agentCapabilities?.[agentId]?.quickbooks, this.roleReadsBooks?.(agentId) ?? false);
       const d = quickbooksAccess(cfg.quickbooksClaude === true, cap, p.tool_name ?? '');
       if (!d.ok) {
-        this.emit(agentId, event, p);
+        this.emitRefused(agentId, event, p);
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -564,7 +564,7 @@ export class HookServer {
       const refs = { forward: named(input.forward), attachFrom: Array.isArray(input.attach_from) && input.attach_from.some(named) };
       const d = op ? mailAccess(cfg, agentId, typeof input.mailbox === 'string' ? input.mailbox : undefined, op, proposal, { refs, present: this.memberPresent }) : { ok: false as const, reason: 'Unknown mail tool.' };
       if (!d.ok) {
-        this.emit(agentId, event, p);
+        this.emitRefused(agentId, event, p);
         return mcpDeny(d.reason);
       }
     }
@@ -588,7 +588,7 @@ export class HookServer {
           caseInsensitive: process.platform !== 'linux'
         });
         if (d.deny) {
-          this.emit(agentId, event, p);
+          this.emitRefused(agentId, event, p);
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
@@ -606,7 +606,7 @@ export class HookServer {
     // puts it on ASK ME.
     // In 1:1 the owner is at that terminal, so the question may go to them there.
     if (event === 'PreToolUse' && agentId && p.tool_name === ASK_TOOL && !this.isGod(agentId) && !this.onHold(agentId)) {
-      this.emit(agentId, event, p);
+      this.emitRefused(agentId, event, p);
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
@@ -624,7 +624,7 @@ export class HookServer {
     if (event === 'PreToolUse' && agentId && (FOLDER_READ_TOOLS.has(toolName) || FOLDER_WRITE_TOOLS.has(toolName))) {
       const d = this.folderCheck(agentId, toolName, p.tool_input, p.cwd);
       if (d.deny) {
-        this.emit(agentId, event, p);
+        this.emitRefused(agentId, event, p);
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -930,7 +930,11 @@ export class HookServer {
     }
   }
 
-  private emit(agentId: string | undefined, event: string, p: HookPayload, blocked = false): void {
+  private emitRefused(agentId: string | undefined, event: string, p: HookPayload): void {
+    this.emit(agentId, event, p, false, true);
+  }
+
+  private emit(agentId: string | undefined, event: string, p: HookPayload, blocked = false, refused = false): void {
     const payload = {
       agentId,
       event,
@@ -939,7 +943,7 @@ export class HookServer {
       notificationType: p.notification_type,
       source: p.source,
       message: p.message,
-      detail: event === 'PreToolUse' ? toolLine(p.tool_name, p.tool_input) : undefined,
+      detail: event === 'PreToolUse' && !refused ? toolLine(p.tool_name, p.tool_input) : undefined,
       blocked
     };
     if (!validateHookEvent(payload)) {

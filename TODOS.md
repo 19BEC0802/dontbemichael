@@ -210,14 +210,6 @@
 **Effort:** S
 **Priority:** P3
 
-### A refused tool call still shows its detail
-
-**What:** PreToolUse that the hook denies (paused or gated) still sends `detail`.
-
-**Why:** The row names a step that never ran.
-
-**Effort:** S
-**Priority:** P3
 
 ### Parallel tool calls clear each other's detail
 
@@ -606,6 +598,16 @@ A live end-to-end run is required before adding an engine: Gemini has never been
 **Depends on:** None
 
 ## Completed
+
+### A refused tool call still shows its detail
+
+**What:** PreToolUse that the hook denies (paused or gated) still sends `detail`.
+
+**Why:** The row names a step that never ran.
+
+**Effort:** S
+**Priority:** P3
+**Completed:** merged 2026-10-13. A refused PreToolUse call omits detail via `emitRefused()` so the row stays clear (agentvivekkumar/dontbemichael#261, by AnonymousSurya).
 
 ### Log the webhook format editor's parse error
 
