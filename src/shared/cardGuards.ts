@@ -38,13 +38,21 @@ export interface Reminder {
   backstopSentAt?: string;
 }
 
+/** An open card's status and what that status needs, kept so a card moved
+ *  back into Triage returns whole. */
+export interface Placed {
+  status: string;
+  waitingOn?: string;
+  nextAt?: string;
+}
+
 export interface GuardState {
   /** Which office this state belongs to, so a new office starts clean. */
   hive: string;
   /** Every card last seen Done, as it was then. */
   done: Record<string, GuardCard>;
-  /** The last status other than Triage each open card was seen in. */
-  placed: Record<string, string>;
+  /** Where each open card last stood outside Triage. */
+  placed: Record<string, Placed>;
   reminders: Record<string, Reminder>;
 }
 
@@ -60,8 +68,8 @@ export const emptyGuardState = (hive: string): GuardState => ({ hive, done: {}, 
 export interface GuardResult {
   /** True when the board needs fixing: apply `fixes` to it with applyGuardFixes. */
   changed: boolean;
-  /** The status each fixed card goes back to, by id. */
-  fixes: Record<string, string>;
+  /** The fields each fixed card goes back to, by id. */
+  fixes: Record<string, Record<string, unknown>>;
   /** Done cards an agent moved out of Done, put back. */
   reopened: Array<{ card: GuardCard; to: string; openAsk: boolean }>;
   /** Done cards that had vanished, put back. */
@@ -80,23 +88,29 @@ export function isNextAt(v: unknown): v is string {
   return typeof v === 'string' && ISO_WITH_OFFSET.test(v) && !Number.isNaN(Date.parse(v));
 }
 
+/** Where an open card last stood outside Triage, the old record being a bare status. */
+const placedOf = (p: Placed | string | undefined): Placed | undefined => (typeof p === 'string' ? { status: p } : p);
+
 /** Check the board against what the app saw before, and record what it sees now. */
 export function guardCards(raw: unknown[], before: GuardState): GuardResult {
   const tasks = raw.filter(isCard);
   const reopened: GuardResult['reopened'] = [];
   const untriaged: GuardResult['untriaged'] = [];
-  const fixes: Record<string, string> = {};
+  const fixes: GuardResult['fixes'] = {};
   const now: GuardCard[] = tasks.map((t) => {
-    if (before.done[t.id] && t.status !== 'done') {
+    const was = before.done[t.id];
+    if (was && t.status !== 'done') {
       reopened.push({ card: t, to: String(t.status ?? ''), openAsk: openAskIndexes(t.humanQA as never).length > 0 });
-      fixes[t.id] = 'done';
-      return { ...t, status: 'done' };
+      // Back as it was Done, so nothing changed with the reopen stands; only a
+      // question asked meanwhile stays, for the owner to see (D3).
+      fixes[t.id] = { ...was, ...(Array.isArray(t.humanQA) ? { humanQA: t.humanQA } : {}), status: 'done' };
+      return { ...t, ...fixes[t.id] };
     }
-    const was = before.placed[t.id];
-    if (t.status === 'triage' && was) {
-      untriaged.push({ card: t, to: was });
-      fixes[t.id] = was;
-      return { ...t, status: was };
+    const placed = placedOf(before.placed[t.id]);
+    if (t.status === 'triage' && placed) {
+      untriaged.push({ card: t, to: placed.status });
+      fixes[t.id] = { ...placed };
+      return { ...t, ...fixes[t.id] };
     }
     return t;
   });
@@ -107,17 +121,23 @@ export function guardCards(raw: unknown[], before: GuardState): GuardResult {
   const state: GuardState = { hive: before.hive, done: {}, placed: {}, reminders: {} };
   for (const t of now) {
     if (t.status === 'done') state.done[t.id] = t;
-    else if (t.status && t.status !== 'triage') state.placed[t.id] = t.status;
+    else if (t.status && t.status !== 'triage') {
+      state.placed[t.id] = {
+        status: t.status,
+        ...(typeof t.waitingOn === 'string' ? { waitingOn: t.waitingOn } : {}),
+        ...(typeof t.nextAt === 'string' ? { nextAt: t.nextAt } : {})
+      };
+    }
     if (before.reminders[t.id]) state.reminders[t.id] = before.reminders[t.id];
   }
   return { changed: Object.keys(fixes).length > 0 || restored.length > 0, fixes, reopened, restored, untriaged, state };
 }
 
 /** The board as read just now with the fixes applied: only the fixed cards'
- *  status changes, restored cards are added when still missing, and every
+ *  fields change, restored cards are added when still missing, and every
  *  other entry, a card without an id included, stays as it is. */
-export function applyGuardFixes(raw: unknown[], fixes: Record<string, string>, restored: GuardCard[]): unknown[] {
-  const out = raw.map((t) => (isCard(t) && fixes[t.id] && t.status !== fixes[t.id] ? { ...t, status: fixes[t.id] } : t));
+export function applyGuardFixes(raw: unknown[], fixes: GuardResult['fixes'], restored: GuardCard[]): unknown[] {
+  const out = raw.map((t) => (isCard(t) && fixes[t.id] ? { ...t, ...fixes[t.id] } : t));
   const present = new Set(raw.filter(isCard).map((t) => t.id));
   for (const t of restored) if (!present.has(t.id)) out.push(t);
   return out;

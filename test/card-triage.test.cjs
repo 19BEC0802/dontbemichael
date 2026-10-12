@@ -242,9 +242,15 @@ test('filings in the triage folder reach Michael oldest first, and leave once he
   fs.writeFileSync(path.join(dir, 'b-nick.json'), JSON.stringify({ title: 'Router password', filedBy: 'nick', filedAt: '2026-10-11T09:00:00Z', ask: '1. Which router?' }));
   fs.writeFileSync(path.join(dir, 'a-erin.json'), JSON.stringify({ title: 'Supplier quote', filedBy: 'erin', filedAt: '2026-10-11T10:00:00Z', waitingOn: 'supplier Acme' }));
   fs.writeFileSync(path.join(dir, 'c-pam.json'), JSON.stringify({ title: 'Lunch order', filedBy: 'pam', filedAt: '2026-10-11T09:30:00+00:00', ask: 'Which day?' }));
+  // Written at 09:00, 09:30 and 10:00; Erin's file claims an earlier filedAt.
+  const at = (name, iso) => { const s = Date.parse(iso) / 1000; fs.utimesSync(path.join(dir, name), s, s); };
+  at('b-nick.json', '2026-10-11T09:00:00Z'); at('c-pam.json', '2026-10-11T09:30:00Z'); at('a-erin.json', '2026-10-11T10:00:00Z');
+  const erin = JSON.parse(fs.readFileSync(path.join(dir, 'a-erin.json'), 'utf8'));
+  fs.writeFileSync(path.join(dir, 'a-erin.json'), JSON.stringify({ ...erin, filedAt: '2020-01-01T00:00:00Z' }));
+  at('a-erin.json', '2026-10-11T10:00:00Z');
   hive.refreshOwnerRequests();
   const filings = hive.stuckCards().filter((c) => c.issue === 'filing');
-  assert.deepEqual(filings.map((c) => [c.id, c.title, c.assignee]), [['b-nick.json', 'Router password', 'nick'], ['c-pam.json', 'Lunch order', 'pam'], ['a-erin.json', 'Supplier quote', 'erin']], 'by filing time, not by name');
+  assert.deepEqual(filings.map((c) => [c.id, c.title, c.assignee]), [['b-nick.json', 'Router password', 'nick'], ['c-pam.json', 'Lunch order', 'pam'], ['a-erin.json', 'Supplier quote', 'erin']], 'by when each was written, not by name or a typed filedAt (Codex review)');
   fs.renameSync(path.join(dir, 'c-pam.json'), path.join(dir, '.done', 'c-pam.json'));
   assert.ok(!hive.stuckCards().some((c) => c.id === 'c-pam.json'), 'gone at once, not after the next tick');
   const text = stuckCardsContext(hive.stuckCards());
@@ -259,7 +265,7 @@ test('filings in the triage folder reach Michael oldest first, and leave once he
   const ids = hive.stuckCards().filter((c) => c.issue === 'filing').map((c) => c.id);
   assert.ok(!ids.includes('d-half.json'), 'still being written');
   assert.ok(ids.includes('e-old.json'), 'broken but old: listed by its name');
-  assert.equal(ids[ids.length - 1], 'f-notime.json', 'no filedAt: its file time, the newest');
+  assert.equal(ids[ids.length - 1], 'f-notime.json', 'its file time, the newest');
   assert.match(text, /Then move the file to triage\/\.done\./);
   fs.renameSync(path.join(dir, 'b-nick.json'), path.join(dir, '.done', 'b-nick.json'));
   hive.refreshOwnerRequests();
@@ -389,6 +395,11 @@ test('the owner dragging a just reopened card to Done puts it back, not as the o
   assert.equal(guard('Edit', '20261011T143000-pam.json'), true, 'never changed once written');
   assert.equal(guard('Write', 'notes.md'), true);
   assert.equal(guard('Write', '.done'), true);
+  // Value (extension): protects=no filing is overwritten, by its writer or another agent; fails_when=Write may replace an existing filing or use another agent's name; why_new=Codex adversarial review; seam=harnessWriteDecision with a real file
+  assert.equal(guard('Write', '20261011T143000-erin.json'), true, 'only under its own id');
+  fs.mkdirSync(path.join(hive.root(), 'triage'), { recursive: true });
+  fs.writeFileSync(path.join(hive.root(), 'triage', '20261011T150000-pam.json'), '{}');
+  assert.equal(guard('Write', '20261011T150000-pam.json'), true, 'never over a filing already there');
 });
 
 test('a board that cannot be read at the moment of a fix is left alone, never written as empty', async (t) => {
@@ -409,4 +420,36 @@ test('a board that cannot be read at the moment of a fix is left alone, never wr
   assert.deepEqual(hive.tasks().tasks.map((c) => c.id), ['d', 'o1', 'o2'], 'nothing deleted');
   hive.refreshOwnerRequests();
   assert.equal(hive.tasks().tasks[0].status, 'done', 'fixed on the next tick');
+});
+
+test('a put back restores the whole Done card, an untriage the whole open card, and one tick commits once', async (t) => {
+  // Value: protects=a reopen cannot rewrite finished work, a move into Triage cannot strip who a card waits on or its next time, and many reminders do not stall the app; fails_when=only the status is restored, or every message commits on its own; why_new=Codex adversarial review; seam=the fleet tick
+  const { hive } = await officeWith(t, 'md-whole-card-');
+  hive.writeTasks([
+    card('d', { status: 'done', title: 'Quote sent', result: 'sent to Acme' }),
+    card('w', { status: 'waiting', waitingOn: 'customer Gopi' }),
+    card('n', { nextAt: '2099-01-01T09:00:00Z' })
+  ]);
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => {
+    Object.assign(tasks[0], { status: 'doing', title: 'Changed', result: 'rewritten', humanQA: [{ q: 'Again?', raisedBy: 'god' }] });
+    tasks[1].status = 'triage'; delete tasks[1].waitingOn;
+    tasks[2].status = 'triage'; delete tasks[2].nextAt;
+  });
+  hive.refreshOwnerRequests();
+  const [d, w, n] = hive.tasks().tasks;
+  assert.deepEqual([d.status, d.title, d.result], ['done', 'Quote sent', 'sent to Acme'], 'the Done card as it was');
+  assert.equal(d.humanQA[0].q, 'Again?', 'the question asked meanwhile stays (D3)');
+  assert.deepEqual([w.status, w.waitingOn], ['waiting', 'customer Gopi']);
+  assert.deepEqual([n.status, n.nextAt], ['todo', '2099-01-01T09:00:00Z']);
+
+  const { home, hive: h2 } = await officeWith(t, 'md-one-commit-');
+  h2.writeTasks(Array.from({ length: 12 }, (_, i) => card(`p${i}`, { nextAt: '2020-01-06T09:00:00Z' })));
+  const { execFileSync } = require('node:child_process');
+  const count = () => Number(execFileSync('git', ['-C', h2.root(), 'rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim());
+  const before = count();
+  h2.refreshOwnerRequests();
+  assert.equal(inboxOf(h2, 'god').filter((m) => m.subject.startsWith('Next step due')).length, 12);
+  assert.ok(count() - before <= 1, 'one commit for the tick, not one per reminder');
+  assert.ok(home);
 });

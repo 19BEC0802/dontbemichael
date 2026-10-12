@@ -212,7 +212,9 @@ one question rule made Michael park the rest):
   time and its id, written once: a title, the context in "description",
   "filedBy", "filedAt", and either an "ask" for the owner (a numbered list) or
   "waitingOn" for an outside party. The owner never sees the folder. Michael
-  sees the waiting filings each turn, oldest first by "filedAt", and works
+  sees the waiting filings each turn, oldest first by when each file was
+  written (the app only lets a team member create a new file under its own
+  id, never overwrite one, so a typed "filedAt" cannot jump the queue), and works
   them in that order against the board as it stands: answers it from memory
   or the board when he can, folds it into an existing card (rewriting it or
   its open ask), routes a question a teammate can answer, drops a duplicate,
@@ -232,13 +234,14 @@ one question rule made Michael park the rest):
   When that card is already Done, he asks them on a new card instead.
 - **Done is final.** A card ends in Done. Only the owner takes one out, to
   correct a card wrongly marked done: into To do, with a short reason. When an
-  agent reopens a Done card, the app puts it back to Done, status only, so a
-  question asked on it meanwhile is not withdrawn, and tells Michael to move
+  agent reopens a Done card, the app puts it back as it was when Done, keeping
+  only a question asked on it meanwhile, which is not withdrawn, and tells Michael to move
   that question to a new card (D3). A Done card that vanishes from the board
   is put back as the app last saw it (D5). The app keeps its Done list in its
   private folder, so this holds across restarts, and a new office starts clean.
 - **Triage is only a way in (D4).** A card already on the board that is moved
-  back to "triage" returns to its last status, and Michael is told.
+  back to "triage" returns to its last status, with who it waits on and its
+  next time, and Michael is told.
 - **A parked step wakes on time (D7).** A To do card with "nextAt" is a
   durable reminder, the pattern of Dapr and Orleans reminders, Temporal timers
   and Letta's wake tool: at that time the app sends the card's person one

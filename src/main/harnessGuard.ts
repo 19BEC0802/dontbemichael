@@ -18,6 +18,7 @@
  * Pure: no fs, no electron. The hook server supplies the paths.
  */
 
+import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 
@@ -47,7 +48,7 @@ export function harnessWriteDecision(i: HarnessWriteInput): { deny: boolean; rea
 
   if (isInside(norm(i.hiveRoot), norm(target))) {
     const rel = relative(norm(resolve(i.hiveRoot)), norm(target)).split(/[\\/]/).join('/');
-    if (isPlumbing(rel, norm(i.agentId), i.isGod, i.tool)) return { deny: false };
+    if (isPlumbing(rel, norm(i.agentId), i.isGod, i.tool, () => existsSync(target))) return { deny: false };
   }
 
   const workHere = i.cwd && !isInside(norm(i.harnessHome), norm(resolve(i.cwd))) ? ` (${i.cwd})` : '';
@@ -63,7 +64,7 @@ export function harnessWriteDecision(i: HarnessWriteInput): { deny: boolean; rea
  * The files the hive protocol tells an agent to write (PROTOCOL.md and the
  * injected prompt). Everything else in the hive is the app's to write.
  */
-function isPlumbing(rel: string, agentId: string, isGod: boolean, tool: string): boolean {
+function isPlumbing(rel: string, agentId: string, isGod: boolean, tool: string, exists: () => boolean): boolean {
   const own = `agents/${agentId}/`;
   // An agent adds notes to its memory inbox; the index (memory.md) is the
   // app's to write (memoryTidy.ts).
@@ -73,9 +74,10 @@ function isPlumbing(rel: string, agentId: string, isGod: boolean, tool: string):
   if (rel.startsWith(`${own}outbox/`) || rel.startsWith(`${own}inbox/`)) return true;
   // A team member files what its work needs as one new file in triage/
   // (card-lifecycle.md section 10); Michael files them away in triage/.done/.
-  // Written once: a new JSON file, never an edit, never the .done folder's name.
+  // Written once: a new JSON file named with the agent's own id, never an
+  // edit, never over a filing already there (its own or another agent's).
   const filing = rel.startsWith('triage/') ? rel.slice('triage/'.length) : '';
-  if (tool === 'Write' && filing.endsWith('.json') && !filing.includes('/') && !filing.startsWith('.')) return true;
+  if (tool === 'Write' && filing.endsWith(`-${agentId}.json`) && !filing.includes('/') && !filing.startsWith('.') && !exists()) return true;
   if (isGod && rel.startsWith('triage/.done/')) return true;
   // Michael alone writes the board (ship review D8).
   if (isGod && rel === 'tasks.json') return true;

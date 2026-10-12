@@ -2744,9 +2744,18 @@ export class HiveManager {
     const before = this.guardState();
     const fixed = guardCards(tasks, before);
     const godId = this.registry().godId;
+    // Every note and reminder of one tick shares one commit, so a restart
+    // with many overdue steps never stalls the app on a commit per message.
+    let sent = 0;
+    const post = (partial: Partial<HiveMessage>): HiveMessage => {
+      const msg = this.normalize(partial, 'system');
+      this.routeMessage(msg);
+      sent++;
+      return msg;
+    };
     const tell = (note: { subject: string; body: string }, cardId: string): void => {
       if (!godId) return;
-      try { this.send({ to: godId, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(cardId) }); } catch { /* the fix stands either way */ }
+      try { post({ to: godId, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(cardId) }); } catch { /* the fix stands either way */ }
     };
     if (fixed.changed) {
       // Fix the board as it is now, not the copy read above: only the fixed
@@ -2765,7 +2774,7 @@ export class HiveManager {
     const godName = resolveGodName(reg.agents[godId ?? 'god']?.name);
     const reminders = dueReminders(tasks.map((t) => {
       const id = (t as GuardCard | null)?.id;
-      return typeof id === 'string' && fixed.fixes[id] ? { ...(t as GuardCard), status: fixed.fixes[id] } : t;
+      return typeof id === 'string' && fixed.fixes[id] ? { ...(t as GuardCard), ...fixed.fixes[id] } : t;
     }) as GuardCard[], this.guard.reminders, Date.now());
     // The card's person, while they are on the team; otherwise Michael.
     const personOf = (t: GuardCard): string | null => {
@@ -2782,7 +2791,7 @@ export class HiveManager {
       if (!to) { unsent(); continue; } // nobody to tell yet: tried again next tick
       const note = nextStepDueNote(t, godName, !person ? 'nobody' : person === godId ? 'own' : 'person');
       try {
-        const msg = this.send({ to, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(t.id) });
+        const msg = post({ to, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(t.id) });
         // Named in the backstop only when it really reached them.
         if (person && person !== godId && this.lastRouted?.id === msg.id && this.lastRouted.delivered.includes(person)) {
           reminders.reminders[t.id] = { ...reminders.reminders[t.id], to: reg.agents[person]?.name || person };
@@ -2792,6 +2801,7 @@ export class HiveManager {
     this.guard.reminders = reminders.reminders;
     if (godId) for (const t of reminders.backstop) tell(nextStepBackstopNote(t, reminders.reminders[t.id]?.to), t.id);
     else for (const t of reminders.backstop) reminders.reminders[t.id] = { ...reminders.reminders[t.id], backstopSentAt: undefined };
+    if (sent) this.commit(`hive: board guard (${sent} message${sent === 1 ? '' : 's'})`);
     this.saveGuard();
   }
 
@@ -2813,11 +2823,13 @@ export class HiveManager {
       if (!hit || hit.mtimeMs !== mtimeMs) {
         let filing: { title: string; filedBy?: string; filedAt: string } | null = null;
         try {
-          const raw = JSON.parse(readFileSync(p, 'utf8')) as { title?: unknown; filedBy?: unknown; filedAt?: unknown };
+          const raw = JSON.parse(readFileSync(p, 'utf8')) as { title?: unknown; filedBy?: unknown };
           filing = {
             title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : f,
             ...(typeof raw.filedBy === 'string' && raw.filedBy ? { filedBy: raw.filedBy } : {}),
-            filedAt: typeof raw.filedAt === 'string' && Number.isFinite(Date.parse(raw.filedAt)) ? new Date(raw.filedAt).toISOString() : new Date(mtimeMs).toISOString()
+            // Ordered by when the file was written (written once, so its time
+            // is the filing's): a "filedAt" an agent typed cannot jump the queue.
+            filedAt: new Date(mtimeMs).toISOString()
           };
         } catch {
           if (Date.now() - mtimeMs < HiveManager.OUTBOX_WRITE_GRACE_MS) continue;
