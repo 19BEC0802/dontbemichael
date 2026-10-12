@@ -39,11 +39,11 @@ own memory, working on your computer.
 > brings you only the calls that need you.
 
 > [!TIP]
-> **New in 0.1.8: the office takes a break at your Claude plan limit, and files open inside it.**
-> When the plan runs out, Ask me and the top bar say when work starts again, nothing is typed into
-> a session that cannot answer, and the team carries on by itself at the reset. A file Michael
-> names opens in an office tab. Done cards show the result, and an email that may have gone out is
-> never sent twice. In 0.1.7, Microsoft 365 mailboxes got a clear message.
+> **New in 0.1.9: Michael alone keeps the task board, and Done is final.**
+> Team members file what they need once and Michael works it in order. Only you reopen a Done
+> card, with a short reason. A To do card shows when its next step is due, and its person is
+> reminded then. One activity's questions arrive as one numbered ask. In 0.1.8, the office took
+> a break at your Claude plan limit and files opened inside it.
 
 ## Contents
 

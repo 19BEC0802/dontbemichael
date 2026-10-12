@@ -1,6 +1,6 @@
 # Don't Be Michael: features and changes
 
-Everything the app does today, and every release that got it here (0.0.1 to 0.1.8). Part 1 is
+Everything the app does today, and every release that got it here (0.0.1 to 0.1.9). Part 1 is
 written to be lifted onto the GitHub page and the website as it is; Part 2 is the full list, release
 by release.
 
@@ -23,7 +23,12 @@ moving, and brings you only the decisions that need you.
 - Your answer to a question becomes Michael's work: he routes it and closes it, and the Tasks view
   shows which cards sit with him. Blocked always means waiting on you, Waiting shows who a card
   waits on, and a card ends only as Done. A Done card shows the first line of Michael's result,
-  and the whole result leads its details.
+  and the whole result leads its details. Only you reopen a Done card, with a short reason.
+- Michael alone keeps the task board. Team members file what their work needs once, in a queue
+  only he sees, and he works it in order: answers it, folds it into a card, or puts it on Ask me.
+  One activity's questions arrive as one numbered ask, and a part you leave open comes back.
+- A To do card shows when its next step is due, in your local time, and its person is reminded
+  then, even after the app was closed.
 - A question stays on Ask me until you answer it or Michael withdraws it, and your answer goes only
   to Michael.
 - A file Michael names in a reply, an Ask me card or a task shows as a chip. Markdown, text, JSON,
@@ -112,6 +117,24 @@ moving, and brings you only the decisions that need you.
   the file was kept.
 
 ## Part 2: Every change, release by release
+
+### 0.1.9 (2026-10-11)
+- Michael alone writes the task board. Team members file what their work needs once, in a queue
+  only he sees, and tell him when their work moves; he works the queue in filing order.
+- A card is one activity's needs: its questions for you are one numbered ask, answered together,
+  and a part left unanswered comes back. Questions for you and for someone outside the office go
+  on separate cards.
+- Done is final: only you take a card out of Done, into To do, with a short reason. A card an
+  agent reopens or deletes is put back as it was, and Michael is told.
+- A To do card can carry the time its next step is due. Its person is reminded at that time, also
+  after a restart, and Michael hears once if the card is still in To do four hours later.
+- Cards carry no running notes, routines on a schedule get no card, and a card never waits on its
+  own person.
+- Team members hear when the house rules change, and reports read in plain business words.
+- Closing time switches to the office floor and its still working count is a button with one
+  scrollbar; a Markdown report fills its tab; file chips sit in their sentence; the way back to
+  your conversation with Michael stays beside the message box.
+- Contributor fix: a webhook body that cannot be read is logged with the reason.
 
 ### 0.1.8 (2026-10-11)
 - Office break: when the Claude plan reaches its usage limit, Ask me, the top bar and the floor say

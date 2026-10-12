@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format is based on
 
 Don't Be Michael keeps its own version line, starting at 0.0.1.
 
-## [Unreleased]
+## [0.1.9] (2026-10-11)
 
 ### Added
 
@@ -28,6 +28,7 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 ### Fixed
 
 - The list of who is still working at closing time has one scrollbar.
+- A webhook body that cannot be read is logged with the reason (contributed in #141).
 
 ## [0.1.8] (2026-10-11)
 

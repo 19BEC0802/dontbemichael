@@ -1,4 +1,4 @@
-- **Office break** at your Claude plan limit.
-- **Files Michael names** open in an office tab.
-- **Done cards** show the result.
-- **No repeat sends** when a send drops.
+- **Michael alone** keeps the task board.
+- **Done is final**: only you reopen a card.
+- **A parked step wakes** at its time.
+- **One numbered ask** per activity.
