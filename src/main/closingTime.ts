@@ -9,11 +9,10 @@
  *
  *   1. The human clicks "closing time" in the quit dialog.
  *   2. We mail the god agent a shutdown brief: broadcast closing time to the
- *      team; every worker commits/parks WIP, sets its task card's status
- *      (and nextAt for a step at a set time; cards carry no running notes,
- *      since each agent's conversation and the office log keep its activity:
- *      owner, 2026-10-11), then replies
- *      with subject CLOSING-TIME-ACK.
+ *      team; every worker commits/parks WIP, then replies with subject
+ *      CLOSING-TIME-ACK saying where each of its cards stands (and when a
+ *      step is due at a set time). Michael alone moves the cards (ship
+ *      review D8); cards carry no running notes (owner, 2026-10-11).
  *   3. The god waits for every ACK (the harness shows live progress by
  *      watching the same inbox traffic), updates board.md, and sends a
  *      message with subject CLOSING-TIME-COMPLETE.

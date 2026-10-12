@@ -1,4 +1,5 @@
 import { openAskIndexes } from '@shared/askMeRouting';
+import { isNextAt } from '@shared/cardGuards';
 
 /* The hive task ledger as the renderer reads it: the card types, the open
  * question rule and the one parser every reader goes through. Plain TypeScript
@@ -137,13 +138,10 @@ export function parseTasks(raw: unknown): HiveTask[] {
     }));
 }
 
-/** House rule 8 asks for an ISO date and time with its offset. Anything looser
- *  is not shown: "Mon 12 Oct 13:00" parses as a 2001 date, and a bare date reads
- *  as midnight UTC, the evening before west of it. */
-const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
-function isNextAt(v: unknown): v is string {
-  return typeof v === 'string' && ISO_WITH_OFFSET.test(v) && !Number.isNaN(Date.parse(v));
-}
+/** House rule 8 asks for an ISO date and time with its offset (isNextAt).
+ *  Anything looser is not shown and wakes nobody: "Mon 12 Oct 13:00" parses as
+ *  a 2001 date, and a bare date reads as midnight UTC, the evening before west
+ *  of it. */
 const nextAtFormats = new Map<string, Intl.DateTimeFormat>();
 
 /** A card's next step time in the viewer's local time and the app's language,

@@ -140,13 +140,13 @@ test('a resumed agent is told the house rules that changed, once; a fresh one is
 test('team members file once in the triage folder, Michael alone writes the board, bundles and re-asks, and done stays done', () => {
   // Value: protects=the owner's card model and the single writer reach every agent; fails_when=a prompt drops the triage folder, write once, the numbered bundle, the split by who answers, the partial re-ask, the done rule, or still lets a team member write tasks.json; why_new=owner decisions 2026-10-11 and review D8; seam=prompt text
   const hive = fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8');
-  assert.match(hive, /file it for \$\{michael\} as one new file in the triage folder \(\$\{p\.hiveRoot\}\/triage\), named by the time you file it and your id/, 'team member files');
+  assert.match(hive, /file it for \$\{michael\} as one new file in the triage folder \(\$\{join\(p\.hiveRoot, 'triage'\)\}\), named by the time you file it and your id/, 'team member files');
   assert.match(hive, /Put all the questions one activity raised for the owner in one ask, as a numbered list, and merge the ones that ask the same thing\./);
   assert.match(hive, /file a second one naming them in "waitingOn"\./, 'split by who answers');
   assert.match(hive, /Write each filing once and never change it\./);
   assert.match(hive, /You never write tasks\.json, your own cards included: when your work moves, such as finished, waiting on someone, or due again at a set time, tell \$\{michael\} and he moves its card\./);
   assert.match(hive, /'## Triage',\n\s*'You alone write the task board \(tasks\.json\)\./, 'Michael triages and is the only writer');
-  assert.match(hive, /Each turn you see the filings waiting, oldest first: work them in that order, one at a time, against the board as it stands\./);
+  assert.match(hive, /Each turn you see the filings waiting, oldest first; at the start of a session, list the folder yourself too: work them in that order, one at a time, against the board as it stands\./);
   assert.match(hive, /Then move the file to triage\/\.done\./);
   assert.match(hive, /You alone write tasks\.json and board\.md/);
   assert.match(hive, /Only Michael writes \\`tasks\.json\\` and \\`board\.md\\`/, 'the protocol');

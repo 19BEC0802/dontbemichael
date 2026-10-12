@@ -13,6 +13,17 @@
 
 export const HOUSE_RULES_CHANGED_SUBJECT = 'House rules changed';
 
+/** The short key the rules were recorded by before 0.1.9 (FNV-1a, 32 bit,
+ *  hex), read once so an upgrade does not retell every rule. */
+function legacyKey(rule: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < rule.length; i++) {
+    h ^= rule.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
 /** The numbered rules, without the "HOUSE RULES." heading line. */
 export function houseRuleLines(rules: string): string[] {
   return rules.split('\n').filter((l) => /^\d+\.\s/.test(l));
@@ -29,7 +40,7 @@ export function houseRulesToTell(rules: string, seen: string[] | undefined, resu
   if (!resumed) return { tell: [], keys: lines };
   if (!seen) return { tell: lines, keys: lines };
   const known = new Set(seen);
-  return { tell: lines.filter((l) => !known.has(l)), keys: lines };
+  return { tell: lines.filter((l) => !known.has(l) && !known.has(legacyKey(l))), keys: lines };
 }
 
 export function houseRulesNoticeBody(tell: string[]): string {

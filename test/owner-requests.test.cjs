@@ -203,7 +203,7 @@ test('Michael sees the nothing asked list every turn, the owner sees it on the T
   assert.doesNotMatch(await ctx(), /BLOCKED CARDS|CARDS TO TIDY/);
   const hiveSrc = fs.readFileSync(path.resolve(__dirname, '../src/main/hive.ts'), 'utf8');
   assert.match(hiveSrc, /A card is "blocked" only while its question for the owner is open on Ask me/);
-  assert.match(hiveSrc, /this\.stuckCardsCache = \[\.\.\.this\.filingsCache, \.\.\.blockedWithNothingAsked\(/);
+  assert.match(hiveSrc, /this\.stuckCardsCache = \[\.\.\.blockedWithNothingAsked\(/);
   const kanban = fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/components/TasksKanban.tsx'), 'utf8');
   assert.match(kanban, /blockedWithNothingAsked\(tasks, ownerRequests\)/);
   assert.match(kanban, /t\('kanban\.nothingAsked'\)/);

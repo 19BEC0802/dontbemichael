@@ -1,3 +1,4 @@
+import { isNextAt } from './cardGuards';
 import { answerMessages, cardOfConversation, cardText, isAnswered, isWithdrawn, MICHAEL_ID, openAskIndexes, raiserOf, type AnswerMessage } from './askMeRouting';
 
 /**
@@ -279,26 +280,30 @@ export function untriagedNote(task: { id: string; title?: string }, to: string):
   };
 }
 
-/** A To do card's nextAt has come: its person does the step (house rule 8). */
-export function nextStepDueNote(task: { id: string; title?: string; nextAt?: string; description?: unknown }): { subject: string; body: string } {
+/** A To do card's nextAt has come: its person does the step (house rule 8).
+ *  `forGod` when nobody on the team has the card, so it goes to Michael. */
+export function nextStepDueNote(task: { id: string; title?: string; nextAt?: string; description?: unknown }, godName: string, forGod = false): { subject: string; body: string } {
   const what = typeof task.description === 'string' && task.description.trim() ? ` What it is about: ${cardText(task.description, 500).replace(/[.!?]+$/, '')}.` : '';
   return {
     subject: `Next step due: ${cardText(task.title ?? task.id)}`,
-    body: `The next step on card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" was set for ${cardText(String(task.nextAt ?? ''), 40)} and is due now.${what} Do it, then tell Michael where the card stands.`
+    body: `The next step on card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" was set for ${cardText(String(task.nextAt ?? ''), 40)} and is due now.${what} ${forGod
+      ? 'Nobody on the team has this card: do the step or hand it to someone, then move the card to where its work stands.'
+      : `Do it, then tell ${cardText(godName, 40)} where the card stands.`}`
   };
 }
 
-/** Michael's one backstop: a card still in To do long after its step came due. */
-export function nextStepBackstopNote(task: { id: string; title?: string; nextAt?: string; assignee?: string }): { subject: string; body: string } {
+/** Michael's one backstop: a card still in To do long after its step came due.
+ *  `reminded`: the team member who got the reminder, when it was not him. */
+export function nextStepBackstopNote(task: { id: string; title?: string; nextAt?: string }, reminded?: string): { subject: string; body: string } {
   return {
     subject: `STILL IN TO DO: card ${cardText(task.id, 60)}`,
-    body: `Card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" had its next step due at ${cardText(String(task.nextAt ?? ''), 40)}${task.assignee ? `, and ${cardText(task.assignee, 40)} was reminded` : ''}, but it is still in To do. Check with whoever has it, then move the card to where its work stands, with a new "nextAt" if the step moved.`
+    body: `Card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" had its next step due at ${cardText(String(task.nextAt ?? ''), 40)}${reminded ? `, and ${cardText(reminded, 40)} was reminded` : ''}, but it is still in To do. ${reminded ? 'Check with them' : 'Check who should do it'}, then move the card to where its work stands, with a new "nextAt" if the step moved.`
   };
 }
 
 /** A card Michael has to tidy: in Blocked with nothing asked (no `issue`), or
  *  holding an open question the wrong way (`issue`). */
-export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'filing' | 'triage' | 'ask-off-blocked' | 'several-asks' }
+export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'filing' | 'triage' | 'ask-off-blocked' | 'several-asks' | 'bad-next' }
 
 const stuckOf = (t: CardLike, issue?: StuckCard['issue']): StuckCard => ({
   id: t.id,
@@ -335,6 +340,9 @@ export function asksToTidy(tasks: CardLike[]): StuckCard[] {
     // Filed by a team member, waiting for Michael to check and release it
     // (card-lifecycle.md section 10); its ask is not on Ask me yet.
     if (t.status === 'triage') { out.push(stuckOf(t, 'triage')); continue; }
+    // A next step time the app cannot read wakes nobody (cardGuards.ts).
+    const next = (t as { nextAt?: unknown }).nextAt;
+    if (t.status === 'todo' && next !== undefined && next !== null && next !== '' && !isNextAt(next)) out.push(stuckOf(t, 'bad-next'));
     const open = openAskIndexes(t.humanQA as never).length;
     if (!open) continue;
     if (t.status !== 'blocked') out.push(stuckOf(t, 'ask-off-blocked'));
@@ -348,6 +356,7 @@ const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', str
   triage: 'CARDS IN TRIAGE ON THE BOARD. The owner does not see these. Handle each like a new filing, then release it: "blocked" when it asks the owner, "waiting" with "waitingOn" when it waits on someone else, or "done" when it needs nothing more.',
   'nothing-asked': 'BLOCKED CARDS WITH NOTHING ASKED. These cards are in Blocked, but none has a question for the owner on Ask me or an open request from the owner, so nothing is moving them. Blocked means waiting on the owner\'s answer. For each one: if it needs the owner, add the question to its humanQA so it shows on Ask me; if it waits on someone outside the office or on a team member, move it to "waiting" and name who in "waitingOn"; if the work is finished, or the owner decided to stop it, move it to "done".',
   'ask-off-blocked': 'OPEN QUESTIONS ON CARDS OUT OF BLOCKED. Each of these cards left Blocked with a question still open, and the owner still sees it on Ask me until they answer it or you withdraw it. For each one: if you moved the card out of Blocked and the work still needs the answer, move it back to "blocked". If the owner moved it, the card is done, or the question no longer matters, withdraw the question by setting "dismissedAt" (the time) and a short "dismissedReason" on that humanQA entry. Never move a card the owner moved.',
+  'bad-next': 'CARDS WITH A NEXT TIME THE APP CANNOT READ. Nobody is reminded when it comes. Set "nextAt" on each to an ISO date and time with its offset, such as 2026-10-12T09:00:00+01:00, or remove it.',
   'several-asks': 'CARDS WITH MORE THAN ONE OPEN QUESTION. The owner sees every one of them on Ask me. Keep one open question per card: fold what still matters into the newest, and withdraw the others by setting "dismissedAt" (the time) and a short "dismissedReason" on each.'
 };
 
@@ -355,7 +364,7 @@ const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', str
 export function stuckCardsContext(stuck: StuckCard[]): string | null {
   if (!stuck.length) return null;
   const parts: string[] = [];
-  for (const kind of ['filing', 'triage', 'nothing-asked', 'ask-off-blocked', 'several-asks'] as const) {
+  for (const kind of ['filing', 'triage', 'nothing-asked', 'ask-off-blocked', 'several-asks', 'bad-next'] as const) {
     const cards = stuck.filter((c) => (c.issue ?? 'nothing-asked') === kind);
     if (!cards.length) continue;
     parts.push([

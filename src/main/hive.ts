@@ -68,7 +68,7 @@ import {
   privateOwnerSentDir, privateOwnerStatePath, privateRoot
 } from '../shared/agentPrivatePaths';
 import { HOUSE_RULES_CHANGED_SUBJECT, houseRulesNoticeBody, houseRulesToTell } from '../shared/houseRulesNotice';
-import { dueReminders, emptyGuardState, guardCards, type GuardCard, type GuardState } from '../shared/cardGuards';
+import { applyGuardFixes, dueReminders, guardSignature, emptyGuardState, guardCards, type GuardCard, type GuardState } from '../shared/cardGuards';
 import { sleepSync } from './atomicFile';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
@@ -330,7 +330,7 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
     'A card ends only as Done: with a "result" when the work is finished, or, when the owner decides to stop it (an answer such as "drop it"), with "closedBy": "owner" and a "closedReason" in the owner\'s words, so the board shows it was their call. Never delete a card. When the owner closes or moves a card themselves, you get a note saying so: tell whoever has it and route the work to match. Only the owner takes a card out of Done, to correct one marked done by mistake; never reopen or delete a done card yourself: the app puts back any that an agent reopens or deletes, and tells you.',
     '',
     '## Triage',
-    'You alone write the task board (tasks.json). Team members file what their work needs as one file each in the triage folder (triage, in the hive folder): a title, what they were doing in "description", "filedBy", "filedAt", and either an "ask" for the owner or "waitingOn" naming someone outside the office. The owner never sees the folder. Each turn you see the filings waiting, oldest first: work them in that order, one at a time, against the board as it stands. For each one: answer it from your memory or the board when you can, and tell the team member; fold it into an existing card that covers the same matter, rewriting that card or its open ask; route a question a teammate can answer to them; drop a duplicate; or make a card for it, "blocked" with the ask rewritten into the Ask me shape ("raisedBy" the team member), or "waiting" with "waitingOn", the team member as assignee and what they were doing kept in its description. Keep one card per source of answers. Then move the file to triage/.done. Team members also tell you when their work moves (finished, waiting on someone, due again at a set time): move its card to match. A card already on the board with "status": "triage" is handled the same way: release it as "blocked" or "waiting", or close it.',
+    'You alone write the task board (tasks.json). Team members file what their work needs as one file each in the triage folder (triage, in the hive folder): a title, what they were doing in "description", "filedBy", "filedAt", and either an "ask" for the owner or "waitingOn" naming someone outside the office. The owner never sees the folder. Each turn you see the filings waiting, oldest first; at the start of a session, list the folder yourself too: work them in that order, one at a time, against the board as it stands. For each one: answer it from your memory or the board when you can, and tell the team member; fold it into an existing card that covers the same matter, rewriting that card or its open ask; route a question a teammate can answer to them; drop a duplicate; or make a card for it, "blocked" with the ask rewritten into the Ask me shape ("raisedBy" the team member), or "waiting" with "waitingOn", the team member as assignee and what they were doing kept in its description. Keep one card per source of answers. Then move the file to triage/.done. Team members also tell you when their work moves (finished, waiting on someone, due again at a set time): move its card to match. A card already on the board with "status": "triage" is handled the same way: release it as "blocked" or "waiting", or close it.',
     '',
     '## Keeping the task board accurate',
     'Record each piece of work as a card. Set its assignee to the team member when you hand the work off and keep it through every status change, because the owner reads the board by who did what. Write no running "notes" on a card (house rule 8): its status, "waitingOn", "nextAt", Ask me question and "result" say where it stands. Move cards between todo, doing, waiting, blocked and done as the work moves, so the board is right whenever the owner looks. A card is "blocked" only while its question for the owner is open on Ask me, because Blocked tells the owner the card waits on them. A card waiting on someone outside the office, or on a team member, is "waiting", with "waitingOn" naming who in a few words (like "customer Gopi" or "Nick"), never the card\'s own person; move it back to "doing" when they answer and the work starts again. A card whose one off next step is its own person\'s at a set time is "todo", with "nextAt" set to that time; scheduled routines get no card (house rule 8). "doing" means someone is working on it now. When you close a request from the owner, leave its card in one of these states. When a To do card\'s "nextAt" arrives, the app sends its person a "Next step due" message; you hear about it only if the card is still in To do hours later. You alone write tasks.json and board.md, the office\'s notes on plans and priorities; team members send you changes.',
@@ -363,7 +363,7 @@ export function teamMemberInstructions(name: string, role: string, michael: stri
   return [
     `You are ${name}, the ${role} on the team at ${where(b)}. ${michael} is the office manager: he gives you work and is your only link to the owner. Anything you need from the owner, such as an approval, an answer or a file, you file for ${michael} to check, and he puts it on the owner's Ask me board.`,
     '',
-    `When your work needs answers from someone, file it for ${michael} as one new file in the triage folder (${p.hiveRoot}/triage), named by the time you file it and your id, like 20261011T143000-<your id>.json. Write {"title": "<a few plain words>", "description": "<what you were doing and why you need it>", "filedBy": "<your id>", "filedAt": "<time>"} with either "ask": "<the questions for the owner>" or "waitingOn": "<who outside the office>". Put all the questions one activity raised for the owner in one ask, as a numbered list, and merge the ones that ask the same thing. When the same activity also needs an answer from someone outside the office, file a second one naming them in "waitingOn". Write each filing once and never change it. ${michael} reads the filings in the order they were filed and turns each into a card on the board. You never write tasks.json, your own cards included: when your work moves, such as finished, waiting on someone, or due again at a set time, tell ${michael} and he moves its card. A "Next step due" message from the app means a step of yours parked for a set time is due now: do it, then tell ${michael}.`,
+    `When your work needs answers from someone, file it for ${michael} as one new file in the triage folder (${join(p.hiveRoot, 'triage')}), named by the time you file it and your id, like 20261011T143000-<your id>.json. Write {"title": "<a few plain words>", "description": "<what you were doing and why you need it>", "filedBy": "<your id>", "filedAt": "<time>"} with either "ask": "<the questions for the owner>" or "waitingOn": "<who outside the office>". Put all the questions one activity raised for the owner in one ask, as a numbered list, and merge the ones that ask the same thing. When the same activity also needs an answer from someone outside the office, file a second one naming them in "waitingOn". Write each filing once and never change it. ${michael} reads the filings in the order they were filed and turns each into a card on the board. You never write tasks.json, your own cards included: when your work moves, such as finished, waiting on someone, or due again at a set time, tell ${michael} and he moves its card. A "Next step due" message from the app means a step of yours parked for a set time is due now: do it, then tell ${michael}.`,
     '',
     'Do what was asked, at the scope asked. If a request looks mistaken, say so in one sentence and carry on. Finish the whole task; if part is blocked, do the rest and say plainly what is missing and why. Anything hard to undo, public, or costing money is the owner\'s call, so send it to ' + michael + ' for approval first; go ahead with everything else. Email is the exception: the owner set how your mail leaves (your Sending setting, which list_mailboxes reports), so follow it.',
     '',
@@ -1959,7 +1959,7 @@ export class HiveManager {
         memoryLine
       ].filter(Boolean).join('\n');
     }
-    const guardrailsLine = 'Guardrails: a circuit breaker watches the floor: a "Circuit breaker: steer/constrain" message means you are looping or overspending, so STOP repeating, summarize what you tried, and follow it. Be token-frugal (a floor-wide or per-agent token budget can pause you). The shared plan has two parts: board.md (freeform; god is the sole scribe) and tasks.json (structured kanban — todo/doing/blocked/done).' + (meta.isGod ? '' : ' A card with a question open for the owner (a humanQA entry with no "a" and no "dismissedAt") is god\'s until the owner answers: never change its status or humanQA yourself; tell god what changed.');
+    const guardrailsLine = 'Guardrails: a circuit breaker watches the floor: a "Circuit breaker: steer/constrain" message means you are looping or overspending, so STOP repeating, summarize what you tried, and follow it. Be token-frugal (a floor-wide or per-agent token budget can pause you). The shared plan has two parts: board.md (freeform; god is the sole scribe) and tasks.json (structured kanban — todo/doing/blocked/done).' + (meta.isGod ? ' You alone write tasks.json; team members file what they need in the triage folder of the hive, which you work oldest first.' : ' Only god writes tasks.json: never change a card yourself, file what your work needs as one new file in the triage folder of the hive, and tell god what changed.');
     const slackLine = meta.isGod
       ? 'SLACK REPLIES: When composing a Slack reply (or writing the `result` field of a Slack-origin kanban card), you MUST: (1) directly address what the user asked — never a bare "done"; (2) include the relevant specifics, outcome, and details; (3) format for Slack mrkdwn — open with a short *bold* headline, use bullet points for multiple items, wrap code/paths in `backtick` blocks, keep it concise (no walls of text). When finishing a Slack-origin task, always write a complete, user-facing, well-formatted `result` on the kanban card — the system posts it verbatim to Slack as the done reply.'
       : `SLACK REPLIES: If god dispatches you a task that came from Slack, it will include an exact \`"${hiveNode}" "<helper>" --channel … --thread … --text "…"\` reply command — when you finish, run it VERBATIM to post your result back to that thread yourself. The reply must be SUBSTANTIVE Slack mrkdwn (a short *bold* headline + the actual outcome/specifics/links), NEVER a bare "done".`;
@@ -2042,7 +2042,7 @@ export class HiveManager {
     if (tell.length) {
       try {
         const msg = this.send({ to: agentId, act: 'inform', subject: HOUSE_RULES_CHANGED_SUBJECT, body: houseRulesNoticeBody(tell) }, 'human');
-        if (!existsSync(join(this.agentDir(agentId), 'inbox', `${msg.id}.json`))) return [];
+        if (this.lastRouted?.id !== msg.id || !this.lastRouted.delivered.includes(agentId)) return [];
       } catch { return []; }
     }
     mkdirSync(dirname(file), { recursive: true });
@@ -2203,11 +2203,16 @@ export class HiveManager {
       }
     }
     this.appendLog({ kind: 'message', from: msg.from, to: msg.to, act: msg.act, subject: msg.subject, id: msg.id, delivered });
+    this.lastRouted = { id: msg.id, delivered };
     this.emitMessage(msg, targets);
     // Main-process observer (e.g. the closing-time controller watching for the
     // team's ACKs and the god's COMPLETE). Best-effort, never breaks routing.
     try { this.routedObserver?.(msg, targets); } catch { /* observer error */ }
   }
+
+  /** Who took delivery of the last message routed (inbox or terminal), for a
+   *  sender that must know it arrived (tellHouseRules). Routing is synchronous. */
+  private lastRouted: { id: string; delivered: string[] } | null = null;
 
   /** Observer invoked for EVERY routed message with its resolved targets.
    *  Used by main-process features that react to hive traffic (closing time). */
@@ -2501,8 +2506,12 @@ export class HiveManager {
     // Out of Done only to correct a card marked done by mistake: into To do,
     // with the owner's reason (card-lifecycle.md section 10).
     const why = reason?.trim().slice(0, 500);
-    if (card.status === 'done' && (status !== 'todo' || !why)) return false;
-    const from = card.status;
+    // Done as the app last saw it counts too: an agent may have moved the card
+    // since, and the next tick would put it back.
+    const wasDone = card.status === 'done' || !!this.guardState().done[id];
+    if (wasDone && (status !== 'todo' || !why)) return false;
+    if (wasDone && card.status !== 'done') { delete this.guardState().done[id]; this.saveGuard(); }
+    const from = wasDone ? 'done' : card.status;
     if (!this.patchTask(id, { status, waitingOn: undefined, closedBy: undefined, closedAt: undefined, closedReason: undefined })) return false;
     if (from !== status) this.tellGodOwnerChange(card, { kind: 'moved', from, to: status, ...(why ? { reason: why } : {}) });
     return true;
@@ -2647,7 +2656,7 @@ export class HiveManager {
    *  cards it saw Done, where each open card was, and the reminders it sent.
    *  Kept in the private folder; null until the first tick loads it. */
   private guard: GuardState | null = null;
-  /** The guard state as last saved, so a quiet tick writes nothing. */
+  /** The guard state's signature as last saved, so a quiet tick writes nothing. */
   private guardSaved = '';
   /** Team members' filings waiting in triage/, oldest first, as of the last tick. */
   private filingsCache: StuckCard[] = [];
@@ -2664,18 +2673,26 @@ export class HiveManager {
     return home ? join(privateRoot(home), 'card-guard.json') : null;
   }
 
-  /** The office this state belongs to: the hive folder itself, which a new
-   *  office replaces, so a fresh office never gets an old one's cards. */
+  /** The office this state belongs to: a random id kept in the hive folder,
+   *  so a new office never gets an old one's cards, while moving or restoring
+   *  the folder keeps it. */
   private hiveIdentity(): string {
     const root = this.root();
     if (!root) return '';
-    try { const st = statSync(root); return `${root}:${st.ino}:${Math.round(st.birthtimeMs)}`; } catch { return root; }
+    const file = join(root, '.office-id');
+    try {
+      const id = readFileSync(file, 'utf8').trim();
+      if (/^[0-9a-f]{16,64}$/.test(id)) return id;
+    } catch { /* first look at this office */ }
+    const id = randomBytes(16).toString('hex');
+    try { writeFileSync(file, `${id}\n`); } catch { /* tried again next time */ }
+    return id;
   }
 
   private saveGuard(): void {
     const file = this.guardFile();
     if (!file || !this.guard) return;
-    const text = JSON.stringify(this.guard);
+    const text = guardSignature(this.guard);
     if (text === this.guardSaved) return;
     try {
       mkdirSync(dirname(file), { recursive: true });
@@ -2695,7 +2712,7 @@ export class HiveManager {
       try {
         const text = readFileSync(file, 'utf8');
         const st = JSON.parse(text) as GuardState;
-        if (st && st.hive === hive && st.done && st.placed && st.reminders) { this.guardSaved = text; return st; }
+        if (st && st.hive === hive && st.done && st.placed && st.reminders) { this.guardSaved = guardSignature(st); return st; }
       } catch { /* none yet: start from what the board shows now */ }
     }
     return emptyGuardState(hive);
@@ -2724,23 +2741,41 @@ export class HiveManager {
       if (!godId) return;
       try { this.send({ to: godId, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(cardId) }); } catch { /* the fix stands either way */ }
     };
-    if (fixed.tasks) {
-      this.writeTasks(fixed.tasks as unknown as HiveTask[]);
+    if (fixed.changed) {
+      // Fix the board as it is now, not the copy read above: only the fixed
+      // cards change, and everything else, a card added since included, stays.
+      const now = this.tasks() as { tasks?: unknown };
+      this.writeTasks(applyGuardFixes(Array.isArray(now?.tasks) ? now.tasks : tasks, fixed.fixes, fixed.restored) as HiveTask[]);
       for (const r of fixed.reopened) tell(reopenedNote(r.card, r.to, r.openAsk), r.card.id);
       for (const t of fixed.restored) tell(restoredDoneNote(t), t.id);
       for (const u of fixed.untriaged) tell(untriagedNote(u.card, u.to), u.card.id);
     }
-    const board = (fixed.tasks ?? tasks) as GuardCard[];
-    const reminders = dueReminders(board, this.guard.reminders, Date.now());
-    this.guard.reminders = reminders.reminders;
-    const agents = this.registry().agents;
+    const reg = this.registry();
+    const godName = resolveGodName(reg.agents[godId ?? 'god']?.name);
+    const reminders = dueReminders(tasks.map((t) => {
+      const id = (t as GuardCard | null)?.id;
+      return typeof id === 'string' && fixed.fixes[id] ? { ...(t as GuardCard), status: fixed.fixes[id] } : t;
+    }) as GuardCard[], this.guard.reminders, Date.now());
+    // The card's person, while they are on the team; otherwise Michael.
+    const personOf = (t: GuardCard): string | null => {
+      const a = t.assignee ? reg.agents[t.assignee] : undefined;
+      return a && !a.archived && !a.isAssistant ? t.assignee! : null;
+    };
     for (const t of reminders.due) {
-      const to = t.assignee && agents[t.assignee] ? t.assignee : godId;
-      if (!to) continue;
-      const note = nextStepDueNote(t);
-      try { this.send({ to, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(t.id) }); } catch { /* sent again never: Michael gets the backstop */ }
+      const person = personOf(t);
+      const to = person ?? godId;
+      const unsent = (): void => {
+        if (this.guard?.reminders[t.id]) reminders.reminders[t.id] = this.guard.reminders[t.id];
+        else delete reminders.reminders[t.id];
+      };
+      if (!to) { unsent(); continue; } // nobody to tell yet: tried again next tick
+      const note = nextStepDueNote(t, godName, to === godId);
+      if (person && person !== godId) reminders.reminders[t.id] = { ...reminders.reminders[t.id], to: reg.agents[person]?.name || person };
+      try { this.send({ to, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(t.id) }); } catch { unsent(); }
     }
-    for (const t of reminders.backstop) tell(nextStepBackstopNote(t), t.id);
+    this.guard.reminders = reminders.reminders;
+    if (godId) for (const t of reminders.backstop) tell(nextStepBackstopNote(t, reminders.reminders[t.id]?.to), t.id);
+    else for (const t of reminders.backstop) reminders.reminders[t.id] = { ...reminders.reminders[t.id], backstopSentAt: undefined };
     this.saveGuard();
   }
 
@@ -2797,7 +2832,7 @@ export class HiveManager {
     const fromMichael = [...this.ownerMessages(join(dir, 'outbox'), since), ...this.ownerMessages(join(dir, 'outbox', '.sent'), since)];
     const aliases = this.ownerAliases();
     this.ownerQuestionsCache = openOwnerQuestions(toMichael, fromMichael, aliases, this.ownerMessageCheck);
-    this.guardBoard();
+    try { this.guardBoard(); } catch (e) { console.error('[hive] board guard:', e); }
     const raw = this.tasks() as { tasks?: unknown };
     const tasks = Array.isArray(raw?.tasks) ? (raw.tasks as CardLike[]) : [];
     // A card that has ended (Done, or closed by the owner) needs no routing,
@@ -2814,8 +2849,8 @@ export class HiveManager {
     // The same tick finds Blocked cards nothing is moving (card-lifecycle.md
     // section 7): no open ask, no open owner request; and open questions held
     // the wrong way, off Blocked or several on one card.
-    this.filingsCache = this.pendingFilings();
-    this.stuckCardsCache = [...this.filingsCache, ...blockedWithNothingAsked(tasks, this.ownerRequestsCache), ...asksToTidy(tasks)];
+    try { this.filingsCache = this.pendingFilings(); } catch (e) { console.error('[hive] triage filings:', e); }
+    this.stuckCardsCache = [...blockedWithNothingAsked(tasks, this.ownerRequestsCache), ...asksToTidy(tasks)];
     return this.ownerRequestsCache;
   }
 
@@ -3149,8 +3184,13 @@ export class HiveManager {
     return true;
   }
 
+  /** What Michael has to tidy, filings first. The filings are listed afresh
+   *  (each file is read once until it changes), so one he just filed away
+   *  never shows from an 8 second old tick. */
   stuckCards(): StuckCard[] {
-    return this.stuckCardsCache;
+    let filings = this.filingsCache;
+    try { filings = this.filingsCache = this.pendingFilings(); } catch { /* the last tick's list */ }
+    return [...filings, ...this.stuckCardsCache];
   }
 
   /** Answers on cards not yet done with no owner request to Michael since
@@ -4495,7 +4535,7 @@ options (roughly 700 characters) is a report, not a question. Cut the narrative 
   stays on its own line.
 
 When the ask originates in another agent's report, REWRITE it into that shape. Never paste the report
-body in as the question, and never make the human read the investigation to find the decision. Do NOT park human questions in separate files (no \`HumanQuestion.md\`),
+body in as the question, and never make the human read the investigation to find the decision. Do NOT park human questions in other files of your own (no \`HumanQuestion.md\`): a team member's filing in \`triage/\` is the only other place one waits,
 and never sit idle waiting for a reply — move on to other work and pick the answer up when it arrives.
 
 ## Guardrails: circuit breaker & token budgets

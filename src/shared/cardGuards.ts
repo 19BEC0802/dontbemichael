@@ -32,6 +32,8 @@ export interface GuardCard {
 export interface Reminder {
   /** The nextAt this reminder is for: a new time is a new reminder. */
   nextAt: string;
+  /** Who was reminded, when it was not Michael. */
+  to?: string;
   dueSentAt?: string;
   backstopSentAt?: string;
 }
@@ -46,11 +48,20 @@ export interface GuardState {
   reminders: Record<string, Reminder>;
 }
 
+/** What a save must keep: which cards are Done, where the open ones are, and
+ *  the reminders. A Done card's copy is refreshed in memory every tick and
+ *  saved with the next change, so a quiet tick costs no full stringify. */
+export function guardSignature(st: GuardState): string {
+  return JSON.stringify([st.hive, Object.keys(st.done).sort(), st.placed, st.reminders]);
+}
+
 export const emptyGuardState = (hive: string): GuardState => ({ hive, done: {}, placed: {}, reminders: {} });
 
 export interface GuardResult {
-  /** The board to write, or null when nothing needs fixing. */
-  tasks: GuardCard[] | null;
+  /** True when the board needs fixing: apply `fixes` to it with applyGuardFixes. */
+  changed: boolean;
+  /** The status each fixed card goes back to, by id. */
+  fixes: Record<string, string>;
   /** Done cards an agent moved out of Done, put back. */
   reopened: Array<{ card: GuardCard; to: string; openAsk: boolean }>;
   /** Done cards that had vanished, put back. */
@@ -62,37 +73,54 @@ export interface GuardResult {
 
 const isCard = (t: unknown): t is GuardCard => !!t && typeof t === 'object' && typeof (t as GuardCard).id === 'string';
 
-/** Fix the board against what the app saw before, and record what it sees now. */
+/** A To do card's next step time, as the board shows it: an ISO date and time
+ *  with its offset. Anything else is not shown and wakes nobody. */
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+export function isNextAt(v: unknown): v is string {
+  return typeof v === 'string' && ISO_WITH_OFFSET.test(v) && !Number.isNaN(Date.parse(v));
+}
+
+/** Check the board against what the app saw before, and record what it sees now. */
 export function guardCards(raw: unknown[], before: GuardState): GuardResult {
   const tasks = raw.filter(isCard);
   const reopened: GuardResult['reopened'] = [];
   const untriaged: GuardResult['untriaged'] = [];
-  let changed = false;
-  const next = tasks.map((t) => {
+  const fixes: Record<string, string> = {};
+  const now: GuardCard[] = tasks.map((t) => {
     if (before.done[t.id] && t.status !== 'done') {
       reopened.push({ card: t, to: String(t.status ?? ''), openAsk: openAskIndexes(t.humanQA as never).length > 0 });
-      changed = true;
+      fixes[t.id] = 'done';
       return { ...t, status: 'done' };
     }
     const was = before.placed[t.id];
     if (t.status === 'triage' && was) {
       untriaged.push({ card: t, to: was });
-      changed = true;
+      fixes[t.id] = was;
       return { ...t, status: was };
     }
     return t;
   });
-  const present = new Set(next.map((t) => t.id));
+  const present = new Set(now.map((t) => t.id));
   const restored = Object.values(before.done).filter((t) => !present.has(t.id));
-  if (restored.length) { next.push(...restored); changed = true; }
+  now.push(...restored);
 
   const state: GuardState = { hive: before.hive, done: {}, placed: {}, reminders: {} };
-  for (const t of next) {
+  for (const t of now) {
     if (t.status === 'done') state.done[t.id] = t;
     else if (t.status && t.status !== 'triage') state.placed[t.id] = t.status;
     if (before.reminders[t.id]) state.reminders[t.id] = before.reminders[t.id];
   }
-  return { tasks: changed ? next : null, reopened, restored, untriaged, state };
+  return { changed: Object.keys(fixes).length > 0 || restored.length > 0, fixes, reopened, restored, untriaged, state };
+}
+
+/** The board as read just now with the fixes applied: only the fixed cards'
+ *  status changes, restored cards are added when still missing, and every
+ *  other entry, a card without an id included, stays as it is. */
+export function applyGuardFixes(raw: unknown[], fixes: Record<string, string>, restored: GuardCard[]): unknown[] {
+  const out = raw.map((t) => (isCard(t) && fixes[t.id] && t.status !== fixes[t.id] ? { ...t, status: fixes[t.id] } : t));
+  const present = new Set(raw.filter(isCard).map((t) => t.id));
+  for (const t of restored) if (!present.has(t.id)) out.push(t);
+  return out;
 }
 
 /** How long after a step's reminder Michael hears that its card is still in To do. */
@@ -111,9 +139,9 @@ export function dueReminders(
   const out = { ...reminders };
   const at = new Date(now).toISOString();
   for (const t of tasks) {
-    if (t.status !== 'todo' || typeof t.nextAt !== 'string') continue;
+    if (!isCard(t) || t.status !== 'todo' || !isNextAt(t.nextAt)) continue;
     const when = Date.parse(t.nextAt);
-    if (!Number.isFinite(when) || when > now) continue;
+    if (when > now) continue;
     const r = out[t.id];
     if (!r || r.nextAt !== t.nextAt) {
       due.push(t);

@@ -241,16 +241,29 @@ test('filings in the triage folder reach Michael oldest first, and leave once he
   fs.mkdirSync(path.join(dir, '.done'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'b-nick.json'), JSON.stringify({ title: 'Router password', filedBy: 'nick', filedAt: '2026-10-11T09:00:00Z', ask: '1. Which router?' }));
   fs.writeFileSync(path.join(dir, 'a-erin.json'), JSON.stringify({ title: 'Supplier quote', filedBy: 'erin', filedAt: '2026-10-11T10:00:00Z', waitingOn: 'supplier Acme' }));
+  fs.writeFileSync(path.join(dir, 'c-pam.json'), JSON.stringify({ title: 'Lunch order', filedBy: 'pam', filedAt: '2026-10-11T09:30:00+00:00', ask: 'Which day?' }));
   hive.refreshOwnerRequests();
   const filings = hive.stuckCards().filter((c) => c.issue === 'filing');
-  assert.deepEqual(filings.map((c) => [c.id, c.title, c.assignee]), [['b-nick.json', 'Router password', 'nick'], ['a-erin.json', 'Supplier quote', 'erin']]);
+  assert.deepEqual(filings.map((c) => [c.id, c.title, c.assignee]), [['b-nick.json', 'Router password', 'nick'], ['c-pam.json', 'Lunch order', 'pam'], ['a-erin.json', 'Supplier quote', 'erin']], 'by filing time, not by name');
+  fs.renameSync(path.join(dir, 'c-pam.json'), path.join(dir, '.done', 'c-pam.json'));
+  assert.ok(!hive.stuckCards().some((c) => c.id === 'c-pam.json'), 'gone at once, not after the next tick');
   const text = stuckCardsContext(hive.stuckCards());
   assert.ok(text.startsWith('NEW FILINGS TO TRIAGE, oldest first.'));
   assert.match(text, /- triage\/b-nick\.json: Router password \(from nick\)\n- triage\/a-erin\.json: Supplier quote \(from erin\)/);
+  // Value (extension): protects=a filing still being written waits, a broken one still reaches Michael, and one with no time sorts by when it was written; fails_when=either is listed or dropped wrongly; why_new=review cycle 2; seam=the fleet tick
+  fs.writeFileSync(path.join(dir, 'd-half.json'), '{"title": "Hal');
+  fs.writeFileSync(path.join(dir, 'e-old.json'), '{"title": "Ol');
+  const old = (Date.now() - 60000) / 1000;
+  fs.utimesSync(path.join(dir, 'e-old.json'), old, old);
+  fs.writeFileSync(path.join(dir, 'f-notime.json'), JSON.stringify({ title: 'No time', filedBy: 'nick' }));
+  const ids = hive.stuckCards().filter((c) => c.issue === 'filing').map((c) => c.id);
+  assert.ok(!ids.includes('d-half.json'), 'still being written');
+  assert.ok(ids.includes('e-old.json'), 'broken but old: listed by its name');
+  assert.equal(ids[ids.length - 1], 'f-notime.json', 'no filedAt: its file time, the newest');
   assert.match(text, /Then move the file to triage\/\.done\./);
   fs.renameSync(path.join(dir, 'b-nick.json'), path.join(dir, '.done', 'b-nick.json'));
   hive.refreshOwnerRequests();
-  assert.deepEqual(hive.stuckCards().filter((c) => c.issue === 'filing').map((c) => c.id), ['a-erin.json']);
+  assert.deepEqual(hive.stuckCards().filter((c) => c.issue === 'filing').map((c) => c.id).filter((id) => /^[ab]-/.test(id)), ['a-erin.json']);
   assert.match(read('src/main/hooks.ts'), /File it as one new file in the hive's triage folder/);
 });
 
@@ -281,4 +294,71 @@ test('a parked step wakes its person at nextAt once, and Michael gets one backst
   assert.equal(inboxOf(hive, 'god').filter((m) => m.subject === 'Next step due: q').length, 1, 'a card with nobody on it goes to Michael');
   new HiveManager(() => home).refreshOwnerRequests();
   assert.equal(inboxOf(hive, 'dwight').filter((m) => m.subject.startsWith('Next step due')).length, 1, 'not again after a restart');
+});
+
+
+test('a guard fix leaves every other entry on the board alone, ids that are not text included', async (t) => {
+  // Value: protects=no card is lost when the app puts one back; fails_when=the fix writes only the cards it understood; why_new=review cycle 2 found entries with a numeric or missing id deleted; seam=the fleet tick
+  const { hive } = await officeWith(t, 'md-guard-keep-');
+  hive.writeTasks([card('d', { status: 'done', result: 'ok' })]);
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => { tasks[0].status = 'doing'; tasks.push({ id: 7, title: 'numeric' }, { title: 'no id' }); });
+  hive.refreshOwnerRequests();
+  const tasks = hive.tasks().tasks;
+  assert.equal(tasks.length, 3);
+  assert.equal(tasks[0].status, 'done');
+  assert.deepEqual(tasks.slice(1), [{ id: 7, title: 'numeric' }, { title: 'no id' }]);
+  setOnDisk(hive, (tasks) => { tasks.push(null); });
+  assert.doesNotThrow(() => hive.refreshOwnerRequests(), 'a null entry never stops the tick');
+});
+
+test('the owner can still correct a card an agent reopened before the app put it back', async (t) => {
+  // Value: protects=the owner's move is not undone and blamed on an agent; fails_when=the owner move skips the Done rule because the file no longer says done, then the tick puts it back; why_new=review cycle 2; seam=ownerMoveTask plus the tick
+  const { hive } = await officeWith(t, 'md-owner-race-');
+  hive.writeTasks([card('d', { status: 'done', result: 'ok' })]);
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => { tasks[0].status = 'doing'; });
+  assert.equal(hive.ownerMoveTask('d', 'todo'), false, 'still needs a reason');
+  assert.equal(hive.ownerMoveTask('d', 'todo', 'Marked done by mistake'), true);
+  hive.refreshOwnerRequests();
+  assert.equal(hive.tasks().tasks[0].status, 'todo');
+  assert.ok(!inboxOf(hive, 'god').some((m) => m.subject === 'DONE CARD PUT BACK: card d'));
+  const moved = inboxOf(hive, 'god').find((m) => m.subject.startsWith('OWNER MOVED card d'));
+  assert.match(moved.body, /from Done to To do\. Reason: Marked done by mistake/);
+});
+
+test('reminders reach the right person, skip times the board cannot show, and the backstop reaches Michael', async (t) => {
+  // Value: protects=a reminder goes to someone who reads it, says whose step it is, and the backstop really arrives; fails_when=an archived or unknown person is reminded, Michael is told to tell himself, a loose time fires, or the backstop is only computed; why_new=review cycle 2; seam=the fleet tick plus the private guard file
+  const { dueReminders } = loadTs('src/shared/cardGuards.ts');
+  const now = Date.parse('2026-10-12T09:00:00Z');
+  assert.deepEqual(dueReminders([card('a', { nextAt: '2026-10-12T08:00:00' }), card('b', { nextAt: '2026-10-12' })], {}, now).due, [], 'no offset, no reminder');
+  assert.deepEqual(asksToTidy([card('a', { nextAt: 'Monday 9am' }), card('b', { nextAt: '2026-10-12T08:00:00Z' })]).map((c) => [c.id, c.issue]), [['a', 'bad-next']]);
+  assert.match(stuckCardsContext([{ id: 'a', title: 'a', issue: 'bad-next' }]), /^CARDS WITH A NEXT TIME THE APP CANNOT READ\./);
+
+  const { home, hive } = await officeWith(t, 'md-next-route-');
+  await hive.ensureAgent({ id: 'gone', name: 'Gone', provider: 'claude', cwd: home, role: 'Sales' });
+  const reg = path.join(hive.root(), 'registry.json');
+  const r = JSON.parse(fs.readFileSync(reg, 'utf8')); r.agents.gone.archived = true; fs.writeFileSync(reg, JSON.stringify(r));
+  const past = '2020-01-06T09:00:00Z';
+  hive.writeTasks([card('g', { assignee: 'gone', nextAt: past }), card('u', { assignee: 'ghost', nextAt: past }), card('m', { assignee: 'god', nextAt: past })]);
+  hive.refreshOwnerRequests();
+  assert.ok(!fs.readdirSync(path.join(hive.root(), 'agents', 'gone', 'inbox')).some((f) => f.endsWith('.json')), 'not to an archived team member');
+  const due = inboxOf(hive, 'god').filter((m) => m.subject.startsWith('Next step due'));
+  assert.equal(due.length, 3, 'each to Michael');
+  for (const m of due) {
+    assert.match(m.body, /Nobody on the team has this card: do the step or hand it to someone, then move the card to where its work stands\./);
+    assert.doesNotMatch(m.body, /tell Michael/);
+  }
+  // Four hours pass: the guard file says the reminders went out long ago.
+  const file = path.join(home, 'private', 'card-guard.json');
+  const st = JSON.parse(fs.readFileSync(file, 'utf8'));
+  for (const id of Object.keys(st.reminders)) st.reminders[id].dueSentAt = '2020-01-06T09:00:00.000Z';
+  fs.writeFileSync(file, JSON.stringify(st));
+  const later = new HiveManager(() => home);
+  later.refreshOwnerRequests();
+  const still = inboxOf(hive, 'god').filter((m) => m.subject.startsWith('STILL IN TO DO'));
+  assert.equal(still.length, 3);
+  assert.match(still[0].body, /but it is still in To do\. Check who should do it, then move the card/);
+  later.refreshOwnerRequests();
+  assert.equal(inboxOf(hive, 'god').filter((m) => m.subject.startsWith('STILL IN TO DO')).length, 3, 'once');
 });
