@@ -5162,6 +5162,8 @@ ipcMain.handle('hive:setArchived', (_evt, id: unknown, archived: unknown) => {
   if (typeof id !== 'string') return { ok: false, error: 'invalid id' };
   if (!hive.enabled()) return { ok: false, error: 'hive disabled (no harnessHome)' };
   hive.setArchived(id, archived === true);
+  // An archived team member leaves closing time's list, and Michael is told.
+  try { if (archived === true) closingTime.refresh(id); } catch (e) { console.error('[closing-time] refresh:', e); }
   return { ok: true };
 });
 ipcMain.handle('hive:patchAgentRole', (_evt, id: unknown, role: unknown) => {
@@ -6526,6 +6528,7 @@ registerRealtimeActionIpc({
     // until the owner turns them on, design 6A).
     else hive.setClosedByOwner(id, false);
     hive.setArchived(id, archived);
+    try { if (archived) closingTime.refresh(id); } catch (e) { console.error('[closing-time] refresh:', e); }
     try { liveWebContents()?.send(archived ? 'hive:agentArchived' : 'hive:agentSpawned', { id }); } catch { /* window gone */ }
     return { ok: true };
   },
