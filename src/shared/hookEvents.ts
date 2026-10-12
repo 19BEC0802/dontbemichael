@@ -15,10 +15,13 @@ export interface HookEvent {
    *  src/main/hooks.ts: redacted, one line, at most 80 characters), e.g.
    *  Claude's description of a command. */
   detail?: string;
+  /** PreToolUse and PostToolUse: the call's id (Claude's tool_use_id), so
+   *  parallel calls can be told apart. */
+  toolUseId?: string;
   blocked?: boolean;
 }
 
-const OPTIONAL_STRING_FIELDS = ['tool', 'notificationType', 'source', 'message', 'detail'] as const;
+const OPTIONAL_STRING_FIELDS = ['tool', 'notificationType', 'source', 'message', 'detail', 'toolUseId'] as const;
 
 /** Validate an untrusted payload before it crosses the Electron IPC boundary. */
 export function validateHookEvent(value: unknown): value is HookEvent {
