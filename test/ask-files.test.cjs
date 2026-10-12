@@ -87,6 +87,23 @@ test('main opens only allowlisted documents inside the roots, judged on the cano
   assert.equal((await askFileVerdict('Plan.md', await resolveAskFileRoots([path.join(base, 'no such folder'), office]))).verdict, 'open', 'a missing root is skipped');
 });
 
+test('a file or folder whose name starts with two dots is inside the office, not outside it', async (t) => {
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'md-askfiles-dots-')));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const office = path.join(base, 'office');
+  fs.mkdirSync(path.join(office, '..archive'), { recursive: true });
+  fs.writeFileSync(path.join(office, '..archive', 'Plan.md'), '# plan');
+  fs.writeFileSync(path.join(office, '..draft.md'), 'draft');
+  fs.writeFileSync(path.join(base, 'secret.md'), 'x');
+  const v = async (p) => (await askFileVerdict(p, [office])).verdict;
+
+  assert.equal(await v('..archive/Plan.md'), 'open');
+  assert.equal(await v(path.join(office, '..archive', 'Plan.md')), 'open', 'named by its absolute path');
+  assert.equal(await v('..draft.md'), 'open');
+  assert.equal(await v('../secret.md'), 'missing', 'a real step out of the office is still refused');
+  assert.equal(await v(path.join(base, 'secret.md')), 'missing');
+});
+
 test('files are looked for in the office, then the raiser, the assignee and the rest of the team', () => {
   // Value: protects=Open looks in the right folders first and never in Michael's or his assistant's; fails_when=root order, the unknown id filter or the god and assistant rule changes; why_new=roots moved into a pure helper; seam=none
   const P = (p) => path.resolve(p); // an absolute path on this platform

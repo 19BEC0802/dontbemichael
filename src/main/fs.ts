@@ -5,6 +5,7 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 import { homedir } from 'node:os';
 import { imageMimeForPath } from '../shared/imageTypes';
 import { OPEN_EXTENSIONS, TAB_EXTENSIONS, extensionOf, kindOf, type AskFileVerdict } from '../shared/askFiles';
+import { isSameOrInside } from './pathInside';
 
 /**
  * Lexical containment — pure string math, no filesystem access.
@@ -17,8 +18,7 @@ import { OPEN_EXTENSIONS, TAB_EXTENSIONS, extensionOf, kindOf, type AskFileVerdi
 function lexicalJoin(root: string, rel: string): { absRoot: string; absPath: string } | null {
   const absRoot = resolve(root);
   const absPath = isAbsolute(rel) ? normalize(rel) : resolve(absRoot, rel);
-  const rel2 = relative(absRoot, absPath);
-  if (rel2.startsWith('..') || isAbsolute(rel2)) return null;
+  if (!isSameOrInside(absRoot, absPath)) return null;
   return { absRoot, absPath };
 }
 
@@ -38,8 +38,7 @@ async function canonicalize(realRoot: string, absPath: string): Promise<string |
     try {
       const real = await realpath(probe);
       const full = tail.length ? resolve(real, ...tail) : real;
-      const r = relative(realRoot, full);
-      if (r.startsWith('..') || isAbsolute(r)) return null;
+      if (!isSameOrInside(realRoot, full)) return null;
       return full;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return null;
@@ -447,8 +446,7 @@ export async function askFileVerdict(
       // Against the root as written, then as it resolves: an office reached
       // through a link is named either way.
       const inside = (base: string): string | null => {
-        const r = relative(base, normalize(p));
-        return r.startsWith('..') || isAbsolute(r) ? null : r;
+        return isSameOrInside(base, normalize(p)) ? relative(base, normalize(p)) : null;
       };
       const r = inside(resolve(root)) ?? (real ? inside(real) : null);
       if (r === null) continue;
