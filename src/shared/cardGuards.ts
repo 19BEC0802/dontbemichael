@@ -48,11 +48,11 @@ export interface GuardState {
   reminders: Record<string, Reminder>;
 }
 
-/** What a save must keep: which cards are Done, where the open ones are, and
- *  the reminders. A Done card's copy is refreshed in memory every tick and
- *  saved with the next change, so a quiet tick costs no full stringify. */
+/** The state as it is saved, so a tick that changed nothing writes nothing.
+ *  It includes each Done card's copy: a restore must bring back its latest
+ *  result, not one from before a restart. */
 export function guardSignature(st: GuardState): string {
-  return JSON.stringify([st.hive, Object.keys(st.done).sort(), st.placed, st.reminders]);
+  return JSON.stringify(st);
 }
 
 export const emptyGuardState = (hive: string): GuardState => ({ hive, done: {}, placed: {}, reminders: {} });

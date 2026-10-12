@@ -346,7 +346,9 @@ test('reminders reach the right person, skip times the board cannot show, and th
   const due = inboxOf(hive, 'god').filter((m) => m.subject.startsWith('Next step due'));
   assert.equal(due.length, 3, 'each to Michael');
   for (const m of due) {
-    assert.match(m.body, /Nobody on the team has this card: do the step or hand it to someone, then move the card to where its work stands\./);
+    assert.match(m.body, m.conversation === 'card:m'
+      ? /It is your own card: do the step, then move the card to where its work stands\./
+      : /Nobody on the team has this card: do the step or hand it to someone, then move the card to where its work stands\./);
     assert.doesNotMatch(m.body, /tell Michael/);
   }
   // Four hours pass: the guard file says the reminders went out long ago.
@@ -361,4 +363,50 @@ test('reminders reach the right person, skip times the board cannot show, and th
   assert.match(still[0].body, /but it is still in To do\. Check who should do it, then move the card/);
   later.refreshOwnerRequests();
   assert.equal(inboxOf(hive, 'god').filter((m) => m.subject.startsWith('STILL IN TO DO')).length, 3, 'once');
+});
+
+
+test('the owner dragging a just reopened card to Done puts it back, not as the owner\'s close; a restore brings the latest copy', async (t) => {
+  // Value: protects=Michael's finished work is not recorded as the owner's close, and a restored card keeps its last result across a restart; fails_when=the owner close stamps closedBy on it, or only the Done ids are saved; why_new=review cycle 3; seam=ownerMoveTask, the tick and the private guard file
+  const { home, hive } = await officeWith(t, 'md-cycle3-');
+  hive.writeTasks([card('d', { status: 'done', result: 'v1' })]);
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => { tasks[0].status = 'doing'; });
+  assert.equal(hive.ownerMoveTask('d', 'done'), true);
+  const d = hive.tasks().tasks[0];
+  assert.equal(d.status, 'done');
+  assert.equal(d.closedBy, undefined, 'not the owner\'s close');
+  setOnDisk(hive, (tasks) => { tasks[0].result = 'v2'; });
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => { tasks.splice(0, 1); tasks.push({ title: 'no id', status: 'todo', nextAt: 'Monday 9am' }); });
+  const again = new HiveManager(() => home);
+  assert.doesNotThrow(() => again.refreshOwnerRequests(), 'an entry with no id never stops the tick');
+  assert.equal(again.tasks().tasks.find((c) => c.id === 'd').result, 'v2', 'the latest copy');
+  // Value (extension): protects=a filing is written once, as a new JSON file; fails_when=a team member may edit filings or claim the .done name; why_new=review cycle 3; seam=harnessWriteDecision
+  const { harnessWriteDecision } = loadTs('src/main/harnessGuard.ts');
+  const guard = (tool, file) => harnessWriteDecision({ tool, toolInput: { file_path: path.join(hive.root(), 'triage', file) }, cwd: home, agentId: 'pam', isGod: false, harnessHome: home, hiveRoot: hive.root(), caseInsensitive: false }).deny;
+  assert.equal(guard('Write', '20261011T143000-pam.json'), false);
+  assert.equal(guard('Edit', '20261011T143000-pam.json'), true, 'never changed once written');
+  assert.equal(guard('Write', 'notes.md'), true);
+  assert.equal(guard('Write', '.done'), true);
+});
+
+test('a board that cannot be read at the moment of a fix is left alone, never written as empty', async (t) => {
+  // Value: protects=every open card when an agent is writing tasks.json just as the guard fixes it; fails_when=the second read falls back to an empty board and the write deletes every card; why_new=review cycle 3 (critical); seam=fs.readFileSync on the second read of one tick
+  const { hive } = await officeWith(t, 'md-guard-reread-');
+  hive.writeTasks([card('d', { status: 'done', result: 'ok' }), card('o1', { status: 'doing' }), card('o2', { status: 'blocked', humanQA: [{ q: 'x?' }] })]);
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => { tasks[0].status = 'doing'; });
+  const file = path.join(hive.root(), 'tasks.json');
+  const real = fs.readFileSync;
+  let reads = 0;
+  fs.readFileSync = function (p, ...rest) {
+    if (String(p) === file && ++reads === 2) return '{"tasks": [';
+    return real.call(this, p, ...rest);
+  };
+  try { hive.refreshOwnerRequests(); } finally { fs.readFileSync = real; }
+  assert.ok(reads >= 2, 'the guard read the board twice');
+  assert.deepEqual(hive.tasks().tasks.map((c) => c.id), ['d', 'o1', 'o2'], 'nothing deleted');
+  hive.refreshOwnerRequests();
+  assert.equal(hive.tasks().tasks[0].status, 'done', 'fixed on the next tick');
 });

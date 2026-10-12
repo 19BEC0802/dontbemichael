@@ -4293,6 +4293,12 @@ ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
         // the old folder stays as a safety net the user removes manually.
         cpSync(src, join(newHome, sub), { recursive: true, force: true, dereference: false });
       }
+      // The board guard and the house rules each agent has heard ride along,
+      // so a move neither resends old reminders nor forgets a Done card.
+      for (const f of ['card-guard.json', 'house-rules-seen.json']) {
+        const src = join(privateRoot(oldHome), f);
+        if (existsSync(src)) { mkdirSync(privateRoot(newHome), { recursive: true }); cpSync(src, join(privateRoot(newHome), f), { force: true }); }
+      }
     } catch (e) {
       // Copy failed: recover IN PLACE against the unchanged old home (config never
       // repointed) so the user loses nothing, and surface the error — no relaunch.

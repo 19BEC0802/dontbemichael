@@ -281,14 +281,16 @@ export function untriagedNote(task: { id: string; title?: string }, to: string):
 }
 
 /** A To do card's nextAt has come: its person does the step (house rule 8).
- *  `forGod` when nobody on the team has the card, so it goes to Michael. */
-export function nextStepDueNote(task: { id: string; title?: string; nextAt?: string; description?: unknown }, godName: string, forGod = false): { subject: string; body: string } {
+ *  `whose`: the card's person's, Michael's own, or nobody's (it goes to Michael). */
+export function nextStepDueNote(task: { id: string; title?: string; nextAt?: string; description?: unknown }, godName: string, whose: 'person' | 'own' | 'nobody' = 'person'): { subject: string; body: string } {
   const what = typeof task.description === 'string' && task.description.trim() ? ` What it is about: ${cardText(task.description, 500).replace(/[.!?]+$/, '')}.` : '';
   return {
     subject: `Next step due: ${cardText(task.title ?? task.id)}`,
-    body: `The next step on card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" was set for ${cardText(String(task.nextAt ?? ''), 40)} and is due now.${what} ${forGod
+    body: `The next step on card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" was set for ${cardText(String(task.nextAt ?? ''), 40)} and is due now.${what} ${whose === 'nobody'
       ? 'Nobody on the team has this card: do the step or hand it to someone, then move the card to where its work stands.'
-      : `Do it, then tell ${cardText(godName, 40)} where the card stands.`}`
+      : whose === 'own'
+        ? 'It is your own card: do the step, then move the card to where its work stands.'
+        : `Do it, then tell ${cardText(godName, 40)} where the card stands.`}`
   };
 }
 
@@ -307,7 +309,7 @@ export interface StuckCard { id: string; title: string; assignee?: string; issue
 
 const stuckOf = (t: CardLike, issue?: StuckCard['issue']): StuckCard => ({
   id: t.id,
-  title: (t.title ?? t.id).trim(),
+  title: String(t.title ?? t.id).trim() || t.id,
   ...(t.assignee ? { assignee: t.assignee } : {}),
   ...(issue ? { issue } : {})
 });
@@ -322,7 +324,7 @@ const stuckOf = (t: CardLike, issue?: StuckCard['issue']): StuckCard => ({
 export function blockedWithNothingAsked(tasks: CardLike[], open: Pick<OwnerRequest, 'taskId'>[]): StuckCard[] {
   const withMichael = new Set(open.map((r) => r.taskId));
   return tasks
-    .filter((t) => !!t && t.status === 'blocked' && openAskIndexes(t.humanQA as never).length === 0 && !withMichael.has(t.id))
+    .filter((t) => !!t && typeof t.id === 'string' && t.status === 'blocked' && openAskIndexes(t.humanQA as never).length === 0 && !withMichael.has(t.id))
     .map((t) => stuckOf(t));
 }
 
@@ -336,7 +338,7 @@ export function blockedWithNothingAsked(tasks: CardLike[], open: Pick<OwnerReque
 export function asksToTidy(tasks: CardLike[]): StuckCard[] {
   const out: StuckCard[] = [];
   for (const t of tasks) {
-    if (!t) continue;
+    if (!t || typeof t.id !== 'string') continue;
     // Filed by a team member, waiting for Michael to check and release it
     // (card-lifecycle.md section 10); its ask is not on Ask me yet.
     if (t.status === 'triage') { out.push(stuckOf(t, 'triage')); continue; }

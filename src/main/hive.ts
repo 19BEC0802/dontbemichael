@@ -1959,7 +1959,7 @@ export class HiveManager {
         memoryLine
       ].filter(Boolean).join('\n');
     }
-    const guardrailsLine = 'Guardrails: a circuit breaker watches the floor: a "Circuit breaker: steer/constrain" message means you are looping or overspending, so STOP repeating, summarize what you tried, and follow it. Be token-frugal (a floor-wide or per-agent token budget can pause you). The shared plan has two parts: board.md (freeform; god is the sole scribe) and tasks.json (structured kanban — todo/doing/blocked/done).' + (meta.isGod ? ' You alone write tasks.json; team members file what they need in the triage folder of the hive, which you work oldest first.' : ' Only god writes tasks.json: never change a card yourself, file what your work needs as one new file in the triage folder of the hive, and tell god what changed.');
+    const guardrailsLine = 'Guardrails: a circuit breaker watches the floor: a "Circuit breaker: steer/constrain" message means you are looping or overspending, so STOP repeating, summarize what you tried, and follow it. Be token-frugal (a floor-wide or per-agent token budget can pause you). The shared plan has two parts: board.md (freeform; god is the sole scribe) and tasks.json (structured kanban: todo, doing, waiting, blocked, done).' + (meta.isGod ? ' You alone write tasks.json; team members file what they need in the triage folder of the hive, which you work oldest first.' : ' Only god writes tasks.json: never change a card yourself, file what your work needs as one new file in the triage folder of the hive, and tell god what changed.');
     const slackLine = meta.isGod
       ? 'SLACK REPLIES: When composing a Slack reply (or writing the `result` field of a Slack-origin kanban card), you MUST: (1) directly address what the user asked — never a bare "done"; (2) include the relevant specifics, outcome, and details; (3) format for Slack mrkdwn — open with a short *bold* headline, use bullet points for multiple items, wrap code/paths in `backtick` blocks, keep it concise (no walls of text). When finishing a Slack-origin task, always write a complete, user-facing, well-formatted `result` on the kanban card — the system posts it verbatim to Slack as the done reply.'
       : `SLACK REPLIES: If god dispatches you a task that came from Slack, it will include an exact \`"${hiveNode}" "<helper>" --channel … --thread … --text "…"\` reply command — when you finish, run it VERBATIM to post your result back to that thread yourself. The reply must be SUBSTANTIVE Slack mrkdwn (a short *bold* headline + the actual outcome/specifics/links), NEVER a bare "done".`;
@@ -2502,7 +2502,12 @@ export class HiveManager {
     const card = (Array.isArray(ledger?.tasks) ? ledger.tasks : []).find((t) => t?.id === id);
     // A card in triage is Michael's until he releases it; the owner never sees it.
     if (!card || card.status === 'triage') return false;
-    if (status === 'done') return card.status === 'done' ? true : this.ownerCloseTask(id);
+    if (status === 'done') {
+      if (card.status === 'done') return true;
+      // An agent just moved it out of Done: put it back, not the owner's close.
+      if (this.guardState().done[id]) return this.patchTask(id, { status: 'done', humanQA: card.humanQA });
+      return this.ownerCloseTask(id);
+    }
     // Out of Done only to correct a card marked done by mistake: into To do,
     // with the owner's reason (card-lifecycle.md section 10).
     const why = reason?.trim().slice(0, 500);
@@ -2727,15 +2732,17 @@ export class HiveManager {
   private guardBoard(): void {
     const root = this.root();
     if (!root) return;
-    let tasks: unknown[];
-    try {
-      const raw = JSON.parse(readFileSync(join(root, 'tasks.json'), 'utf8')) as { tasks?: unknown };
-      if (!Array.isArray(raw?.tasks)) return;
-      tasks = raw.tasks;
-    } catch { return; }
+    // Read strictly: a board that does not parse is never taken as empty.
+    const readBoard = (): unknown[] | null => {
+      try {
+        const raw = JSON.parse(readFileSync(join(root, 'tasks.json'), 'utf8')) as { tasks?: unknown };
+        return Array.isArray(raw?.tasks) ? raw.tasks : null;
+      } catch { return null; }
+    };
+    const tasks = readBoard();
+    if (!tasks) return;
     const before = this.guardState();
     const fixed = guardCards(tasks, before);
-    this.guard = fixed.state;
     const godId = this.registry().godId;
     const tell = (note: { subject: string; body: string }, cardId: string): void => {
       if (!godId) return;
@@ -2744,12 +2751,16 @@ export class HiveManager {
     if (fixed.changed) {
       // Fix the board as it is now, not the copy read above: only the fixed
       // cards change, and everything else, a card added since included, stays.
-      const now = this.tasks() as { tasks?: unknown };
-      this.writeTasks(applyGuardFixes(Array.isArray(now?.tasks) ? now.tasks : tasks, fixed.fixes, fixed.restored) as HiveTask[]);
+      // A board being written this moment waits for the next tick.
+      const now = readBoard();
+      if (!now) return;
+      this.guard = fixed.state;
+      this.writeTasks(applyGuardFixes(now, fixed.fixes, fixed.restored) as HiveTask[]);
       for (const r of fixed.reopened) tell(reopenedNote(r.card, r.to, r.openAsk), r.card.id);
       for (const t of fixed.restored) tell(restoredDoneNote(t), t.id);
       for (const u of fixed.untriaged) tell(untriagedNote(u.card, u.to), u.card.id);
     }
+    this.guard = fixed.state;
     const reg = this.registry();
     const godName = resolveGodName(reg.agents[godId ?? 'god']?.name);
     const reminders = dueReminders(tasks.map((t) => {
@@ -2769,9 +2780,14 @@ export class HiveManager {
         else delete reminders.reminders[t.id];
       };
       if (!to) { unsent(); continue; } // nobody to tell yet: tried again next tick
-      const note = nextStepDueNote(t, godName, to === godId);
-      if (person && person !== godId) reminders.reminders[t.id] = { ...reminders.reminders[t.id], to: reg.agents[person]?.name || person };
-      try { this.send({ to, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(t.id) }); } catch { unsent(); }
+      const note = nextStepDueNote(t, godName, !person ? 'nobody' : person === godId ? 'own' : 'person');
+      try {
+        const msg = this.send({ to, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(t.id) });
+        // Named in the backstop only when it really reached them.
+        if (person && person !== godId && this.lastRouted?.id === msg.id && this.lastRouted.delivered.includes(person)) {
+          reminders.reminders[t.id] = { ...reminders.reminders[t.id], to: reg.agents[person]?.name || person };
+        }
+      } catch { unsent(); }
     }
     this.guard.reminders = reminders.reminders;
     if (godId) for (const t of reminders.backstop) tell(nextStepBackstopNote(t, reminders.reminders[t.id]?.to), t.id);
