@@ -2480,12 +2480,13 @@ export class HiveManager {
     }
     // The app moving a Done card on (the owner's reopen, a mailbox that broke
     // again) is allowed; agents write the file directly and never pass here.
+    next[index] = { ...tasks[index], ...patch, id };
+    this.writeTasks(next);
+    // Forgotten as Done only once the move is on disk.
     if (patch.status && patch.status !== 'done' && tasks[index].status === 'done') {
       delete this.guardState().done[id];
       this.saveGuard();
     }
-    next[index] = { ...tasks[index], ...patch, id };
-    this.writeTasks(next);
     return true;
   }
 
@@ -2505,7 +2506,9 @@ export class HiveManager {
     if (status === 'done') {
       if (card.status === 'done') return true;
       // An agent just moved it out of Done: put it back, not the owner's close.
-      if (this.guardState().done[id]) return this.patchTask(id, { status: 'done', humanQA: card.humanQA });
+      // As it was Done, like the tick's put back: only a question asked meanwhile stays.
+      const was = this.guardState().done[id];
+      if (was) return this.patchTask(id, { ...(was as unknown as Partial<HiveTask>), ...(Array.isArray(card.humanQA) ? { humanQA: card.humanQA } : {}), status: 'done' });
       return this.ownerCloseTask(id);
     }
     // Out of Done only to correct a card marked done by mistake: into To do,
@@ -2515,9 +2518,9 @@ export class HiveManager {
     // since, and the next tick would put it back.
     const wasDone = card.status === 'done' || !!this.guardState().done[id];
     if (wasDone && (status !== 'todo' || !why)) return false;
-    if (wasDone && card.status !== 'done') { delete this.guardState().done[id]; this.saveGuard(); }
     const from = wasDone ? 'done' : card.status;
     if (!this.patchTask(id, { status, waitingOn: undefined, closedBy: undefined, closedAt: undefined, closedReason: undefined })) return false;
+    if (wasDone && card.status !== 'done') { delete this.guardState().done[id]; this.saveGuard(); }
     if (from !== status) this.tellGodOwnerChange(card, { kind: 'moved', from, to: status, ...(why ? { reason: why } : {}) });
     return true;
   }

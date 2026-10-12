@@ -38,13 +38,9 @@ export interface Reminder {
   backstopSentAt?: string;
 }
 
-/** An open card's status and what that status needs, kept so a card moved
- *  back into Triage returns whole. */
-export interface Placed {
-  status: string;
-  waitingOn?: string;
-  nextAt?: string;
-}
+/** An open card as last seen outside Triage, kept so a card moved back into
+ *  Triage returns whole. */
+export type Placed = GuardCard & { status: string };
 
 export interface GuardState {
   /** Which office this state belongs to, so a new office starts clean. */
@@ -89,7 +85,7 @@ export function isNextAt(v: unknown): v is string {
 }
 
 /** Where an open card last stood outside Triage, the old record being a bare status. */
-const placedOf = (p: Placed | string | undefined): Placed | undefined => (typeof p === 'string' ? { status: p } : p);
+const placedOf = (id: string, p: Placed | string | undefined): Placed | undefined => (typeof p === 'string' ? { id, status: p } : p);
 
 /** Check the board against what the app saw before, and record what it sees now. */
 export function guardCards(raw: unknown[], before: GuardState): GuardResult {
@@ -106,7 +102,7 @@ export function guardCards(raw: unknown[], before: GuardState): GuardResult {
       fixes[t.id] = { ...was, ...(Array.isArray(t.humanQA) ? { humanQA: t.humanQA } : {}), status: 'done' };
       return { ...t, ...fixes[t.id] };
     }
-    const placed = placedOf(before.placed[t.id]);
+    const placed = placedOf(t.id, before.placed[t.id]);
     if (t.status === 'triage' && placed) {
       untriaged.push({ card: t, to: placed.status });
       fixes[t.id] = { ...placed };
@@ -121,14 +117,11 @@ export function guardCards(raw: unknown[], before: GuardState): GuardResult {
   const state: GuardState = { hive: before.hive, done: {}, placed: {}, reminders: {} };
   for (const t of now) {
     if (t.status === 'done') state.done[t.id] = t;
-    else if (t.status && t.status !== 'triage') {
-      state.placed[t.id] = {
-        status: t.status,
-        ...(typeof t.waitingOn === 'string' ? { waitingOn: t.waitingOn } : {}),
-        ...(typeof t.nextAt === 'string' ? { nextAt: t.nextAt } : {})
-      };
-    }
-    if (before.reminders[t.id]) state.reminders[t.id] = before.reminders[t.id];
+    else if (t.status && t.status !== 'triage') state.placed[t.id] = { ...t, status: t.status };
+    // A reminder is kept only while its card is parked in To do on that time,
+    // so a card that moves on and comes back is reminded again.
+    const r = before.reminders[t.id];
+    if (r && t.status === 'todo' && t.nextAt === r.nextAt) state.reminders[t.id] = r;
   }
   return { changed: Object.keys(fixes).length > 0 || restored.length > 0, fixes, reopened, restored, untriaged, state };
 }

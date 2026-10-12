@@ -427,20 +427,20 @@ test('a put back restores the whole Done card, an untriage the whole open card, 
   const { hive } = await officeWith(t, 'md-whole-card-');
   hive.writeTasks([
     card('d', { status: 'done', title: 'Quote sent', result: 'sent to Acme' }),
-    card('w', { status: 'waiting', waitingOn: 'customer Gopi' }),
+    card('w', { status: 'waiting', waitingOn: 'customer Gopi', assignee: 'pam' }),
     card('n', { nextAt: '2099-01-01T09:00:00Z' })
   ]);
   hive.refreshOwnerRequests();
   setOnDisk(hive, (tasks) => {
     Object.assign(tasks[0], { status: 'doing', title: 'Changed', result: 'rewritten', humanQA: [{ q: 'Again?', raisedBy: 'god' }] });
-    tasks[1].status = 'triage'; delete tasks[1].waitingOn;
+    tasks[1].status = 'triage'; delete tasks[1].waitingOn; tasks[1].assignee = 'someone else'; tasks[1].title = 'Changed';
     tasks[2].status = 'triage'; delete tasks[2].nextAt;
   });
   hive.refreshOwnerRequests();
   const [d, w, n] = hive.tasks().tasks;
   assert.deepEqual([d.status, d.title, d.result], ['done', 'Quote sent', 'sent to Acme'], 'the Done card as it was');
   assert.equal(d.humanQA[0].q, 'Again?', 'the question asked meanwhile stays (D3)');
-  assert.deepEqual([w.status, w.waitingOn], ['waiting', 'customer Gopi']);
+  assert.deepEqual([w.status, w.waitingOn, w.assignee, w.title], ['waiting', 'customer Gopi', 'pam', 'w'], 'the whole open card (Codex pass 2)');
   assert.deepEqual([n.status, n.nextAt], ['todo', '2099-01-01T09:00:00Z']);
 
   const { home, hive: h2 } = await officeWith(t, 'md-one-commit-');
@@ -452,4 +452,22 @@ test('a put back restores the whole Done card, an untriage the whole open card, 
   assert.equal(inboxOf(h2, 'god').filter((m) => m.subject.startsWith('Next step due')).length, 12);
   assert.ok(count() - before <= 1, 'one commit for the tick, not one per reminder');
   assert.ok(home);
+});
+
+
+test('a reminder fires again when its card comes back to To do, and the owner drag restores the whole Done card', async (t) => {
+  // Value: protects=a parked step that moved on and came back is not silently skipped, and the owner's drag cannot keep an agent's edits to finished work; fails_when=old reminder records outlive the card's To do spell, or the drag patches status only; why_new=Codex adversarial pass 2; seam=dueReminders, guardCards and ownerMoveTask
+  const { guardCards, emptyGuardState } = loadTs('src/shared/cardGuards.ts');
+  const past = '2020-01-06T09:00:00Z';
+  let st = { ...emptyGuardState('x'), reminders: { p: { nextAt: past, dueSentAt: past } } };
+  st = guardCards([card('p', { status: 'doing', nextAt: past })], st).state;
+  assert.deepEqual(st.reminders, {}, 'forgotten once the card leaves To do');
+
+  const { hive } = await officeWith(t, 'md-drag-whole-');
+  hive.writeTasks([card('d', { status: 'done', title: 'Quote sent', result: 'sent to Acme', humanQA: [{ q: 'Which?', a: 'Acme' }] })]);
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => { Object.assign(tasks[0], { status: 'doing', result: 'rewritten' }); delete tasks[0].humanQA; });
+  assert.equal(hive.ownerMoveTask('d', 'done'), true);
+  const d = hive.tasks().tasks[0];
+  assert.deepEqual([d.status, d.result, d.humanQA?.[0]?.a, d.closedBy], ['done', 'sent to Acme', 'Acme', undefined]);
 });
