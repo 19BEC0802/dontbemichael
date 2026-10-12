@@ -57,6 +57,9 @@ test('the chip replaces exactly the path, from the source, in text, code spans a
   assert.equal(para[1].children[1].value, '.', 'the sentence period stays text, kept with its chip');
   assert.equal(para[2].value, ' Also ');
   assert.deepEqual(chips('Saved to C:\\Reports\\_q3.md today').out, ['C:\\Reports\\_q3.md'], 'Windows path read from the source, backslash kept');
+  assert.deepEqual(chips('Saved to C:/Reports/q3.csv. See [notes](D:/Reports/notes.md).').out,
+    ['C:/Reports/q3.csv', 'D:/Reports/notes.md'], 'Windows forward slash paths become chips in prose and links');
+  assert.deepEqual(chips('See [site](https://example.com/C:/Reports/q3.csv).').out, [], 'a URL containing a drive path stays a link');
   assert.deepEqual(chips('```\n/Users/me/skip.md\n```').out, [], 'code fences stay code');
   // 2026-10-11: Michael wrote **... 10 Oct (`/path/report.md`).** and the chip
   // wrapped to its own line, stranding "(" above it and ")." below it.
