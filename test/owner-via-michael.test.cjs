@@ -35,7 +35,7 @@ test("a team member's in-terminal question is refused and pointed at Michael", a
   const res = await server.handle({ agent_id: 'pam', session_id: 's', hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', tool_input: {} });
   assert.equal(res.hookSpecificOutput.permissionDecision, 'deny');
   assert.equal(res.hookSpecificOutput.permissionDecisionReason, ASK_TOOL_REFUSAL);
-  assert.match(ASK_TOOL_REFUSAL, /File it as a card in tasks\.json with "status": "triage"/);
+  assert.match(ASK_TOOL_REFUSAL, /File it as one new file in the hive's triage folder/);
   assert.match(ASK_TOOL_REFUSAL, /Michael checks it and puts it on the owner's ASK ME board\./);
 });
 

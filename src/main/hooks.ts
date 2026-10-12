@@ -66,7 +66,7 @@ export function pickIdleLine(previous: string | null, rand: () => number = Math.
 /** Claude Code's in-terminal question tool. Refused for team members. */
 export const ASK_TOOL = 'AskUserQuestion';
 export const ASK_TOOL_REFUSAL =
-  "Don't ask the owner here: nobody answers your terminal. File it as a card in tasks.json with \"status\": \"triage\" (one ask in humanQA, what you were doing in description). Michael checks it and puts it on the owner's ASK ME board.";
+  "Don't ask the owner here: nobody answers your terminal. File it as one new file in the hive's triage folder (your questions as one \"ask\", what you were doing in \"description\"). Michael checks it and puts it on the owner's ASK ME board.";
 
 /** A Notification that means the session is stopped on a prompt a person must
  *  answer in the terminal: a permission request or a question dialog, never the
@@ -771,7 +771,7 @@ export class HookServer {
       : null;
     const stuckCards = michaelTurn && typeof this.hive.stuckCards === 'function'
       ? this.everyTurnNote(this.stuckCardsShown, agentId!, p.session_id ?? null, this.hive.stuckCards(),
-        stuckCardsContext, 'CARDS TO TIDY (Blocked with nothing asked, or open questions held the wrong way): none now.')
+        stuckCardsContext, 'CARDS TO TIDY (new filings, Blocked with nothing asked, or open questions held the wrong way): none now.')
       : null;
     // Questions the owner asked in the dock that he still owes an answer
     // (docs/designs/michael-replies.md): every turn until he sends done or refuse.

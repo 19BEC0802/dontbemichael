@@ -107,8 +107,9 @@ function TalkToMichael() {
         pointerEvents: 'auto', position: 'relative',
         // The buttons stay on the bottom row while the message grows upward.
         // It gives up to 120 px before anything else (owner check at 1280 x 800:
-        // squeezed, the placeholder wrapped onto two lines).
-        flex: '0 1 420px', minWidth: 300, minHeight: 50, display: 'flex', alignItems: 'flex-end', gap: 10, padding: '7px 7px 7px 8px',
+        // squeezed, the placeholder wrapped onto two lines). The conversation
+        // button takes its 34 px plus a gap out of the same row, so it adds both.
+        flex: `0 1 ${dock.items.length > 0 ? 464 : 420}px`, minWidth: dock.items.length > 0 ? 344 : 300, minHeight: 50, display: 'flex', alignItems: 'flex-end', gap: 10, padding: '7px 7px 7px 8px',
         background: 'var(--cth-card)', borderRadius: 'var(--cth-r-2xl)'
       }}
     >

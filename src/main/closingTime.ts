@@ -78,7 +78,7 @@ const TIMEOUT_MS = 6 * 60_000;
 const TEARDOWN_GRACE_MS = 2_500;
 
 /** What each team member is told when closing time starts, and on Remind. */
-const WORKER_STEER = 'Closing time: the office is closing. Finish your current step but do not start new work. Save any work in progress, make sure your task card on tasks.json has the right status, with nextAt when its next step is at a set time, then send Michael ("to": "michael") a message with the subject exactly "CLOSING-TIME-ACK".';
+const WORKER_STEER = 'Closing time: the office is closing. Finish your current step but do not start new work. Save any work in progress, then send Michael ("to": "michael") a message with the subject exactly "CLOSING-TIME-ACK" saying where each of your cards stands, with the time when its next step is due at a set time.';
 /** Why closing time cannot run: no live Michael to collect the reports. */
 const NO_GOD_ERROR = 'No orchestrator is running. Closing time needs the god agent to collect the reports.';
 /** What Michael is told when closing time starts, and on Remind. */
@@ -178,9 +178,9 @@ export class ClosingTimeController {
         'The owner pressed "closing time". The app closes as soon as you confirm the office is safe to close. Do this now, before anything else:',
         '',
         `1. Tell the team it is closing time (a message with "to": "broadcast"). Team members now: ${names}.`,
-        '   Ask each to save any work in progress, make sure its task card on tasks.json has the right status, with nextAt when its next step is at a set time, and then reply to you with the subject exactly "CLOSING-TIME-ACK".',
+        '   Ask each to save any work in progress and then reply to you with the subject exactly "CLOSING-TIME-ACK", saying where each of its cards stands.',
         '2. Keep working your inbox until every team member above has sent CLOSING-TIME-ACK. Remind anyone slow once if needed.',
-        '3. Update board.md so it says where every piece of work stands. Session logs do not go in memory: it holds only lessons worth keeping.',
+        '3. Move each card on tasks.json to match what the team told you, with nextAt when its next step is due at a set time, and update board.md so it says where every piece of work stands. Session logs do not go in memory: it holds only lessons worth keeping.',
         '4. Then send a message with "to": "human" and the subject exactly "CLOSING-TIME-COMPLETE"; the app watches for it and closes. Send it only after every team member has acknowledged: the app checks the acknowledgements and rejects an early one.',
         '',
         this.workers.size === 0

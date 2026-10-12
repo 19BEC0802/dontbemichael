@@ -206,26 +206,49 @@ one question rule made Michael park the rest):
 - **Split by who answers.** When one activity needs answers from the owner and
   from someone outside (a customer), it is two cards: the owner's in Blocked
   (Ask me), the outside party's in Waiting, naming them.
-- **The doer files, Michael triages (pattern: anyone files, one person
-  triages).** The team member writes the card itself with status "triage":
-  its title, the context in "description", and either one ask for the owner in
-  humanQA (raisedBy itself) or "waitingOn" for an outside party. Triage cards
-  are Michael's alone: the owner's board, Ask me and the floor never show them.
-  Michael sees them each turn and, for each: answers it from memory or the
-  board when he can (then tells the doer and closes it), merges it into an open
-  ask that covers the same thing, rewrites the ask for the owner (Ask me shape),
-  routes a question a teammate can answer, keeps the split by who answers, then
-  releases it to Blocked or Waiting. Michael still assigns work and is the only
-  voice to the owner. Research behind the choice: orchestrator, shared board
+- **The doer files once, Michael triages and alone writes the board (ship
+  review D8, 2026-10-12).** A team member never writes `tasks.json`. It files
+  what its work needs as one new file in `triage/` in the hive, named by the
+  time and its id, written once: a title, the context in "description",
+  "filedBy", "filedAt", and either an "ask" for the owner (a numbered list) or
+  "waitingOn" for an outside party. The owner never sees the folder. Michael
+  sees the waiting filings each turn, oldest first by "filedAt", and works
+  them in that order against the board as it stands: answers it from memory
+  or the board when he can, folds it into an existing card (rewriting it or
+  its open ask), routes a question a teammate can answer, drops a duplicate,
+  or makes a card (Blocked with the ask in Ask me shape, or Waiting), keeping
+  the split by who answers; then moves the file to `triage/.done/`. When a
+  team member's work moves (finished, waiting on someone, due again at a set
+  time) it tells Michael, who moves the card: Michael is the only agent that
+  writes the board, so no filing is lost and no stale copy overwrites a newer
+  one. A card with status "triage" on the board (from before the folder) is
+  handled the same way. Research behind the choice: orchestrator, shared board
   and file then triage patterns (Anthropic, LangGraph, CrewAI, blackboard
   papers, Kanban inbox practice).
 - **Partial answers come back.** When the owner's answer leaves any question
   of a bundle unanswered, Michael adds one new ask on the same card holding
   only those questions, keeps the card Blocked, and only then closes the
   owner's request. The request stays in his context every turn until he does.
+  When that card is already Done, he asks them on a new card instead.
 - **Done is final.** A card ends in Done. Only the owner takes one out, to
   correct a card wrongly marked done: into To do, with a short reason. When an
-  agent reopens a Done card, the app puts it back to Done and tells Michael.
+  agent reopens a Done card, the app puts it back to Done, status only, so a
+  question asked on it meanwhile is not withdrawn, and tells Michael to move
+  that question to a new card (D3). A Done card that vanishes from the board
+  is put back as the app last saw it (D5). The app keeps its Done list in its
+  private folder, so this holds across restarts, and a new office starts clean.
+- **Triage is only a way in (D4).** A card already on the board that is moved
+  back to "triage" returns to its last status, and Michael is told.
+- **A parked step wakes on time (D7).** A To do card with "nextAt" is a
+  durable reminder, the pattern of Dapr and Orleans reminders, Temporal timers
+  and Letta's wake tool: at that time the app sends the card's person one
+  "Next step due" message threaded to the card (Michael when nobody has it),
+  also after a restart when the time passed while the app was closed. If the
+  card is still in To do four hours later, Michael gets one backstop note. No
+  agent watches the clock and Michael never polls.
+- **Routines need no card (D6).** A routine that repeats on a schedule lives
+  in Schedules; what a run produces for the owner still goes on Ask me as a
+  report card.
 
 ## What is not built
 

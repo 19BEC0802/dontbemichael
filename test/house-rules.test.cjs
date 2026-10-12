@@ -76,7 +76,7 @@ test('a card never waits on its own person; its own step at a set time is todo',
   // 2026-10-11: Erin read rule 8 as covering her scheduled inbox checks and
   // reopened her done card; routines live in Schedules and done stays done.
   assert.match(HOUSE_RULES, /When a card's one off next step is its own person's at a set time/);
-  assert.match(HOUSE_RULES, /Work that repeats on a schedule needs no card: its runs live in Schedules\. A done card stays done: only the owner reopens one, to correct a card marked done by mistake\./);
+  assert.match(HOUSE_RULES, /A routine that repeats on a schedule needs no card to track it: its runs live in Schedules\. What a run produces for the owner still goes on Ask me as a report card\. A done card stays done: only the owner reopens one, to correct a card marked done by mistake\./);
   assert.equal((fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8').match(/scheduled routines get no card/g) || []).length, 3, 'Michael\'s two board texts and the protocol');
   const hive = fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8');
   assert.equal((hive.match(/never the card\\'s own person/g) || []).length, 4, 'rule 8, Michael\'s two board texts and the protocol');
@@ -111,11 +111,22 @@ test('a resumed agent is told the house rules that changed, once; a fresh one is
   // A rule reworded since Nick last started: only that one is told.
   const seenFile = path.join(home, 'private', 'house-rules-seen.json');
   const seen = JSON.parse(fs.readFileSync(seenFile, 'utf8'));
-  seen.nick = seen.nick.filter((k) => k !== N.ruleKey(all[6]));
+  // Value (extension): protects=the record is the rule's own wording, so any rewording counts; fails_when=a short key collides or is kept; why_new=review D10; seam=none
+  assert.deepEqual(seen.nick, all, 'each rule is remembered by its wording');
+  seen.nick = seen.nick.filter((k) => k !== all[6]);
   fs.writeFileSync(seenFile, JSON.stringify(seen));
   assert.deepEqual(hive.tellHouseRules('nick', true), [all[6]]);
   assert.equal(inbox('nick').length, 2);
   assert.deepEqual(hive.tellHouseRules('oscar', true), [], 'oscar was recorded at his fresh start');
+  // Value (extension): protects=a note that never reached the inbox is sent again at the next start; fails_when=the rules are recorded as seen before delivery; why_new=review D9; seam=a missing inbox folder makes delivery fail
+  const now = JSON.parse(fs.readFileSync(seenFile, 'utf8'));
+  now.nick = now.nick.filter((k) => k !== all[2]);
+  fs.writeFileSync(seenFile, JSON.stringify(now));
+  const nickInbox = path.join(hive.root(), 'agents', 'nick', 'inbox');
+  fs.renameSync(nickInbox, `${nickInbox}.away`);
+  assert.deepEqual(hive.tellHouseRules('nick', true), [], 'nothing was delivered');
+  fs.renameSync(`${nickInbox}.away`, nickInbox);
+  assert.deepEqual(hive.tellHouseRules('nick', true), [all[2]], 'told at the next start');
   // Value (extension): protects=every hive agent start runs the check with its real resume flag, and the prep assistant is left out; fails_when=the spawn hook is dropped, passes a fixed flag, or the assistant gets the note; why_new=tellHouseRules was only called directly; seam=source pin for the spawn hook
   assert.match(fs.readFileSync(path.resolve(__dirname, '..', 'src/main/index.ts'), 'utf8'),
     /if \(res\.ok && opts\.hive\?\.id && hive\.enabled\(\)\) \{\n\s*try \{ hive\.tellHouseRules\(opts\.hive\.id, didResume\); \}/);
@@ -124,20 +135,26 @@ test('a resumed agent is told the house rules that changed, once; a fresh one is
   assert.deepEqual(hive.tellHouseRules('nobody', true), [], 'an unknown id is skipped');
 });
 
-// 2026-10-11 (card-lifecycle.md section 10): a card is one activity's needs;
-// the team member files it as triage, Michael triages and releases it.
-test('team members file triage cards, Michael triages, bundles and re-asks, and done stays done', () => {
-  // Value: protects=the owner's card model reaches every agent; fails_when=a prompt drops the triage filing, the numbered bundle, the split by who answers, the partial re-ask or the done rule; why_new=owner decisions 2026-10-11; seam=prompt text
+// 2026-10-11 (card-lifecycle.md section 10): a card is one activity's needs.
+// Ship review D8: team members write a filing once; Michael alone writes the board.
+test('team members file once in the triage folder, Michael alone writes the board, bundles and re-asks, and done stays done', () => {
+  // Value: protects=the owner's card model and the single writer reach every agent; fails_when=a prompt drops the triage folder, write once, the numbered bundle, the split by who answers, the partial re-ask, the done rule, or still lets a team member write tasks.json; why_new=owner decisions 2026-10-11 and review D8; seam=prompt text
   const hive = fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8');
-  assert.match(hive, /file a card yourself in tasks\.json \(in \$\{p\.hiveRoot\}\) with "status": "triage"/, 'team member files');
-  assert.match(hive, /Put all the questions one activity raised for the owner in one ask, a numbered list in one humanQA entry/);
-  assert.match(hive, /file a second card for them with "waitingOn" naming who, instead of an ask/, 'split by who answers');
-  assert.match(hive, /never set a card to blocked or waiting yourself, and never reopen a done card/);
-  assert.match(hive, /'## Triage',\n\s*'Team members file the cards their work needs/, 'Michael triages');
-  assert.match(hive, /Triage cards are yours alone; the owner never sees them/);
+  assert.match(hive, /file it for \$\{michael\} as one new file in the triage folder \(\$\{p\.hiveRoot\}\/triage\), named by the time you file it and your id/, 'team member files');
+  assert.match(hive, /Put all the questions one activity raised for the owner in one ask, as a numbered list, and merge the ones that ask the same thing\./);
+  assert.match(hive, /file a second one naming them in "waitingOn"\./, 'split by who answers');
+  assert.match(hive, /Write each filing once and never change it\./);
+  assert.match(hive, /You never write tasks\.json, your own cards included: when your work moves, such as finished, waiting on someone, or due again at a set time, tell \$\{michael\} and he moves its card\./);
+  assert.match(hive, /'## Triage',\n\s*'You alone write the task board \(tasks\.json\)\./, 'Michael triages and is the only writer');
+  assert.match(hive, /Each turn you see the filings waiting, oldest first: work them in that order, one at a time, against the board as it stands\./);
+  assert.match(hive, /Then move the file to triage\/\.done\./);
+  assert.match(hive, /You alone write tasks\.json and board\.md/);
+  assert.match(hive, /Only Michael writes \\`tasks\.json\\` and \\`board\.md\\`/, 'the protocol');
+  assert.doesNotMatch(hive, /Keep your own card's status current/);
+  assert.doesNotMatch(hive, /file a card yourself in tasks\.json/);
   assert.match(hive, /the questions one activity raised go in that ask as a numbered list, answered together/);
   assert.match(hive, /Questions from a different activity get a card of their own, never a parked note\./);
-  assert.match(hive, /When the answer leaves any question of the ask unanswered, first add one new ask on the same card holding only those questions and keep the card Blocked/);
+  assert.match(hive, /When the answer leaves any question of the ask unanswered, first add one new ask on the same card holding only those questions and keep the card Blocked, or, when that card is done, make a new card that asks them/);
   assert.match(hive, /Only the owner takes a card out of Done, to correct one marked done by mistake/);
   assert.doesNotMatch(hive, /never add a different question to a card that already has one open/);
 });

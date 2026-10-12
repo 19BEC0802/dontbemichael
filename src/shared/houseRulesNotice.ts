@@ -7,21 +7,11 @@
  * of the report he was asked to extend). So when the rules change, an agent
  * that resumes gets one inbox note quoting the new or reworded rules.
  *
- * Each rule is remembered by a short key of its wording, so rewording a rule
- * counts as a change. No electron / node imports: tests load it directly.
+ * Each rule is remembered by its wording, so rewording a rule counts as a
+ * change. No electron / node imports: tests load it directly.
  */
 
 export const HOUSE_RULES_CHANGED_SUBJECT = 'House rules changed';
-
-/** FNV-1a, 32 bit, as hex: stable across launches, no crypto import. */
-export function ruleKey(rule: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < rule.length; i++) {
-    h ^= rule.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, '0');
-}
 
 /** The numbered rules, without the "HOUSE RULES." heading line. */
 export function houseRuleLines(rules: string): string[] {
@@ -29,18 +19,17 @@ export function houseRuleLines(rules: string): string[] {
 }
 
 /**
- * What to tell an agent as it starts. `seen` is the keys recorded at its last
- * start, or undefined when nothing was recorded. A fresh conversation reads the
+ * What to tell an agent as it starts. `seen` is the rules recorded at its
+ * last start, or undefined when nothing was recorded. A fresh conversation reads the
  * rules in its instructions, so it gets no note; a resumed one with no record
  * gets every rule once, since its habits predate any record.
  */
 export function houseRulesToTell(rules: string, seen: string[] | undefined, resumed: boolean): { tell: string[]; keys: string[] } {
   const lines = houseRuleLines(rules);
-  const keys = lines.map(ruleKey);
-  if (!resumed) return { tell: [], keys };
-  if (!seen) return { tell: lines, keys };
+  if (!resumed) return { tell: [], keys: lines };
+  if (!seen) return { tell: lines, keys: lines };
   const known = new Set(seen);
-  return { tell: lines.filter((_, i) => !known.has(keys[i])), keys };
+  return { tell: lines.filter((l) => !known.has(l)), keys: lines };
 }
 
 export function houseRulesNoticeBody(tell: string[]): string {

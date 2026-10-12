@@ -246,18 +246,59 @@ export function ownerChangeNote(task: { id: string; title?: string }, change: Ow
 }
 
 /** The app put back a Done card an agent reopened (card-lifecycle.md section
- *  10): only the owner takes a card out of Done. */
-export function reopenedNote(task: { id: string; title?: string }, to: string): { subject: string; body: string } {
+ *  10): only the owner takes a card out of Done. Status only: a question asked
+ *  on it meanwhile is still open, so Michael moves it to a new card. */
+export function reopenedNote(task: { id: string; title?: string }, to: string, openAsk = false): { subject: string; body: string } {
   const card = `card ${cardText(task.id, 60)}${task.title ? ` "${cardText(task.title)}"` : ''}`;
   return {
     subject: `DONE CARD PUT BACK: card ${cardText(task.id, 60)}`,
-    body: `${card} was moved out of Done to ${STATUS_WORDS[to] ?? cardText(to, 20)} by an agent, so the app put it back to Done: only the owner takes a card out of Done. If the work needs more, file a new card for it, and tell whoever moved it.`
+    body: [
+      `${card} was moved out of Done to ${STATUS_WORDS[to] ?? cardText(to, 20)} by an agent, so the app put it back to Done: only the owner takes a card out of Done. If the work needs more, make a new card for it, and tell whoever moved it.`,
+      ...(openAsk ? ['It has a question open on Ask me. Withdraw it on this card ("dismissedAt" and a short "dismissedReason"), and when the work still needs the answer, ask it on the new card.'] : [])
+    ].join('\n')
+  };
+}
+
+/** The app put back a Done card that vanished from the board: a card ends only
+ *  as Done and is never deleted. */
+export function restoredDoneNote(task: { id: string; title?: string }): { subject: string; body: string } {
+  const card = `card ${cardText(task.id, 60)}${task.title ? ` "${cardText(task.title)}"` : ''}`;
+  return {
+    subject: `DONE CARD RESTORED: card ${cardText(task.id, 60)}`,
+    body: `${card} disappeared from tasks.json, so the app put it back as it was when it was last Done. Never delete a card: a card ends only as Done. When you rewrite tasks.json, start from the file as it is now.`
+  };
+}
+
+/** The app moved a card back out of Triage: Triage is only the way a new card
+ *  comes in. */
+export function untriagedNote(task: { id: string; title?: string }, to: string): { subject: string; body: string } {
+  const card = `card ${cardText(task.id, 60)}${task.title ? ` "${cardText(task.title)}"` : ''}`;
+  return {
+    subject: `CARD MOVED BACK FROM TRIAGE: card ${cardText(task.id, 60)}`,
+    body: `${card} was moved into Triage after it was on the board, so the app moved it back to ${STATUS_WORDS[to] ?? cardText(to, 20)}. Triage is only for new filings; move the card to where its work stands.`
+  };
+}
+
+/** A To do card's nextAt has come: its person does the step (house rule 8). */
+export function nextStepDueNote(task: { id: string; title?: string; nextAt?: string; description?: unknown }): { subject: string; body: string } {
+  const what = typeof task.description === 'string' && task.description.trim() ? ` What it is about: ${cardText(task.description, 500).replace(/[.!?]+$/, '')}.` : '';
+  return {
+    subject: `Next step due: ${cardText(task.title ?? task.id)}`,
+    body: `The next step on card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" was set for ${cardText(String(task.nextAt ?? ''), 40)} and is due now.${what} Do it, then tell Michael where the card stands.`
+  };
+}
+
+/** Michael's one backstop: a card still in To do long after its step came due. */
+export function nextStepBackstopNote(task: { id: string; title?: string; nextAt?: string; assignee?: string }): { subject: string; body: string } {
+  return {
+    subject: `STILL IN TO DO: card ${cardText(task.id, 60)}`,
+    body: `Card ${cardText(task.id, 60)} "${cardText(task.title ?? task.id)}" had its next step due at ${cardText(String(task.nextAt ?? ''), 40)}${task.assignee ? `, and ${cardText(task.assignee, 40)} was reminded` : ''}, but it is still in To do. Check with whoever has it, then move the card to where its work stands, with a new "nextAt" if the step moved.`
   };
 }
 
 /** A card Michael has to tidy: in Blocked with nothing asked (no `issue`), or
  *  holding an open question the wrong way (`issue`). */
-export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'triage' | 'ask-off-blocked' | 'several-asks' }
+export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'filing' | 'triage' | 'ask-off-blocked' | 'several-asks' }
 
 const stuckOf = (t: CardLike, issue?: StuckCard['issue']): StuckCard => ({
   id: t.id,
@@ -303,7 +344,8 @@ export function asksToTidy(tasks: CardLike[]): StuckCard[] {
 }
 
 const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', string> = {
-  triage: 'CARDS TO TRIAGE. Team members filed these with what their work needs; the owner does not see them yet. For each one: answer it from your memory or the board when you can (tell the team member, then move it to "done" with a "result"); merge it into an open ask that covers the same thing; route a question a teammate can answer; rewrite its ask into the Ask me shape, one numbered ask per card; keep one card per source of answers. Then release it: "blocked" when it asks the owner, "waiting" with "waitingOn" when it waits on someone else.',
+  filing: 'NEW FILINGS TO TRIAGE, oldest first. Team members filed these in the triage folder of the hive with what their work needs; the owner does not see them. Work them in this order, one at a time, against the board as it stands. For each one: answer it from your memory or the board when you can, and tell the team member; fold it into an existing card that covers the same matter; route a question a teammate can answer; drop a duplicate; or make a card for it, "blocked" with its ask rewritten into the Ask me shape, or "waiting" with "waitingOn". Keep one card per source of answers. Then move the file to triage/.done.',
+  triage: 'CARDS IN TRIAGE ON THE BOARD. The owner does not see these. Handle each like a new filing, then release it: "blocked" when it asks the owner, "waiting" with "waitingOn" when it waits on someone else, or "done" when it needs nothing more.',
   'nothing-asked': 'BLOCKED CARDS WITH NOTHING ASKED. These cards are in Blocked, but none has a question for the owner on Ask me or an open request from the owner, so nothing is moving them. Blocked means waiting on the owner\'s answer. For each one: if it needs the owner, add the question to its humanQA so it shows on Ask me; if it waits on someone outside the office or on a team member, move it to "waiting" and name who in "waitingOn"; if the work is finished, or the owner decided to stop it, move it to "done".',
   'ask-off-blocked': 'OPEN QUESTIONS ON CARDS OUT OF BLOCKED. Each of these cards left Blocked with a question still open, and the owner still sees it on Ask me until they answer it or you withdraw it. For each one: if you moved the card out of Blocked and the work still needs the answer, move it back to "blocked". If the owner moved it, the card is done, or the question no longer matters, withdraw the question by setting "dismissedAt" (the time) and a short "dismissedReason" on that humanQA entry. Never move a card the owner moved.',
   'several-asks': 'CARDS WITH MORE THAN ONE OPEN QUESTION. The owner sees every one of them on Ask me. Keep one open question per card: fold what still matters into the newest, and withdraw the others by setting "dismissedAt" (the time) and a short "dismissedReason" on each.'
@@ -313,12 +355,14 @@ const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', str
 export function stuckCardsContext(stuck: StuckCard[]): string | null {
   if (!stuck.length) return null;
   const parts: string[] = [];
-  for (const kind of ['triage', 'nothing-asked', 'ask-off-blocked', 'several-asks'] as const) {
+  for (const kind of ['filing', 'triage', 'nothing-asked', 'ask-off-blocked', 'several-asks'] as const) {
     const cards = stuck.filter((c) => (c.issue ?? 'nothing-asked') === kind);
     if (!cards.length) continue;
     parts.push([
       STUCK_HEADS[kind],
-      ...cards.slice(0, LIST_MAX).map((c) => `- card ${cardText(c.id, 60)}: ${cardText(c.title)}${c.assignee ? ` (with ${cardText(c.assignee, 40)})` : ''}`),
+      ...cards.slice(0, LIST_MAX).map((c) => kind === 'filing'
+        ? `- triage/${cardText(c.id, 80)}: ${cardText(c.title)}${c.assignee ? ` (from ${cardText(c.assignee, 40)})` : ''}`
+        : `- card ${cardText(c.id, 60)}: ${cardText(c.title)}${c.assignee ? ` (with ${cardText(c.assignee, 40)})` : ''}`),
       ...(cards.length > LIST_MAX ? [`- and ${cards.length - LIST_MAX} more`] : [])
     ].join('\n'));
   }
