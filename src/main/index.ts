@@ -13,6 +13,7 @@ import { request as httpsRequest } from 'node:https';
 import { PtyManager, type ProcessLaunch, type SpawnOptions } from './pty';
 import { resolveCommand as resolveCliCommand, isSafeCommandName, userShellPath } from './shellEnv';
 import { buildPtyEnv } from './ptyEnv';
+import { isSameOrInside } from './pathInside';
 import {
   apiKeyShapeOk, checkAnthropicKey, claudeInstallScript, claudeMissingScript, ENGINE_INSTALL_PTY, ENGINE_SIGNIN_PTY,
   claudeAuthStatusCommand, findClaudeFast, isEngineSetupPty, makeClaudeAuthReader, makeNoticeCoalescer, readEngineSetupStatus,
@@ -4616,7 +4617,7 @@ ipcMain.handle('git:checkout', async (_evt, cwd: unknown, ref: unknown, detach: 
   // checkoutRef additionally requires a clean tree, and TUIs redraw on fs
   // changes gracefully.)
   const busy = ptyManager.list().find((p) =>
-    (p.cwd === cwd || p.cwd.startsWith(cwd.endsWith('/') ? cwd : `${cwd}/`)) &&
+    isSameOrInside(cwd, p.cwd) &&
     Date.now() - p.lastOutputAt < 10_000
   );
   if (busy) {
