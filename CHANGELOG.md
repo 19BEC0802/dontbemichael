@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format is based on
 
 Don't Be Michael keeps its own version line, starting at 0.0.1.
 
+## [Unreleased]
+
+### Added
+
+- **A parked step wakes on time.** A To do card can carry the time its next step is due, shown on the card in your local time. At that time the person on the card gets one reminder, even if the app was closed when it came due; if the card is still in To do four hours later, Michael hears about it once.
+- **Closing time takes you to the office floor**, and the still working count opens the list of who is still busy.
+
+### Changed
+
+- **Michael alone writes the task board.** Team members file what their work needs once, in a queue only Michael sees, and tell him when their work moves. He works the queue in the order it was filed: answers it, folds it into a card, drops a duplicate or puts it on Ask me or in Waiting.
+- **A card is one activity's needs.** One activity's questions for you arrive as one numbered ask, answered together; a part you leave unanswered comes back on its own. Questions for you and for someone outside the office go on separate cards.
+- **Done is final.** Only you take a card out of Done, into To do, with a short reason. A card an agent reopens or deletes is put back as it was, and a question asked on it meanwhile stays on Ask me.
+- **Cards carry no running notes.** Where a card stands shows in its status, who it waits on, its next step time, its question and its result. Routines that repeat on a schedule get no card; their reports still reach Ask me.
+- **A card never waits on its own person.** Waiting names who else it waits on.
+- **Team members hear when the house rules change**, once, when they resume their conversation.
+- **Reports and files you read are in plain business words**, with sources named the way you know them.
+- A Markdown report fills its tab, and a file link sits in its sentence without stray brackets.
+- The way back to your conversation with Michael stays beside the message box once every reply is read.
+
+### Fixed
+
+- The list of who is still working at closing time has one scrollbar.
+
 ## [0.1.8] (2026-10-11)
 
 ### Added
