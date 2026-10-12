@@ -150,15 +150,6 @@
 **Effort:** M
 **Priority:** P3
 
-### Say "closing" in dev builds when reopen is skipped
-
-**What:** In dev (`ELECTRON_RENDERER_URL` set) the app quits instead of relaunching, but the dialog still says "reopening".
-
-**Why:** Cosmetic, dev only; the event could carry whether a relaunch will really happen.
-
-**Effort:** S
-**Priority:** P4
-
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
 
 ## QuickBooks through the Claude account (deferred from ship of feat/qbo-claude-channel, 2026-09-30)
