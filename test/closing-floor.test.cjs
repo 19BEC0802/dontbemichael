@@ -54,7 +54,8 @@ test('the store, the stage and the app follow the rule, and Cancel brings everyt
 test('closing time switches to the office floor as it starts', () => {
   // Value: protects=the owner sees the office close, from any tab; fails_when=the switch is dropped or fires on every progress tick; why_new=closing used to leave a file or Tasks tab in front; seam=source pin
   const app = read('src/renderer/src/App.tsx');
-  assert.match(app, /if \(phase === 'started'\) useStore\.getState\(\)\.setFloorView\('office'\);/);
+  // Not saved as the remembered view (review 2026-10-12): the next launch opens where the owner left off.
+  assert.match(app, /if \(phase === 'started'\) useStore\.setState\(\{ floorView: 'office' \}\);/);
 });
 
 test('nobody who has gone home trades banter, and a closed office has none', () => {

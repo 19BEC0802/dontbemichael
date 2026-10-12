@@ -215,8 +215,9 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
   onOpen: () => void;
   onDismiss: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [hover, setHover] = useState(false);
+  const next = nextAtLabel(task.nextAt, i18n.language);
   return (
     <div style={{ position: 'relative', display: 'flex' }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <button
@@ -243,8 +244,8 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
           </span>
         )}
         {/* When its one off next step is due, in the owner's local time (house rule 8). */}
-        {!done && nextAtLabel(task.nextAt) && (
-          <span data-next-at style={{ fontSize: 11, fontWeight: 500, color: 'var(--cth-ink-2)' }}>{t('kanban.nextAt', { when: nextAtLabel(task.nextAt) })}</span>
+        {!done && next && (
+          <span data-next-at style={{ fontSize: 11, fontWeight: 500, color: 'var(--cth-ink-2)' }}>{t('kanban.nextAt', { when: next })}</span>
         )}
         {/* What came of it, first line of Michael's result (issue 51); a card
             the owner closed says so below instead. */}
@@ -335,9 +336,10 @@ export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign
   onAssign: () => void;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [reopening, setReopening] = useState(false);
   const [why, setWhy] = useState('');
+  const next = nextAtLabel(task.nextAt, i18n.language);
   const rtl = useRtl();
   const detailGodName = useResolvedGodName();
   // Every file the Q&A trail names, checked in one go rather than per question.
@@ -410,18 +412,6 @@ export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign
                   <InfoTip text={t('kanban.waitingOnTitle', { godName: detailGodName })} />
                 </div>
               )}
-              {task.status === 'done' && reopening && (
-                <div data-reopen style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 260 }}>
-                  <textarea autoFocus rows={2} value={why} onChange={(e) => setWhy(e.target.value)} placeholder={t('kanban.reopenWhy')} aria-label={t('kanban.reopenWhy')} style={{
-                    resize: 'vertical', padding: '6px 8px', borderRadius: 'var(--cth-r-md)', border: 'none', boxShadow: 'inset 0 0 0 1px var(--cth-line-input)',
-                    background: 'var(--cth-card)', color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5
-                  }} />
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <PixelButton variant="primary" size="sm" disabled={!why.trim()} onClick={() => { onReopen(why.trim()); setReopening(false); setWhy(''); }}>{t('kanban.reopen')}</PixelButton>
-                    <PixelButton variant="secondary" size="sm" onClick={() => { setReopening(false); setWhy(''); }}>{t('common.cancel')}</PixelButton>
-                  </div>
-                </div>
-              )}
               {task.status === 'done' && task.closedBy === 'owner' && (
                 <div data-closed-by="owner" style={{ marginTop: 4, fontSize: 11, color: 'var(--cth-ink-3)' }}>
                   {t('kanban.closedByOwner')}{task.closedReason ? <InfoTip text={task.closedReason} /> : null}
@@ -458,6 +448,21 @@ export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign
             </div>
           )}
 
+          {/* Out of Done only into To do, with a reason (card-lifecycle.md 10): its own
+              row, so the four facts above keep their place. */}
+          {task.status === 'done' && reopening && (
+            <div data-reopen style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <textarea className="cth-input" autoFocus rows={2} value={why} onChange={(e) => setWhy(e.target.value)} placeholder={t('kanban.reopenWhy')} aria-label={t('kanban.reopenWhy')} style={{
+                resize: 'vertical', padding: '6px 8px', border: 'none', outline: 'none',
+                background: 'var(--cth-card)', color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5
+              }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <PixelButton variant="primary" size="sm" disabled={!why.trim()} onClick={() => { onReopen(why.trim()); setReopening(false); setWhy(''); }}>{t('kanban.reopen')}</PixelButton>
+                <PixelButton variant="secondary" size="sm" onClick={() => { setReopening(false); setWhy(''); }}>{t('common.cancel')}</PixelButton>
+              </div>
+            </div>
+          )}
+
           {/* What the card is for, when a request gave it one. No running notes:
               an agent's activity lives in its conversation and the office log
               (owner, 2026-10-11). */}
@@ -468,8 +473,8 @@ export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign
               </div>
             </div>
           )}
-          {task.status !== 'done' && nextAtLabel(task.nextAt) && (
-            <div data-next-at style={{ fontSize: 12.5, color: 'var(--cth-ink)' }}>{t('kanban.nextAt', { when: nextAtLabel(task.nextAt) })}</div>
+          {task.status !== 'done' && next && (
+            <div data-next-at style={{ fontSize: 12.5, color: 'var(--cth-ink)' }}>{t('kanban.nextAt', { when: next })}</div>
           )}
 
           {/* The owner Q&A trail: every decision documented on the card. */}

@@ -237,4 +237,11 @@ test('voice: a status change is the owner\'s move, close never deletes, and a ne
   r = await handlers.get('realtime:action:confirm')(null, { phrase: 'confirm' });
   assert.equal(r.ok, true, r.spoken);
   assert.deepEqual(missions.map((m) => [m.label, m.focus, m.intervalMs, m.to, m.createdBy]), [['Check invoices', 'Unpaid past 30 days.', 7_200_000, 'god', 'owner']]);
+  // Review 2026-10-12: a spoken reopen of a Done card changes nothing on it.
+  board.tasks.push(card('d1', { title: 'Settled invoice', status: 'done', result: 'Paid' }));
+  calls.length = 0;
+  r = await act({ verb: 'update_task', task: 'Settled invoice', status: 'todo', result: 'Not paid after all' });
+  assert.equal(r.ok, false);
+  assert.match(r.spoken, /is done\. To reopen it, open the card on the board and give a short reason\./);
+  assert.deepEqual(calls, [], 'nothing on the Done card changes');
 });

@@ -116,6 +116,12 @@ test('a resumed agent is told the house rules that changed, once; a fresh one is
   assert.deepEqual(hive.tellHouseRules('nick', true), [all[6]]);
   assert.equal(inbox('nick').length, 2);
   assert.deepEqual(hive.tellHouseRules('oscar', true), [], 'oscar was recorded at his fresh start');
+  // Value (extension): protects=every hive agent start runs the check with its real resume flag, and the prep assistant is left out; fails_when=the spawn hook is dropped, passes a fixed flag, or the assistant gets the note; why_new=tellHouseRules was only called directly; seam=source pin for the spawn hook
+  assert.match(fs.readFileSync(path.resolve(__dirname, '..', 'src/main/index.ts'), 'utf8'),
+    /if \(res\.ok && opts\.hive\?\.id && hive\.enabled\(\)\) \{\n\s*try \{ hive\.tellHouseRules\(opts\.hive\.id, didResume\); \}/);
+  await hive.ensureAgent({ id: 'prep', name: 'Prep', provider: 'claude', cwd: home, isAssistant: true });
+  assert.deepEqual(hive.tellHouseRules('prep', true), [], 'the prep assistant writes prompts, not owner work');
+  assert.deepEqual(hive.tellHouseRules('nobody', true), [], 'an unknown id is skipped');
 });
 
 // 2026-10-11 (card-lifecycle.md section 10): a card is one activity's needs;

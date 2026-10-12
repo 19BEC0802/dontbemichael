@@ -2023,7 +2023,6 @@ export class HiveManager {
     return true;
   }
 
-  /** Inject a message directly (used by the orchestrator / UI / tests). */
   /**
    * As an agent starts, tell it the house rules that changed since its last
    * start (shared/houseRulesNotice.ts). The keys it has seen are app-private,
@@ -2044,6 +2043,7 @@ export class HiveManager {
     return tell;
   }
 
+  /** Inject a message directly (used by the orchestrator / UI / tests). */
   send(partial: Partial<HiveMessage>, from = 'system'): HiveMessage {
     const msg = this.normalize(partial, from);
     this.routeMessage(msg);
@@ -2501,7 +2501,8 @@ export class HiveManager {
   ownerCloseTask(id: string, reason?: string): boolean {
     const ledger = this.tasks() as { tasks?: HiveTask[] };
     const card = (Array.isArray(ledger?.tasks) ? ledger.tasks : []).find((t) => t?.id === id);
-    if (!card) return false;
+    // A card in triage is Michael's until he releases it; the owner never sees it.
+    if (!card || card.status === 'triage') return false;
     const now = new Date().toISOString();
     const patch: Partial<Omit<HiveTask, 'id'>> = { status: 'done', closedBy: 'owner', closedAt: now };
     if (reason?.trim()) patch.closedReason = reason.trim().slice(0, 500);
@@ -2641,12 +2642,6 @@ export class HiveManager {
   private ownerMessageCheck: (m: ThreadMessage) => boolean = () => true;
   setOwnerMessageCheck(check: (m: ThreadMessage) => boolean): void { this.ownerMessageCheck = check; }
 
-  /**
-   * Recompute Michael's open requests from the owner
-   * (docs/designs/card-lifecycle.md): owner answers he has not closed with a
-   * reply. Run on the fleet tick so a prompt never scans folders; reads his
-   * mail from OWNER_REQUESTS_FLOOR on.
-   */
   /** A Done card an agent moved out of Done goes back, and Michael is told
    *  (owner, 2026-10-11). Seeds on the first tick. True when it put any back. */
   private putBackReopened(tasks: CardLike[]): boolean {
@@ -2665,6 +2660,12 @@ export class HiveManager {
     return back.length > 0;
   }
 
+  /**
+   * Recompute Michael's open requests from the owner
+   * (docs/designs/card-lifecycle.md): owner answers he has not closed with a
+   * reply. Run on the fleet tick so a prompt never scans folders; reads his
+   * mail from OWNER_REQUESTS_FLOOR on.
+   */
   refreshOwnerRequests(): OwnerRequest[] {
     if (!this.root()) return (this.ownerRequestsCache = []);
     const dir = this.agentDir(this.registry().godId ?? 'god');

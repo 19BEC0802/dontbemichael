@@ -69,6 +69,13 @@ test('the chip replaces exactly the path, from the source, in text, code spans a
   const aside = chips('See (in /Users/me/a.md) for more').tree.children[0].children;
   assert.equal(aside[0].value, 'See (in ', 'parentheses that hold more than the path stay');
   assert.equal(aside[2].value, ') for more');
+  // Value (extension): protects=only a pair hugging the chip goes, at any place in a line and around a linked file; fails_when=one sided parens are stripped, a leading space is left, or link chips are skipped; why_new=one middle of line case was checked; seam=none
+  const open = chips('Open (`/Users/me/a.md` today)').tree.children[0].children;
+  assert.deepEqual([open[0].value, open[1].data.hName, open[2].value], ['Open (', 'cth-file', ' today)'], 'a "(" with no ")" right after the chip stays');
+  const first = chips('(`/Users/me/a.md`) first').tree.children[0].children;
+  assert.deepEqual([first.length, first[0].data.hName, first[1].value], [2, 'cth-file', ' first'], 'a chip opening the line keeps no stray space');
+  const linked = chips('See ([data](/Users/me/b.json)), ok').tree.children[0].children;
+  assert.deepEqual([linked[0].value, linked[1].children[0].data.hName, linked[1].children[1].value, linked[2].value], ['See ', 'cth-file', ',', ' ok'], 'a linked file sheds its parentheses too');
 });
 
 test('main reads only readable kinds inside the folders, capped, by canonical path (R3)', async (t) => {

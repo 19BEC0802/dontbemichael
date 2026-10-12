@@ -206,3 +206,11 @@ test('the who list has one scrollbar', () => {
   assert.equal((bar.match(/overflowY: 'auto'/g) || []).length, 1, 'only the list scrolls');
   assert.match(bar.match(/<div ref=\{listRef\}[^\n]*/)[0], /maxHeight: 300, overflowY: 'auto'/);
 });
+
+test('the still working pill sits in a 28 px target, and the row never jumps', () => {
+  // Value: protects=DESIGN.md 12's 28 px target and a steady bar height; fails_when=the pill becomes the button again or the row loses its min height; why_new=review 2026-10-12; seam=source pin
+  const bar = read('src/renderer/src/components/ClosingTimeBar.tsx');
+  assert.match(bar, /const hitBtn: CSSProperties = \{\n\s*flexShrink: 0, height: 28,/);
+  assert.match(bar, /style=\{hitBtn\}>\n\s*<span style=\{linkBtn\}>/);
+  assert.match(bar, /marginTop: 6, minHeight: 28 \}\}/);
+});

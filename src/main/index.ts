@@ -2775,7 +2775,8 @@ function lookupWebhookStatus(token: string): WebhookTaskStatus | null {
     const have = Buffer.from(h);
     // Both are fixed-length sha-256 hex; compare in constant time defensively.
     if (have.length === wanted.length && timingSafeEqual(have, wanted)) {
-      return { status: t.status, title: t.title, result: t.result };
+      // Triage is internal: to the caller the card is simply not started yet.
+      return { status: t.status === 'triage' ? 'todo' : t.status, title: t.title, result: t.result };
     }
   }
   return null;
@@ -6033,7 +6034,9 @@ ipcMain.handle('hive:textSearch', (_evt, query: unknown) => {
   for (const { path, source } of targets) {
     if (!existsSync(path)) continue;
     let hits = 0;
-    for (const line of readFileSync(path, 'utf8').split('\n')) {
+    // The owner's search never shows a card still in triage (card-lifecycle.md 10).
+    const text = source === 'tasks.json' ? JSON.stringify(ownerLedger(hive.tasks()), null, 2) : readFileSync(path, 'utf8');
+    for (const line of text.split('\n')) {
       if (hits >= 3) break;
       const idx = line.toLowerCase().indexOf(q);
       if (idx === -1) continue;

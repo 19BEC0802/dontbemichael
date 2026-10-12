@@ -102,7 +102,7 @@ export function parseTasks(raw: unknown): HiveTask[] {
       // running "notes" are left in the file but not read: an agent's activity
       // lives in its conversation and the office log (owner, 2026-10-11).
       description: typeof t.description === 'string' ? t.description : undefined,
-      nextAt: typeof t.nextAt === 'string' && !Number.isNaN(Date.parse(t.nextAt)) ? t.nextAt : undefined,
+      nextAt: isNextAt(t.nextAt) ? t.nextAt : undefined,
       assignee: typeof t.assignee === 'string' ? t.assignee : undefined,
       status: (['todo', 'doing', 'waiting', 'blocked', 'done'] as const).includes(t.status as TaskStatus)
         ? (t.status as TaskStatus) : 'todo',
@@ -137,12 +137,26 @@ export function parseTasks(raw: unknown): HiveTask[] {
     }));
 }
 
-/** A card's next step time in the viewer's local time, like "Mon, 12 Oct, 8:00 AM". */
-export function nextAtLabel(nextAt: string | undefined): string | undefined {
-  if (!nextAt) return undefined;
-  const d = new Date(nextAt);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return d.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+/** House rule 8 asks for an ISO date and time with its offset. Anything looser
+ *  is not shown: "Mon 12 Oct 13:00" parses as a 2001 date, and a bare date reads
+ *  as midnight UTC, the evening before west of it. */
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+function isNextAt(v: unknown): v is string {
+  return typeof v === 'string' && ISO_WITH_OFFSET.test(v) && !Number.isNaN(Date.parse(v));
+}
+const nextAtFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** A card's next step time in the viewer's local time and the app's language,
+ *  like "Mon, 12 Oct, 8:00 AM". */
+export function nextAtLabel(nextAt: string | undefined, lang?: string): string | undefined {
+  if (!isNextAt(nextAt)) return undefined;
+  const key = lang ?? '';
+  let f = nextAtFormats.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat(lang || undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    nextAtFormats.set(key, f);
+  }
+  return f.format(new Date(nextAt));
 }
 
 /** The first line of a Done card's result, as plain text for the board: its

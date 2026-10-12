@@ -107,18 +107,20 @@ export function ClosingTimeBar({ closing, onCancel, onForceQuit, onRetry }: Clos
             <span role="status" aria-live="polite" style={{ fontSize: 12.5, color: error ? 'var(--cth-coral-text)' : 'var(--cth-ink-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>
           </div>
           {!error && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, minHeight: 28 }}>
               <span style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--cth-line)', overflow: 'hidden' }}>
                 <span style={{ display: 'block', height: '100%', width: `${pct}%`, borderRadius: 2, background: done ? 'var(--cth-green)' : 'var(--cth-indigo)', transition: 'width 600ms var(--cth-ease)' }} />
               </span>
               {c && !done && waiting > 0 && (
-                <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} style={linkBtn}>
+                <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} style={hitBtn}>
+                  <span style={linkBtn}>
                   {open ? t('closingBar.hideWho') : (waiting === 1 ? t('closingBar.left', { count: waiting }) : t('closingBar.leftPlural', { count: waiting }))}
                   {/* The list opens upward from the bar: the chevron points up to open it, down to close it. */}
                   <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
                     style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms var(--cth-ease)' }}>
                     <path d="M6 15l6-6 6 6" />
                   </svg>
+                  </span>
                 </button>
               )}
             </div>
@@ -152,6 +154,11 @@ const linkBtn: CSSProperties = {
   flexShrink: 0, border: 'none', background: 'var(--cth-indigo-soft)', padding: '0 8px 0 10px', height: 24, borderRadius: 'var(--cth-r-pill)', cursor: 'pointer',
   display: 'inline-flex', alignItems: 'center', gap: 4,
   fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--cth-indigo-text)'
+};
+// The 28 px target (DESIGN.md 12) around the 24 px pill, like the composer's count.
+const hitBtn: CSSProperties = {
+  flexShrink: 0, height: 28, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer',
+  display: 'inline-flex', alignItems: 'center'
 };
 
 /**
