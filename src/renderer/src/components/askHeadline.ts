@@ -9,8 +9,9 @@ export function askHeadline(q: string): string {
   const bold = /^\*\*([\s\S]+?)\*\*/.exec(text);
   const lead = bold ? bold[1] : (/^[\s\S]*?(?:[.?!](?=\s|$)|\n|$)/.exec(text)?.[0] ?? text);
   return lead
-    .replace(/`([^`]*)`/g, '$1')
-    .replace(/\*\*|__|[*_]/g, '')
+    // One pass, so a code span's text is kept as written, and an underscore
+    // inside a word (monthly_report.pdf, first_last@acme.com) is not emphasis.
+    .replace(/`([^`]*)`|\*+|(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, (_m, code?: string) => code ?? '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^#+\s*/, '')
     .replace(/\s+/g, ' ')

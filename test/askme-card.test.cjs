@@ -21,6 +21,14 @@ test('the headline is Michael\'s bold lead, else the first sentence, as plain te
   assert.equal(askHeadline('Sign in again\nwith the app password'), 'Sign in again');
 });
 
+test('the headline keeps underscores in file names and addresses, and drops them as emphasis', () => {
+  assert.equal(askHeadline('Should I send `monthly_report.pdf` to Kelly? It is ready.'), 'Should I send monthly_report.pdf to Kelly?');
+  assert.equal(askHeadline('Can I email first_last@acme.com the quote?'), 'Can I email first_last@acme.com the quote?');
+  assert.equal(askHeadline('Is `a*b` the right formula?'), 'Is a*b the right formula?');
+  assert.equal(askHeadline('**Approve the _final_ invoice?** It is ready.'), 'Approve the final invoice?');
+  assert.equal(askHeadline('__Approve__ the *new* price?'), 'Approve the new price?');
+});
+
 test('how long ago, in plain words', () => {
   const now = Date.parse('2026-09-30T12:00:00Z');
   assert.equal(askedAgo('2026-09-30T11:59:30Z', now, 'en'), 'just now');
