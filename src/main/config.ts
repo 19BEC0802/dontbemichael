@@ -16,7 +16,7 @@ import {
 import { defaultMcpDefaults } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { expandTilde, normalizeHiveHome } from './fs';
-import { writeFileAtomic } from './atomicFile';
+import { isHeldRename, RENAME_RETRY_MS, sleepSync, writeFileAtomic } from './atomicFile';
 import type { IntegrationRecord } from '../shared/integrations';
 import {
   DEFAULT_CONTEXT_TRIGGER,
@@ -920,9 +920,12 @@ function updateClaudeJson(home: string, change: (c: ClaudeConfig) => boolean): b
   // Claude Code writes this file too. Write a copy beside it and swap it in, so
   // a crash never leaves it half written, and start again (up to three times)
   // when Claude changed it between our read and our write, so its edit is kept.
+  // On Windows the swap is refused while something else has the file open
+  // (antivirus, backup or sync tools); that also starts again from the read.
   const stamp = (): string => { try { const st = statSync(p); return `${st.mtimeMs}:${st.size}`; } catch { return 'none'; } };
+  const ATTEMPTS = 3;
   try {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
       const before = stamp();
       let c: ClaudeConfig = {};
       let mode = 0o600;
@@ -936,7 +939,14 @@ function updateClaudeJson(home: string, change: (c: ClaudeConfig) => boolean): b
       const tmp = `${p}.dbm-${process.pid}-${attempt}.tmp`;
       writeFileSync(tmp, JSON.stringify(c, null, 2), { encoding: 'utf8', mode });
       if (stamp() !== before) { rmSync(tmp, { force: true }); continue; }
-      renameSync(tmp, p);
+      try {
+        renameSync(tmp, p);
+      } catch (e) {
+        rmSync(tmp, { force: true });
+        if (!isHeldRename(e) || attempt === ATTEMPTS - 1) throw e;
+        sleepSync(RENAME_RETRY_MS[attempt]);
+        continue;
+      }
       return true;
     }
     console.warn(`[config] Claude config at ${p} kept changing; left it for the next start.`);
