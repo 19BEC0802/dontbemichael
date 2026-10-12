@@ -508,11 +508,14 @@ export class MailService {
       const messages: Array<{ id: string; from: string; subject: string; date: string; unread: boolean }> = [];
       if (slice.length) {
         for await (const m of c.fetch(slice, { uid: true, envelope: true, flags: true }, { uid: true })) {
+          // imapflow hands back the raw header text when it cannot read a date,
+          // and toISOString throws on that, failing the whole search over one email.
+          const sent = m.envelope?.date ? new Date(m.envelope.date) : null;
           messages.push({
             id: messageIdFor(key, m.uid),
             from: addrText(m.envelope?.from),
             subject: m.envelope?.subject ?? '',
-            date: m.envelope?.date ? new Date(m.envelope.date).toISOString() : '',
+            date: sent && !Number.isNaN(sent.getTime()) ? sent.toISOString() : '',
             unread: !(m.flags instanceof Set ? m.flags.has('\\Seen') : false)
           });
         }
