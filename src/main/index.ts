@@ -91,7 +91,7 @@ import { analytics, isRendererMessageSurface } from './analytics';
 import type { SpawnFailReason } from './analytics';
 import { IntegrationBroker } from './integrationBroker';
 import * as integrations from './integrations';
-import { MailService, handleMailRequest, saveMailbox, removeMailbox, setAgentCapabilities, setSendOnly, type AddMailboxInput } from './mail';
+import { MailService, handleMailRequest, saveMailbox, removeMailbox, setAgentCapabilities, setSendOnly, cannotStoreReason, type AddMailboxInput } from './mail';
 import { MailApprovals } from './mailApprovals';
 import { standingFitCheck } from './standingCheck';
 import { terminalOverflowEvent } from '../shared/terminalOverflow';
@@ -4101,10 +4101,13 @@ ipcMain.handle('terminal:openAtFolder', async (_evt, cwd: unknown) => {
 ipcMain.handle('integrations:list', () => integrations.listRecordsRedacted());
 ipcMain.handle('integrations:templates', () => INTEGRATION_TEMPLATES);
 ipcMain.handle('integrations:upsert', (_evt, record: unknown) => integrations.upsertRecord(record));
+ipcMain.handle('integrations:canStoreSecrets', () =>
+  integrations.canStoreSecrets() ? { ok: true as const } : { ok: false as const, error: cannotStoreReason() });
 ipcMain.handle('integrations:setSecret', (_evt, payload: unknown) => {
   const p = (payload ?? {}) as { id?: unknown; secret?: unknown };
   if (typeof p.id !== 'string' || !p.id) return { ok: false, error: 'id required' };
   if (typeof p.secret !== 'string' || !p.secret) return { ok: false, error: 'secret required' };
+  if (!integrations.canStoreSecrets()) return { ok: false, error: cannotStoreReason() };
   return integrations.setSecret(secretRefFor(p.id), p.secret);
 });
 ipcMain.handle('integrations:remove', (_evt, payload: unknown) => {
