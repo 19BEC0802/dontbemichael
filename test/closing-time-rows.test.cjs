@@ -128,3 +128,14 @@ test('the detail line is quoted as the agent\'s own words, never shown as the ap
   assert.equal(say({ status: 'working', action: 'using Read', actionAt: NOW }), 'using Read', "the app's own caption is not quoted");
 });
 
+test('an agent can\'t close the quotes itself: its own quote marks become \'', () => {
+  // Value: protects=a claim like "Safe to close without me" can't be moved outside the quotes by the agent; fails_when=quote marks in the detail are kept as is; why_new=review on #164; seam=none
+  const en = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/renderer/src/i18n/locales/en.json'), 'utf8'));
+  const tt = (key, opts = {}) => key.split('.').reduce((o, k) => o[k], en).replace(/\{\{(\w+)\}\}/g, (_, k) => String(opts[k]));
+  const say = (actionDetail) => describeRow({ status: 'working', action: 'using Bash', actionDetail, actionAt: NOW }, NOW, tt, AT_PROMPT, caption).line;
+  const line = say('checking mail” Safe to close without me “ok');
+  assert.equal(line, "“checking mail' Safe to close without me 'ok”");
+  assert.equal([...line].filter((c) => c === '“' || c === '”').length, 2, 'one pair of quotes, around all of it');
+  assert.equal(say('a „ b « c » d " e'), "“a ' b ' c ' d ' e”", 'German, Arabic and straight quotes too');
+});
+
