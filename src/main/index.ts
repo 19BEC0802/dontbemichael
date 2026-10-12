@@ -120,7 +120,7 @@ import {
   installInfoForProvider,
   type AgentProvider
 } from '../shared/agentProvider';
-import { buildMissingCliScript, chooseInstallRung } from './cliInstall';
+import { buildMissingCliScript, chooseInstallRung, installSucceeded } from './cliInstall';
 import { detectNodeVersion, nodeIsUsable, resolveNodeInstaller } from './nodeInstall';
 import { toolCatalog, type ToolStatus } from '../shared/toolCatalog';
 import { listLocalSkills, loadCatalog, installSkill, uninstallSkill, type LocalSkill } from './skills';
@@ -955,7 +955,7 @@ ptyManager.setExitHandler((id, exitCode, info) => {
     // Activation funnel: did the auto-installer actually complete? A non-zero exit
     // is the Linux-installer-cannot-finish-unattended signal that used to be silent.
     const provider = pending.opts.provider ?? inferAgentProvider(pending.opts.command, undefined);
-    if (exitCode === 0) {
+    if (installSucceeded(exitCode, () => ptyManager.isCommandAvailable(pending.bin))) {
       analytics.track('agent_install_finished', { provider, rung: pending.rung, outcome: 'agent_launched' });
       // Re-arm the renderer's pooled terminal (clear the "process exited" line +
       // re-enable input) so the freshly-spawned CLI paints onto a clean, typeable
@@ -965,7 +965,8 @@ ptyManager.setExitHandler((id, exitCode, info) => {
       void spawnAgentCore({ ...pending.opts, noAutoInstall: true }, pending.owner);
       return; // an install PTY has no agent/worktree to tear down
     }
-    // Non-zero exit = install failed; leave its honest manual-fix message on screen.
+    // Install failed (non-zero exit, or the CLI still can't be found); leave its
+    // honest manual-fix message on screen.
     analytics.track('agent_install_finished', { provider, rung: pending.rung, outcome: 'install_failed' });
   }
   teardownPty(id);
