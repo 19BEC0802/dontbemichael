@@ -382,8 +382,13 @@ export class MailService {
     if (open) this.drop(id);
     const rec = this.record(id);
     const client = this.createImap(rec.imap, rec.address, this.password(id));
-    client.on?.('error', () => this.drop(id));
-    client.on?.('close', () => this.drop(id));
+    // A replaced socket can finish closing after its successor connects.
+    // Only the client still held for this mailbox may drop that connection.
+    const disconnected = (): void => {
+      if (this.boxes.get(id)?.client === client) this.drop(id);
+    };
+    client.on?.('error', disconnected);
+    client.on?.('close', disconnected);
     try {
       await withTimeout(client.connect(), CALL_TIMEOUT_MS, 'Connecting to the mailbox');
     } catch (e) {
