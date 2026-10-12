@@ -749,9 +749,9 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                   <div>
                     <div style={{
                       fontFamily: 'var(--cth-font-display)',
-                      fontSize: 12, lineHeight: '18px'
+                      fontSize: 14, lineHeight: '20px'
                     }}>{t('onboarding.welcome.headline')}</div>
-                    <div style={{ fontSize: 12, color: 'var(--cth-ink-700)', lineHeight: '18px' }}>
+                    <div style={{ fontSize: 14, color: 'var(--cth-ink-700)', lineHeight: '20px' }}>
                       {t('onboarding.welcome.desc')}
                     </div>
                   </div>
@@ -769,7 +769,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                       <span style={{ width: 26, height: 26, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 'var(--cth-r-md)', background: 'var(--cth-neutral-soft)', color: 'var(--cth-ink-2)' }}>
                         <Icon name={f.icon} />
                       </span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--cth-ink)' }}>{t(f.labelKey, { godName })}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, lineHeight: '20px', color: 'var(--cth-ink)' }}>{t(f.labelKey, { godName })}</span>
                       <InfoTip text={t(f.descKey)} align="end" />
                     </div>
                   ))}
@@ -1101,7 +1101,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                 {/* AUTONOMY — one choice that maps to each engine's flag: autoMode →
                     claude bypassPermissions / codex -a never -s workspace-write
                     (sandbox kept), etc.; off → each engine's ask-first default. */}
-                <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--cth-ink-2)' }}>
+                <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 14, fontWeight: 600, lineHeight: '20px', color: 'var(--cth-ink-2)' }}>
                   {t('onboarding.permissions.autonomyHead')}
                 </div>
                 <label style={{
@@ -1119,25 +1119,25 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                     style={{ width: 18, height: 18, flexShrink: 0 }}
                   />
                   <div>
-                    <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, lineHeight: '16px' }}>
+                    <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 14, fontWeight: 600, lineHeight: '20px' }}>
                       {t('onboarding.permissions.autoLabel')}
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--cth-ink-700)' }}>
+                    <div style={{ fontSize: 14, lineHeight: '20px', color: 'var(--cth-ink-700)' }}>
                       {autoMode ? t('onboarding.permissions.autoOn') : t('onboarding.permissions.autoOff')}
                     </div>
                   </div>
                 </label>
-                <div style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>
+                <div style={{ fontSize: 14, lineHeight: '20px', color: 'var(--cth-ink-500)' }}>
                   {t('onboarding.permissions.autoNote')}
                 </div>
 
                 <div style={{ height: 1, background: 'var(--cth-ink-300)', margin: '2px 0' }} />
 
                 {/* RELIABILITY — keeping work firing while you're away. */}
-                <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--cth-ink-2)' }}>
+                <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 14, fontWeight: 600, lineHeight: '20px', color: 'var(--cth-ink-2)' }}>
                   {t('onboarding.permissions.reliabilityHead')}
                 </div>
-                <p style={{ margin: 0, lineHeight: '20px', fontSize: 12, color: 'var(--cth-ink-700)' }}>
+                <p style={{ margin: 0, lineHeight: '20px', fontSize: 14, color: 'var(--cth-ink-700)' }}>
                   {t('onboarding.permissions.reliabilityDesc')}
                 </p>
 
@@ -1204,10 +1204,10 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                   </span>
                   <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div>
-                      <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, lineHeight: '16px', marginBottom: 3 }}>
+                      <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 14, fontWeight: 600, lineHeight: '20px', marginBottom: 3 }}>
                         {t('onboarding.permissions.stayAwake')}
                       </div>
-                      <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--cth-ink-700)' }}>
+                      <div style={{ fontSize: 14, lineHeight: '20px', color: 'var(--cth-ink-700)' }}>
                         {t(`onboarding.permissions.stayAwakeDesc${stayAwakeOs === 'mac' ? 'Mac' : stayAwakeOs === 'windows' ? 'Windows' : 'Linux'}`)}
                       </div>
                     </div>
@@ -1582,10 +1582,10 @@ function ToggleRow({ icon, label, desc, on, tint, edge, onChange }: {
         <Icon name={icon} />
       </span>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, lineHeight: '16px', marginBottom: 3 }}>
+        <span style={{ display: 'block', fontFamily: 'var(--cth-font-ui)', fontSize: 14, fontWeight: 600, lineHeight: '20px', marginBottom: 3 }}>
           {label}
         </span>
-        <span style={{ display: 'block', fontSize: 12, lineHeight: '16px', color: 'var(--cth-ink-700)' }}>
+        <span style={{ display: 'block', fontSize: 14, lineHeight: '20px', color: 'var(--cth-ink-700)' }}>
           {desc}
         </span>
       </span>
