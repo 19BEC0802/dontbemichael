@@ -325,15 +325,19 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
 // the big stage instead of the narrow side panel. Exported for App's
 // TaskDetailOverlay; opened via the store's openTaskDetail from anywhere.
 
-export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose }: {
+export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign, onClose }: {
   task: HiveTask;
   all: HiveTask[];
   assigneeName?: string;
   onMove: (s: Status) => void;
+  /** Out of Done, into To do, with the owner's reason (card-lifecycle.md 10). */
+  onReopen: (reason: string) => void;
   onAssign: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const [reopening, setReopening] = useState(false);
+  const [why, setWhy] = useState('');
   const rtl = useRtl();
   const detailGodName = useResolvedGodName();
   // Every file the Q&A trail names, checked in one go rather than per question.
@@ -383,7 +387,12 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
           {/* Facts */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, auto)', justifyContent: 'space-between', gap: 12, paddingTop: 14 }}>
             <div>{label(t('kanban.status'))}
-              <select value={task.status} onChange={(e) => onMove(e.target.value as Status)} style={{
+              <select value={task.status} onChange={(e) => {
+                const next = e.target.value as Status;
+                // A Done card leaves Done only into To do, with a reason.
+                if (task.status === 'done' && next !== 'done') { setReopening(true); return; }
+                onMove(next);
+              }} style={{
                 height: 30, padding: '0 8px', borderRadius: 'var(--cth-r-md)', border: 'none', cursor: 'pointer',
                 background: col.soft, color: col.text, boxShadow: 'inset 0 0 0 1px var(--cth-line-input)',
                 fontFamily: 'var(--cth-font-ui)', fontSize: 12.5, fontWeight: 600
@@ -391,7 +400,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
                 {/* Blocked means a question waits on Ask me, and Waiting names who the
                     card waits on, so only Michael sets them; a card in one shows it as
                     its current state (ship 2026-10-03). */}
-                {COLUMNS.filter((c) => (c.key !== 'blocked' && c.key !== 'waiting') || task.status === c.key).map((c) => (
+                {COLUMNS.filter((c) => ((c.key !== 'blocked' && c.key !== 'waiting') || task.status === c.key) && !(task.status === 'done' && c.key === 'doing')).map((c) => (
                   <option key={c.key} value={c.key} disabled={c.key === 'blocked' || c.key === 'waiting'}>{t(c.labelKey)}</option>
                 ))}
               </select>
@@ -399,6 +408,18 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
                 <div data-waiting-on style={{ marginTop: 4, fontSize: 11, color: 'var(--cth-amber-text)' }}>
                   {task.waitingOn ? t('kanban.waitingOn', { who: task.waitingOn }) : t('kanban.waitingOnUnknown')}
                   <InfoTip text={t('kanban.waitingOnTitle', { godName: detailGodName })} />
+                </div>
+              )}
+              {task.status === 'done' && reopening && (
+                <div data-reopen style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 260 }}>
+                  <textarea autoFocus rows={2} value={why} onChange={(e) => setWhy(e.target.value)} placeholder={t('kanban.reopenWhy')} aria-label={t('kanban.reopenWhy')} style={{
+                    resize: 'vertical', padding: '6px 8px', borderRadius: 'var(--cth-r-md)', border: 'none', boxShadow: 'inset 0 0 0 1px var(--cth-line-input)',
+                    background: 'var(--cth-card)', color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5
+                  }} />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <PixelButton variant="primary" size="sm" disabled={!why.trim()} onClick={() => { onReopen(why.trim()); setReopening(false); setWhy(''); }}>{t('kanban.reopen')}</PixelButton>
+                    <PixelButton variant="secondary" size="sm" onClick={() => { setReopening(false); setWhy(''); }}>{t('common.cancel')}</PixelButton>
+                  </div>
                 </div>
               )}
               {task.status === 'done' && task.closedBy === 'owner' && (

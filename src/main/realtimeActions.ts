@@ -474,6 +474,8 @@ function execUpdateTask(deps: RealtimeActionDeps, a: Record<string, unknown>): A
   if (status === 'done' && patch.result) {
     if (!deps.hivePatchTask(card.id, { status: 'done' })) return { ok: false, spoken: `I couldn't update "${card.title}" right now.` };
   } else if (status && !deps.hiveMoveTask(card.id, status as HiveTask['status'])) {
+    // Out of Done only from the board, with a reason (card-lifecycle.md 10).
+    if (card.status === 'done' && status !== 'done') return { ok: false, spoken: `"${card.title}" is done. To reopen it, open the card on the board and give a short reason.` };
     return { ok: false, spoken: `I couldn't update "${card.title}" right now.` };
   }
   attribute(deps, 'update_task', card.id, { status: status || card.status });

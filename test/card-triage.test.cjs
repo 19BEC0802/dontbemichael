@@ -58,3 +58,34 @@ test('an answer that leaves part of a bundle open comes back as a new ask on the
   const [m] = answerMessages({ id: 'c1', title: 'T' }, { q: '1. A? 2. B?', a: 'A is yes', raisedBy: 'god' }, { god: 'Michael' });
   assert.match(m.body, /Check each question of the ask against the answer\. If any is left unanswered, first add one new ask on this card holding only those questions and keep the card Blocked, so none is lost\./);
 });
+
+test('a Done card an agent reopens goes back to Done and Michael is told; the owner reopens with a reason', async (t) => {
+  // Value: protects=Done is final except the owner's correction; fails_when=an agent's direct write keeps a reopened card, or an app move out of Done is undone; why_new=owner, 2026-10-11 (Erin reopened a done card); seam=the fleet tick (refreshOwnerRequests)
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-done-guard-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: home, isGod: true });
+  hive.writeTasks([card('d1', { status: 'done', result: 'ok' }), card('d2', { status: 'done', result: 'ok' })]);
+  hive.refreshOwnerRequests(); // seeds what was Done
+  // An agent edits the file directly, as agents do.
+  const file = path.join(hive.root(), 'tasks.json');
+  const ledger = JSON.parse(fs.readFileSync(file, 'utf8'));
+  ledger.tasks[0].status = 'todo';
+  fs.writeFileSync(file, JSON.stringify(ledger));
+  hive.refreshOwnerRequests();
+  assert.equal(hive.tasks().tasks[0].status, 'done', 'put back');
+  const inbox = path.join(hive.root(), 'agents', 'god', 'inbox');
+  const notes = fs.readdirSync(inbox).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(inbox, f), 'utf8')));
+  const back = notes.find((m) => m.subject === 'DONE CARD PUT BACK: card d1');
+  assert.ok(back, 'Michael is told');
+  assert.match(back.body, /only the owner takes a card out of Done\. If the work needs more, file a new card for it/);
+  // The owner's own reopen stands on the next tick.
+  assert.equal(hive.ownerMoveTask('d2', 'todo', 'Marked done by mistake'), true);
+  hive.refreshOwnerRequests();
+  assert.equal(hive.tasks().tasks[1].status, 'todo');
+  // Voice cannot reopen; it points to the board.
+  assert.match(read('src/main/realtimeActions.ts'), /is done\. To reopen it, open the card on the board and give a short reason\./);
+  const kanban = read('src/renderer/src/components/TasksKanban.tsx');
+  assert.match(kanban, /if \(task\.status === 'done' && next !== 'done'\) \{ setReopening\(true\); return; \}/);
+  assert.match(kanban, /disabled=\{!why\.trim\(\)\} onClick=\{\(\) => \{ onReopen\(why\.trim\(\)\);/);
+});

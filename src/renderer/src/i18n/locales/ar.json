@@ -1488,6 +1488,8 @@
     "waitingOn": "بانتظار {{who}}",
     "waitingOnUnknown": "بانتظار شخص ما",
     "nextAt": "التالي: {{when}}",
+    "reopenWhy": "لماذا تعيد فتحها؟",
+    "reopen": "إعادة الفتح إلى المهام",
     "waitingOnTitle": "متوقفة على شخص من خارج المكتب أو زميل. يعيدها {{godName}} إلى قيد العمل عندما يرد.",
     "colBlocked": "معطَّل",
     "colDone": "منجَز",

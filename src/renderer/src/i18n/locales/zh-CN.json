@@ -1488,6 +1488,8 @@
     "waitingOn": "等待 {{who}}",
     "waitingOnUnknown": "等待他人",
     "nextAt": "下一步：{{when}}",
+    "reopenWhy": "为什么重新打开？",
+    "reopen": "重新打开到待办",
     "waitingOnTitle": "在等待办公室外的人或同事。对方回复后，{{godName}} 会把它移回进行中。",
     "colBlocked": "已阻塞",
     "colDone": "已完成",

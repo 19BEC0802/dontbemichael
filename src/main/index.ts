@@ -5154,13 +5154,13 @@ setInterval(() => {
 // The owner's own card changes (card-lifecycle.md section 4): a move, or a
 // close that ends the card as Done by their decision. Cards are never deleted
 // from the UI; Michael is told of each change.
-ipcMain.handle('hive:moveTask', (_evt, id: unknown, status: unknown) => {
+ipcMain.handle('hive:moveTask', (_evt, id: unknown, status: unknown, reason: unknown) => {
   // Not Blocked: that is Michael's, for a question waiting on Ask me.
   if (typeof id !== 'string' || !id || !['todo', 'doing', 'done'].includes(status as string)) {
     return { ok: false, error: 'invalid task move' };
   }
   if (!hive.enabled()) return { ok: false, error: 'hive disabled (no harnessHome)' };
-  return { ok: hive.ownerMoveTask(id, status as HiveTask['status']) };
+  return { ok: hive.ownerMoveTask(id, status as HiveTask['status'], typeof reason === 'string' ? reason : undefined) };
 });
 ipcMain.handle('hive:closeTask', (_evt, id: unknown, reason: unknown) => {
   if (typeof id !== 'string' || !id) return { ok: false, error: 'invalid task id' };

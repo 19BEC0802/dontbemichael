@@ -50,7 +50,7 @@ import { selectBroadcastTargets } from '../shared/broadcast';
 import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
 import {
-  answersWithoutRequest, asksToTidy, blockedWithNothingAsked, closesOwnerQuestion, openOwnerQuestions, openOwnerRequests, ownerChangeNote, ownerConversation,
+  answersWithoutRequest, asksToTidy, blockedWithNothingAsked, closesOwnerQuestion, openOwnerQuestions, openOwnerRequests, ownerChangeNote, reopenedNote, ownerConversation,
   ownerDock, ownerQuestionOf, OWNER_ALIASES, OWNER_NUDGE_EVERY_MS, OWNER_REQUESTS_FLOOR, unmatchedReplyNote,
   type CardLike, type MessageLike, type OpenOwnerQuestion, type OwnerCardChange, type OwnerDock, type OwnerDockState, type OwnerRequest,
   type OwnerRequestFlags, type StuckCard, type ThreadMessage
@@ -2433,6 +2433,8 @@ export class HiveManager {
     const current = this.readJson<{ tasks?: unknown }>(path, { tasks: [] });
     const merged = mergeTaskLedger(current?.tasks, tasks);
     this.writeJson(path, { tasks: merged });
+    // Cards the app itself marks Done count as seen Done.
+    if (this.doneIds) for (const t of merged as HiveTask[]) if (t?.status === 'done' && typeof t.id === 'string') this.doneIds.add(t.id);
     this.appendLog({ kind: 'tasks', count: merged.length });
     this.commit(`hive: tasks (${merged.length})`);
   }
@@ -2462,6 +2464,9 @@ export class HiveManager {
       const settled = withdrawnOnClose(tasks[index].humanQA, new Date().toISOString());
       if (settled) patch = { ...patch, humanQA: settled };
     }
+    // The app moving a Done card on (the owner's reopen, a mailbox that broke
+    // again) is allowed; agents write the file directly and never pass here.
+    if (patch.status && patch.status !== 'done' && tasks[index].status === 'done') this.doneIds?.delete(id);
     next[index] = { ...tasks[index], ...patch, id };
     this.writeTasks(next);
     return true;
@@ -2472,7 +2477,7 @@ export class HiveManager {
    *  is told either way: he orchestrates, the app only records the change. The
    *  owner never moves a card to Blocked: Blocked means a question waits for
    *  them on Ask me, which only Michael raises (ship 2026-10-03). */
-  ownerMoveTask(id: string, status: HiveTask['status']): boolean {
+  ownerMoveTask(id: string, status: HiveTask['status'], reason?: string): boolean {
     // Blocked and Waiting are Michael's: one needs a question on Ask me, the
     // other who the card waits on.
     if (status === 'blocked' || status === 'waiting') return false;
@@ -2481,9 +2486,13 @@ export class HiveManager {
     // A card in triage is Michael's until he releases it; the owner never sees it.
     if (!card || card.status === 'triage') return false;
     if (status === 'done') return card.status === 'done' ? true : this.ownerCloseTask(id);
+    // Out of Done only to correct a card marked done by mistake: into To do,
+    // with the owner's reason (card-lifecycle.md section 10).
+    const why = reason?.trim().slice(0, 500);
+    if (card.status === 'done' && (status !== 'todo' || !why)) return false;
     const from = card.status;
     if (!this.patchTask(id, { status, waitingOn: undefined, closedBy: undefined, closedAt: undefined, closedReason: undefined })) return false;
-    if (from !== status) this.tellGodOwnerChange(card, { kind: 'moved', from, to: status });
+    if (from !== status) this.tellGodOwnerChange(card, { kind: 'moved', from, to: status, ...(why ? { reason: why } : {}) });
     return true;
   }
 
@@ -2621,6 +2630,10 @@ export class HiveManager {
   private ownerRequestsCache: OwnerRequest[] = [];
   /** Blocked cards with nothing asked, as of the last refresh. */
   private stuckCardsCache: StuckCard[] = [];
+  /** Cards the app has seen Done. Only the owner takes one out of Done (through
+   *  ownerMoveTask); one an agent reopens is put back on the fleet tick. Null
+   *  until the first tick seeds it. */
+  private doneIds: Set<string> | null = null;
   /** Owner questions from the dock Michael still owes (michael-replies.md). */
   private ownerQuestionsCache: OpenOwnerQuestion[] = [];
   /** Whether an owner message is one the owner really sent (the dock's check,
@@ -2634,6 +2647,24 @@ export class HiveManager {
    * reply. Run on the fleet tick so a prompt never scans folders; reads his
    * mail from OWNER_REQUESTS_FLOOR on.
    */
+  /** A Done card an agent moved out of Done goes back, and Michael is told
+   *  (owner, 2026-10-11). Seeds on the first tick. True when it put any back. */
+  private putBackReopened(tasks: CardLike[]): boolean {
+    const doneNow = tasks.filter((t) => t?.status === 'done' && typeof t.id === 'string').map((t) => t.id);
+    if (!this.doneIds) { this.doneIds = new Set(doneNow); return false; }
+    const seen = this.doneIds;
+    const back = tasks.filter((t) => !!t && seen.has(t.id) && t.status !== 'done');
+    for (const id of doneNow) seen.add(id);
+    const godId = this.registry().godId;
+    for (const t of back) {
+      if (!this.patchTask(t.id, { status: 'done' })) continue;
+      if (!godId) continue;
+      const note = reopenedNote(t, String(t.status));
+      try { this.send({ to: godId, act: 'inform', subject: note.subject, body: note.body, conversation: cardConversation(t.id) }); } catch { /* the card is back either way */ }
+    }
+    return back.length > 0;
+  }
+
   refreshOwnerRequests(): OwnerRequest[] {
     if (!this.root()) return (this.ownerRequestsCache = []);
     const dir = this.agentDir(this.registry().godId ?? 'god');
@@ -2644,7 +2675,8 @@ export class HiveManager {
     const fromMichael = [...this.ownerMessages(join(dir, 'outbox'), since), ...this.ownerMessages(join(dir, 'outbox', '.sent'), since)];
     const aliases = this.ownerAliases();
     this.ownerQuestionsCache = openOwnerQuestions(toMichael, fromMichael, aliases, this.ownerMessageCheck);
-    const raw = this.tasks() as { tasks?: unknown };
+    let raw = this.tasks() as { tasks?: unknown };
+    if (this.putBackReopened(Array.isArray(raw?.tasks) ? (raw.tasks as CardLike[]) : [])) raw = this.tasks() as { tasks?: unknown };
     const tasks = Array.isArray(raw?.tasks) ? (raw.tasks as CardLike[]) : [];
     // A card that has ended (Done, or closed by the owner) needs no routing,
     // unless the owner answered after it closed: an open question stays on Ask

@@ -224,7 +224,7 @@ export function michaelCardState(createdAt: string, now: number, days: readonly 
  *  conversation. */
 export type OwnerCardChange =
   | { kind: 'closed'; reason?: string }
-  | { kind: 'moved'; from: string; to: string };
+  | { kind: 'moved'; from: string; to: string; reason?: string };
 
 const STATUS_WORDS: Record<string, string> = { triage: 'Triage', todo: 'To do', doing: 'Doing', waiting: 'Waiting', blocked: 'Blocked', done: 'Done' };
 
@@ -241,7 +241,17 @@ export function ownerChangeNote(task: { id: string; title?: string }, change: Ow
   }
   return {
     subject: `OWNER MOVED card ${cardText(task.id, 60)} to ${STATUS_WORDS[change.to] ?? change.to}`,
-    body: `The owner moved ${card} from ${STATUS_WORDS[change.from] ?? change.from} to ${STATUS_WORDS[change.to] ?? change.to}. Take it from there: check who has it and route the work to match.`
+    body: `The owner moved ${card} from ${STATUS_WORDS[change.from] ?? change.from} to ${STATUS_WORDS[change.to] ?? change.to}.${change.reason ? ` Reason: ${cardText(change.reason, 500)}` : ''} Take it from there: check who has it and route the work to match.`
+  };
+}
+
+/** The app put back a Done card an agent reopened (card-lifecycle.md section
+ *  10): only the owner takes a card out of Done. */
+export function reopenedNote(task: { id: string; title?: string }, to: string): { subject: string; body: string } {
+  const card = `card ${cardText(task.id, 60)}${task.title ? ` "${cardText(task.title)}"` : ''}`;
+  return {
+    subject: `DONE CARD PUT BACK: card ${cardText(task.id, 60)}`,
+    body: `${card} was moved out of Done to ${STATUS_WORDS[to] ?? cardText(to, 20)} by an agent, so the app put it back to Done: only the owner takes a card out of Done. If the work needs more, file a new card for it, and tell whoever moved it.`
   };
 }
 
