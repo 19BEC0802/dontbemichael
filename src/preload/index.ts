@@ -1586,6 +1586,8 @@ const api = {
     ipcRenderer.invoke('integrations:templates'),
   integrationsUpsert: (record: IntegrationRecord): Promise<{ ok: true; record: IntegrationRecord } | { ok: false; error: string }> =>
     ipcRenderer.invoke('integrations:upsert', record),
+  integrationsCanStoreSecrets: (): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('integrations:canStoreSecrets'),
   integrationsSetSecret: (req: { id: string; secret: string }): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('integrations:setSecret', req),
   integrationsRemove: (req: { id: string }): Promise<{ ok: boolean }> =>
