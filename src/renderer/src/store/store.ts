@@ -1330,7 +1330,9 @@ export const useStore = create<State>((set, get) => ({
     try { window.localStorage.setItem(LS_FLOOR_VIEW, view); } catch { /* per-Mac nicety only */ }
     set({ floorView: view, lastFixedView: view });
   },
-  openFileTab: (tab) => set((s) => ({ ...openTab(s, { ...tab, openedAt: Date.now() }), floorView: 'file' })),
+  // A file opened from Task detail would land behind that dialog, so the
+  // dialog closes and the owner sees the file.
+  openFileTab: (tab) => set((s) => ({ ...openTab(s, { ...tab, openedAt: Date.now() }), floorView: 'file', taskDetailId: null })),
   selectFileTab: (id) => set((s) => (s.fileTabs.some((f) => f.id === id) ? { activeFileTab: id, floorView: 'file' } : {})),
   closeFileTab: (id) => set((s) => {
     const r = closeTab(s, id);
