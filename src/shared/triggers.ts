@@ -60,10 +60,17 @@ export function isAutoAllowed(mode: TriggerMode, kind: InboundKind): boolean {
 export function classifyInboundKind(text: string): InboundKind {
   const t = text.trim().toLowerCase();
   if (!t) return 'communication';
-  // A leading question with no imperative reads as someone asking, not tasking.
-  const asksOnly = /^(what|how|when|where|who|why|is|are|do|does|did|can|could|status|any)\b/.test(t)
+
+  // "Can you …", "Could you please …", etc. are requests — treat as directive.
+  if (/^(can|could|would|will)\s+you\s+(please\s+)?/.test(t)) return 'directive';
+
+  // Standalone "please" anywhere also signals a request.
+  if (/\bplease\b/.test(t)) return 'directive';
+
+  // A leading question word with no imperative verb reads as asking, not tasking.
+  const asksOnly = /^(what|how|when|where|who|why|is|are|do|does|did|status|any)\b/.test(t)
     && t.endsWith('?')
-    && !/\b(fix|build|ship|deploy|run|write|create|add|remove|delete|refactor|implement|update|merge|revert|start|stop|send|execute|install|configure|test|push|pull|cancel|schedule|enable|disable|launch|terminate|restart|move|copy|publish|release|migrate|upgrade|downgrade|rollback|destroy|drop|reset|init|setup|provision)\b/.test(t);
+    && !/\b(fix|build|ship|deploy|run|write|create|add|remove|delete|refactor|implement|update|merge|revert)\b/.test(t);
   return asksOnly ? 'communication' : 'directive';
 }
 
