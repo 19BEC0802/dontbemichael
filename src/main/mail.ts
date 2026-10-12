@@ -765,7 +765,22 @@ export async function handleMailRequest(
     refs: { forward: !!ref(body.forward), attachFrom: !!attachRefs?.length },
     present: deps.present
   });
-  if (!access.ok) return { status: 403, body: { error: access.reason } };
+  if (!access.ok) {
+    try {
+      deps.audit?.({
+        kind: 'mail-access-denied',
+        agentId,
+        mailbox: mailbox ?? null,
+        operation: op,
+        outcome: 'denied',
+        timestamp: new Date().toISOString()
+      });
+    } catch {
+      // Audit logging must not expose details or alter the refusal.
+    }
+
+    return { status: 403, body: { error: access.reason } };
+  }
   // A Send only grant on the named mailbox (shared-mailboxes.md).
   const grant = sendOnlyGrant(cfg, agentId);
   const underGrant = !!grant && !!mailbox && grant.mailbox === mailbox;
