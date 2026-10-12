@@ -275,6 +275,20 @@
 **Effort:** S
 **Priority:** P3
 
+## Task board (deferred from ship of mit/local-app-version-stuck-ee4e87, 2026-10-12)
+
+### A triage filing the app creates itself, so none is ever overwritten
+
+**What:** Team members send a filing as an outbox message to "triage", and the router creates the file in `triage/` with an exclusive create, instead of each agent writing there itself.
+
+**Why:** The write guard refuses an edit, another agent's name and a file that already exists (`src/main/harnessGuard.ts`, `isPlumbing`), but the check runs before the write, so two writes of the very same filing name at the same instant could still lose the first. Codex adversarial pass 2 found it; the owner accepted the risk for this release (ship D11), since agents do not write the same name twice at once.
+
+**Context:** The router already moves every outbox file (`HiveManager.routeOnce`); open the new file with `wx` there and archive the outbox copy, as messages do. Then the triage folder can be the app's alone in the write guard.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Schedules
 
 ### Starter jobs in an agent's empty Schedules tab
@@ -580,20 +594,6 @@ A live end-to-end run is required before adding an engine: Gemini has never been
 **Priority:** P2
 **Depends on:** None
 
-## Settings
-
-### Log the webhook format editor's parse error
-
-**What:** `console.error` the raw JSON parse message in `src/renderer/src/components/triggers/WebhookSchemaEditor.tsx`, and make `error` a boolean.
-
-**Why:** The owner now sees plain words, but nobody can see where the mistake was.
-
-**Context:** Third review pass, 2026-09-24.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
 ## Release
 
 ### Sign and notarize the Mac build with an Apple Developer ID
@@ -635,6 +635,19 @@ A live end-to-end run is required before adding an engine: Gemini has never been
 **Depends on:** None
 
 ## Completed
+
+### Log the webhook format editor's parse error
+
+**What:** `console.error` the raw JSON parse message in `src/renderer/src/components/triggers/WebhookSchemaEditor.tsx`, and make `error` a boolean.
+
+**Why:** The owner now sees plain words, but nobody can see where the mistake was.
+
+**Context:** Third review pass, 2026-09-24.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+**Completed:** merged 2026-10-12, ships in 0.1.9. A failed save logs the parser's message once with `console.error`, `error` is a yes or no flag, and the owner sees the same words; the check is the pure `schemaParseError` helper with its own test (agentvivekkumar/dontbemichael#141, by piyush12kunjilwar, closes #131).
 
 ### Cap the total size of an Office file's zip entries
 

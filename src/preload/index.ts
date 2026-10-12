@@ -169,7 +169,7 @@ export interface HiveTask {
   title: string;
   description?: string;
   assignee?: string;
-  status: 'todo' | 'doing' | 'waiting' | 'blocked' | 'done';
+  status: 'triage' | 'todo' | 'doing' | 'waiting' | 'blocked' | 'done';
   /** Who a Waiting card waits on (Michael writes it). */
   waitingOn?: string;
   dependsOn: string[];
@@ -1334,8 +1334,8 @@ const api = {
     patch: Partial<Omit<HiveTask, 'id'>>
   ): Promise<{ ok: boolean; landed?: boolean; error?: string }> => ipcRenderer.invoke('hive:patchTask', id, patch),
   /** The owner moves a card; Done is their decision to end it. Michael is told. */
-  hiveMoveTask: (id: string, status: HiveTask['status']): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke('hive:moveTask', id, status),
+  hiveMoveTask: (id: string, status: HiveTask['status'], reason?: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('hive:moveTask', id, status, reason),
   /** The owner ends a card: Done, marked "Closed by owner", never deleted. */
   hiveCloseTask: (id: string, reason?: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('hive:closeTask', id, reason),

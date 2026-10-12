@@ -799,7 +799,9 @@ a small "Fix" coral pill that opens Settings, Connections, Mailboxes.
 
 - **Talk to Michael composer** (MessageQueueComposer for Michael; owner, 2026-09-30: "Brief
   Michael" was unclear): 400 px, 50 px tall,
-  `card`, `line-2` border, `r-2xl`, `shadow-lg`. Attach button (34 × 34, `neutral-soft`,
+  `card`, `line-2` border, `r-2xl`, `shadow-lg`. When Michael's conversation has saved history, a
+  conversation button first (34 × 34, `neutral-soft`, `r-md`, a speech bubble; `ink` fill while the
+  dock is open) opens or closes the dock. Attach button (34 × 34, `neutral-soft`,
   `r-md`), a message box with placeholder "Talk to Michael…", primary button "Send" with
   an arrow. The box grows with the text up to 140 px, then scrolls; the composer grows
   upward from the bar's bottom edge with its buttons on the bottom row, and the chips
@@ -856,13 +858,17 @@ Centered overlay over the stage (never over the right column), 528 px wide, `r-2
   `t-panel` under them at full width, cleaned like an Ask me title (§7.8) (owner,
   2026-10-01: side by side, a long id squeezed the title).
 - Four fields in a row with uppercase micro labels: STATUS (select, `coral` text when
-  Blocked; it offers To do, Doing and Done, and shows Blocked or Waiting only as the card's
+  Blocked; it offers To do, Doing and Done (a Done card offers only To do: choosing it opens a full
+  width row under the facts with a "Why reopen it?" `cth-input` box, primary Reopen and secondary
+  Cancel, and the reason reaches Michael; card-lifecycle.md section 10), and shows Blocked or Waiting only as the card's
   current state, since only Michael sets them; a Waiting card reads "Waiting on {who}"
   under it, `amber` text), ASSIGNEE (person chip), PRIORITY (5 dots,
   filled `ink`), CREATED (mono).
-- NOTES: the card's `description`, else the `notes` agents keep on it (owner, 2026-10-01:
-  the dialog read only `description`, so it was empty on every card); Michael is told to
-  keep them to what the work is and where it stands. No section when a card has none.
+- DESCRIPTION: the card's `description` when a request gave it one; no section otherwise.
+  Cards carry no running notes (owner, 2026-10-11: agents used them as diaries; an agent's
+  activity lives in its conversation and the office log). A To do card with a one off
+  step at a set time shows "Next: Mon, 12 Oct, 8:00 AM" (`nextAt`, local time), on the
+  card under the assignee and in the detail.
   QUESTIONS (the Q and A trail; an open question sits
   in a coral soft box with a "Waiting for you" pill; answered ones are plain), DEPENDENCIES
   (rows with a link icon, mono id, title, "waits on this").
@@ -901,7 +907,8 @@ Centered overlay over the stage (never over the right column), 528 px wide, `r-2
 - Closing time is not a dialog (owner, 2026-09-30): quitting with people at work starts it
   at once, and a closing bar takes the bottom bar's place: `card`, `r-xl`, `shadow-lg`, the
   moon mark, "Closing time" and the counter strip ("5 / 8 workers confirmed"), a progress
-  line, "3 still working" opening the rows (Remind, Close without them), "Cancel and go back
+  line, "3 still working" as a 24 px `indigo-soft` pill with a chevron (up to open, down while open)
+  inside a 28 px target, opening the rows (Remind, Close without them; one scroller, 300 px), "Cancel and go back
   to work", and "Force quit now", which asks once because unsaved work is lost.
 - A person who has gone home at closing time (confirmed, or closed without) is gone from the
   floor (owner, 2026-10-03; `docs/designs/closing-floor.md`): their desk goes dark and they

@@ -113,7 +113,8 @@ function FileTabBody({ tab }: { tab: FileTab }) {
         {read.status !== 'not found' && canOpenInApp && <PixelButton variant="secondary" size="sm" onClick={openInApp}>{t('fileTab.openInApp')}</PixelButton>}
         {read.status !== 'not found' && <PixelButton variant="secondary" size="sm" onClick={reveal}>{revealLabel}</PixelButton>}
       </div>
-      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: read.status === 'ok' && read.kind === 'markdown' && read.size > 0 ? 0 : '16px 20px' }}>
+      {/* cth-file-tab lifts the Markdown reading cap: a report fills the pane. */}
+      <div ref={scroller} className="cth-file-tab" style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: read.status === 'ok' && read.kind === 'markdown' && read.size > 0 ? 0 : '16px 20px' }}>
         {body}
       </div>
     </div>

@@ -54,9 +54,28 @@ test('the chip replaces exactly the path, from the source, in text, code spans a
   assert.deepEqual(out, ['/Users/me/IT/report.md', 'Sales/F.xlsx', '/Users/me/b.json']);
   const para = tree.children[0].children;
   assert.equal(para[0].value, 'Full report: ');
-  assert.equal(para[2].value, '. Also ', 'the sentence period stays text');
+  assert.equal(para[1].children[1].value, '.', 'the sentence period stays text, kept with its chip');
+  assert.equal(para[2].value, ' Also ');
   assert.deepEqual(chips('Saved to C:\\Reports\\_q3.md today').out, ['C:\\Reports\\_q3.md'], 'Windows path read from the source, backslash kept');
   assert.deepEqual(chips('```\n/Users/me/skip.md\n```').out, [], 'code fences stay code');
+  // 2026-10-11: Michael wrote **... 10 Oct (`/path/report.md`).** and the chip
+  // wrapped to its own line, stranding "(" above it and ")." below it.
+  const wrapped = chips('**Covered 7 to 10 Oct (`/Users/me/IT/report.md`).** Next week too.').tree.children[0].children[0].children;
+  assert.equal(wrapped[0].value, 'Covered 7 to 10 Oct ', 'the "(" before a chip goes');
+  assert.equal(wrapped[1].data.hName, 'span', 'the chip and its period break as one');
+  assert.equal(wrapped[1].children[0].data.hName, 'cth-file');
+  assert.equal(wrapped[1].children[1].value, '.', 'the ")" goes, the period stays with the chip');
+  assert.equal(wrapped.length, 2);
+  const aside = chips('See (in /Users/me/a.md) for more').tree.children[0].children;
+  assert.equal(aside[0].value, 'See (in ', 'parentheses that hold more than the path stay');
+  assert.equal(aside[2].value, ') for more');
+  // Value (extension): protects=only a pair hugging the chip goes, at any place in a line and around a linked file; fails_when=one sided parens are stripped, a leading space is left, or link chips are skipped; why_new=one middle of line case was checked; seam=none
+  const open = chips('Open (`/Users/me/a.md` today)').tree.children[0].children;
+  assert.deepEqual([open[0].value, open[1].data.hName, open[2].value], ['Open (', 'cth-file', ' today)'], 'a "(" with no ")" right after the chip stays');
+  const first = chips('(`/Users/me/a.md`) first').tree.children[0].children;
+  assert.deepEqual([first.length, first[0].data.hName, first[1].value], [2, 'cth-file', ' first'], 'a chip opening the line keeps no stray space');
+  const linked = chips('See ([data](/Users/me/b.json)), ok').tree.children[0].children;
+  assert.deepEqual([linked[0].value, linked[1].children[0].data.hName, linked[1].children[1].value, linked[2].value], ['See ', 'cth-file', ',', ' ok'], 'a linked file sheds its parentheses too');
 });
 
 test('main reads only readable kinds inside the folders, capped, by canonical path (R3)', async (t) => {
@@ -139,6 +158,8 @@ test('wiring: tabs after Who talks to whom, never saved, Ask me beside a file, w
   assert.match(app, /const columnShown = columnOpen && \(floorView === 'office' \|\| floorView === 'file'\);/);
   assert.match(app, /display: floorView === 'office' \|\| floorView === 'file' \? 'flex' : 'none'/, 'the column style too, not only columnShown');
   assert.match(app, /\{floorView === 'file' && <FileTabView \/>\}/);
+  assert.match(read('src/renderer/src/components/FileTabView.tsx'), /<div ref=\{scroller\} className="cth-file-tab"/);
+  assert.match(read('src/renderer/src/design/global.css'), /\.cth-file-tab \.cth-md-preview \{ max-width: none; \}/, 'a report fills the file tab, no 72ch cap');
   const bar = read('src/renderer/src/shell/TopBar.tsx');
   assert.match(bar, /\{tab\('graph', t\('floorView\.graph'\)\)\}\n[\s\S]*?\{fileTabs\.map/, 'file tabs come after Who talks to whom');
   assert.match(bar, /aria-label=\{t\('fileTab\.close', \{ name: f\.title \}\)\}/, 'close is its own labelled button');

@@ -13,7 +13,7 @@ import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 export { openQuestion, openQuestions, waitsOnHuman, parseTasks, type HiveTask, type HumanQA } from './hiveTasks';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
-import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus } from './hiveTasks';
+import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus, nextAtLabel } from './hiveTasks';
 import { FileText, useAskFileChecks } from './FileChip';
 import { blockedWithNothingAsked, michaelCardState, type WorkHours } from '@shared/ownerRequests';
 import { isAnswered, isWithdrawn } from '@shared/askMeRouting';
@@ -215,8 +215,9 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
   onOpen: () => void;
   onDismiss: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [hover, setHover] = useState(false);
+  const next = nextAtLabel(task.nextAt, i18n.language);
   return (
     <div style={{ position: 'relative', display: 'flex' }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <button
@@ -241,6 +242,10 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
             <AgentAvatar id={task.assignee} name={assigneeName} size={17} />
             {assigneeName}
           </span>
+        )}
+        {/* When its one off next step is due, in the owner's local time (house rule 8). */}
+        {!done && next && (
+          <span data-next-at style={{ fontSize: 11, fontWeight: 500, color: 'var(--cth-ink-2)' }}>{t('kanban.nextAt', { when: next })}</span>
         )}
         {/* What came of it, first line of Michael's result (issue 51); a card
             the owner closed says so below instead. */}
@@ -321,15 +326,20 @@ function TaskCard({ task, done, assigneeName, withGod, nothingAsked, godName, on
 // the big stage instead of the narrow side panel. Exported for App's
 // TaskDetailOverlay; opened via the store's openTaskDetail from anywhere.
 
-export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose }: {
+export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign, onClose }: {
   task: HiveTask;
   all: HiveTask[];
   assigneeName?: string;
   onMove: (s: Status) => void;
+  /** Out of Done, into To do, with the owner's reason (card-lifecycle.md 10). */
+  onReopen: (reason: string) => void;
   onAssign: () => void;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [reopening, setReopening] = useState(false);
+  const [why, setWhy] = useState('');
+  const next = nextAtLabel(task.nextAt, i18n.language);
   const rtl = useRtl();
   const detailGodName = useResolvedGodName();
   // Every file the Q&A trail names, checked in one go rather than per question.
@@ -379,7 +389,12 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
           {/* Facts */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, auto)', justifyContent: 'space-between', gap: 12, paddingTop: 14 }}>
             <div>{label(t('kanban.status'))}
-              <select value={task.status} onChange={(e) => onMove(e.target.value as Status)} style={{
+              <select value={task.status} onChange={(e) => {
+                const next = e.target.value as Status;
+                // A Done card leaves Done only into To do, with a reason.
+                if (task.status === 'done' && next !== 'done') { setReopening(true); return; }
+                onMove(next);
+              }} style={{
                 height: 30, padding: '0 8px', borderRadius: 'var(--cth-r-md)', border: 'none', cursor: 'pointer',
                 background: col.soft, color: col.text, boxShadow: 'inset 0 0 0 1px var(--cth-line-input)',
                 fontFamily: 'var(--cth-font-ui)', fontSize: 12.5, fontWeight: 600
@@ -387,7 +402,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
                 {/* Blocked means a question waits on Ask me, and Waiting names who the
                     card waits on, so only Michael sets them; a card in one shows it as
                     its current state (ship 2026-10-03). */}
-                {COLUMNS.filter((c) => (c.key !== 'blocked' && c.key !== 'waiting') || task.status === c.key).map((c) => (
+                {COLUMNS.filter((c) => ((c.key !== 'blocked' && c.key !== 'waiting') || task.status === c.key) && !(task.status === 'done' && c.key === 'doing')).map((c) => (
                   <option key={c.key} value={c.key} disabled={c.key === 'blocked' || c.key === 'waiting'}>{t(c.labelKey)}</option>
                 ))}
               </select>
@@ -433,15 +448,34 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
             </div>
           )}
 
-          {/* What the card is for, and the notes kept on it, line by line;
-              nothing for either when the card has none. */}
-          {([['description', task.description], ['notes', task.notes]] as const).map(([key, text]) => text?.trim() ? (
-            <div key={key}>{label(t(`kanban.${key}`))}
-              <div style={{ fontSize: 12.5, lineHeight: '19px', color: 'var(--cth-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} dir={rtl ? 'auto' : undefined}>
-                {text.trim()}
+          {/* Out of Done only into To do, with a reason (card-lifecycle.md 10): its own
+              row, so the four facts above keep their place. */}
+          {task.status === 'done' && reopening && (
+            <div data-reopen style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <textarea className="cth-input" autoFocus rows={2} value={why} onChange={(e) => setWhy(e.target.value)} placeholder={t('kanban.reopenWhy')} aria-label={t('kanban.reopenWhy')} style={{
+                resize: 'vertical', padding: '6px 8px', border: 'none', outline: 'none',
+                background: 'var(--cth-card)', color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5
+              }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <PixelButton variant="primary" size="sm" disabled={!why.trim()} onClick={() => { onReopen(why.trim()); setReopening(false); setWhy(''); }}>{t('kanban.reopen')}</PixelButton>
+                <PixelButton variant="secondary" size="sm" onClick={() => { setReopening(false); setWhy(''); }}>{t('common.cancel')}</PixelButton>
               </div>
             </div>
-          ) : null)}
+          )}
+
+          {/* What the card is for, when a request gave it one. No running notes:
+              an agent's activity lives in its conversation and the office log
+              (owner, 2026-10-11). */}
+          {task.description?.trim() && (
+            <div>{label(t('kanban.description'))}
+              <div style={{ fontSize: 12.5, lineHeight: '19px', color: 'var(--cth-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} dir={rtl ? 'auto' : undefined}>
+                {task.description.trim()}
+              </div>
+            </div>
+          )}
+          {task.status !== 'done' && next && (
+            <div data-next-at style={{ fontSize: 12.5, color: 'var(--cth-ink)' }}>{t('kanban.nextAt', { when: next })}</div>
+          )}
 
           {/* The owner Q&A trail: every decision documented on the card. */}
           {(task.humanQA?.length ?? 0) > 0 && (

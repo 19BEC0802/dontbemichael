@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
+import { ownerLedger } from '../shared/taskLedger';
 import { execFile, spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
@@ -2774,7 +2775,8 @@ function lookupWebhookStatus(token: string): WebhookTaskStatus | null {
     const have = Buffer.from(h);
     // Both are fixed-length sha-256 hex; compare in constant time defensively.
     if (have.length === wanted.length && timingSafeEqual(have, wanted)) {
-      return { status: t.status, title: t.title, result: t.result };
+      // Triage is internal: to the caller the card is simply not started yet.
+      return { status: t.status === 'triage' ? 'todo' : t.status, title: t.title, result: t.result };
     }
   }
   return null;
@@ -3962,6 +3964,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // `cwd` echoes back the TILDE-EXPANDED absolute path so the renderer's agent
   // record matches what the registry and the PTY actually used.
   if (res.ok && opts.hive?.id) tellOfficeOpen(opts.hive.id);
+  if (res.ok && opts.hive?.id && hive.enabled()) {
+    try { hive.tellHouseRules(opts.hive.id, didResume); } catch (e) { console.error('[house-rules]', e); }
+  }
   if (res.ok && opts.hive?.isGod) { standupOnOfficeOpen(); catchUpOwnerAnswers(); }
   return { ...res, cwd: opts.cwd, ...(worktreePath ? { worktreePath } : {}), ...(resumeNotFound ? { resumeNotFound: true } : {}), ...(didResume ? { resumed: true } : {}), ...(seedPrompt ? { seedPrompt } : {}) };
 }
@@ -4287,6 +4292,12 @@ ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
         // renameSync, which throws EXDEV across volumes). We COPY, never delete —
         // the old folder stays as a safety net the user removes manually.
         cpSync(src, join(newHome, sub), { recursive: true, force: true, dereference: false });
+      }
+      // The board guard and the house rules each agent has heard ride along,
+      // so a move neither resends old reminders nor forgets a Done card.
+      for (const f of ['card-guard.json', 'house-rules-seen.json']) {
+        const src = join(privateRoot(oldHome), f);
+        if (existsSync(src)) { mkdirSync(privateRoot(newHome), { recursive: true }); cpSync(src, join(privateRoot(newHome), f), { force: true }); }
       }
     } catch (e) {
       // Copy failed: recover IN PLACE against the unchanged old home (config never
@@ -4642,7 +4653,8 @@ ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
   return hive.setAgentHold(id, hold);
 });
 ipcMain.handle('hive:board', () => hive.board());
-ipcMain.handle('hive:tasks', () => hive.tasks());
+// The owner's surfaces never see a card still in triage (card-lifecycle.md 10).
+ipcMain.handle('hive:tasks', () => ownerLedger(hive.tasks()));
 ipcMain.handle('hive:log', (_evt, n: unknown, kind: unknown, since: unknown) => hive.logTail(typeof n === 'number' ? n : 200, typeof kind === 'string' ? kind : undefined, typeof since === 'number' ? since : undefined));
 ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? hive.memory(id) : ''));
 ipcMain.handle('hive:memoryDetail', (_evt, id: unknown) => (typeof id === 'string' ? hive.memoryDetail(id) : { index: '', waiting: 0 }));
@@ -5149,13 +5161,13 @@ setInterval(() => {
 // The owner's own card changes (card-lifecycle.md section 4): a move, or a
 // close that ends the card as Done by their decision. Cards are never deleted
 // from the UI; Michael is told of each change.
-ipcMain.handle('hive:moveTask', (_evt, id: unknown, status: unknown) => {
+ipcMain.handle('hive:moveTask', (_evt, id: unknown, status: unknown, reason: unknown) => {
   // Not Blocked: that is Michael's, for a question waiting on Ask me.
   if (typeof id !== 'string' || !id || !['todo', 'doing', 'done'].includes(status as string)) {
     return { ok: false, error: 'invalid task move' };
   }
   if (!hive.enabled()) return { ok: false, error: 'hive disabled (no harnessHome)' };
-  return { ok: hive.ownerMoveTask(id, status as HiveTask['status']) };
+  return { ok: hive.ownerMoveTask(id, status as HiveTask['status'], typeof reason === 'string' ? reason : undefined) };
 });
 ipcMain.handle('hive:closeTask', (_evt, id: unknown, reason: unknown) => {
   if (typeof id !== 'string' || !id) return { ok: false, error: 'invalid task id' };
@@ -6028,7 +6040,9 @@ ipcMain.handle('hive:textSearch', (_evt, query: unknown) => {
   for (const { path, source } of targets) {
     if (!existsSync(path)) continue;
     let hits = 0;
-    for (const line of readFileSync(path, 'utf8').split('\n')) {
+    // The owner's search never shows a card still in triage (card-lifecycle.md 10).
+    const text = source === 'tasks.json' ? JSON.stringify(ownerLedger(hive.tasks()), null, 2) : readFileSync(path, 'utf8');
+    for (const line of text.split('\n')) {
       if (hits >= 3) break;
       const idx = line.toLowerCase().indexOf(q);
       if (idx === -1) continue;
@@ -6463,7 +6477,7 @@ const completionWatcher = initCompletionWatcher({
 registerRealtimeActionIpc({
   hiveEnabled: () => hive.enabled(),
   hiveSend: (partial, from) => hive.send(partial, from),
-  hiveTasks: () => hive.tasks(),
+  hiveTasks: () => ownerLedger(hive.tasks()),
   hiveAddTask: (task) => hive.addTask(task as HiveTask),
   hivePatchTask: (id, patch) => hive.patchTask(id, patch as Partial<Omit<HiveTask, 'id'>>),
   hiveMoveTask: (id, status) => hive.ownerMoveTask(id, status),
@@ -6549,7 +6563,7 @@ completionWatcher.onCompletion((evt) => { try { liveWebContents()?.send('realtim
 const floorWatcher = new RealtimeFloorWatcher({
   enabled: () => hive.enabled(),
   registry: () => hive.registry(),
-  tasks: () => hive.tasks(),
+  tasks: () => ownerLedger(hive.tasks()),
   ptys: () => ptyManager.list().map((p) => ({ id: p.id, lastOutputAt: p.lastOutputAt })),
   push: (text) => { try { liveWebContents()?.send('realtime:floorDelta', { text }); } catch { /* window gone */ } }
 });

@@ -70,7 +70,9 @@ hive/
   PROTOCOL.md            # the agent-facing contract (how to remember + message)
   registry.json          # roster: every agent, role, capabilities, status, seat
   board.md               # shared blackboard / co-authored plans
-  tasks.json             # task ledger (id, assignee, spec, status, result ref)
+  tasks.json             # task ledger (id, assignee, spec, status, result ref); god writes it alone
+  triage/                # one file per team member filing, written once; god works them oldest first
+  .office-id             # random id the app's board guard keys its private state on
   log.jsonl              # append-only event feed (drives the UI activity stream)
   agents/<agentId>/
     identity.md          # who am I, my role, my capabilities  (read at start)
@@ -157,7 +159,9 @@ michael`, flagged `isGod`. It is an ordinary `claude` process — the *intellige
   task spec), escalate only critical ones. This is "god mode."
 - **Blackboard scribe**: the single writer of `board.md`, so shared plans never
   conflict.
-- **Task ledger** (`tasks.json`): assign, track, retry, checkpoint.
+- **Task ledger** (`tasks.json`): assign, track, retry, checkpoint. The single
+  writer of `tasks.json` too: team members file what they need in `triage/` and
+  tell god when their work moves (docs/designs/card-lifecycle.md section 10).
 
 Its escalation policy (what counts as "critical") lives in its system prompt and
 is the primary control surface — tune the prompt, not the code.
