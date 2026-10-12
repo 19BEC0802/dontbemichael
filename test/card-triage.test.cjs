@@ -471,3 +471,28 @@ test('a reminder fires again when its card comes back to To do, and the owner dr
   const d = hive.tasks().tasks[0];
   assert.deepEqual([d.status, d.result, d.humanQA?.[0]?.a, d.closedBy], ['done', 'sent to Acme', 'Acme', undefined]);
 });
+
+test('a put back trusts only the saved Done card: history stays, a new open question is added, a smuggled field goes; a reopen clears the result', async (t) => {
+  // Value: protects=the audit trail of finished work and a stale result never reported as current; fails_when=the live question list or extra fields of a rogue reopen survive, an app write leaves the open card copy stale, or the owner's reopen keeps the old result; why_new=Codex adversarial pass 3; seam=restoreDone, writeTasks and ownerMoveTask
+  const { restoreDone } = loadTs('src/shared/cardGuards.ts');
+  const was = card('d', { status: 'done', result: 'ok', humanQA: [{ q: 'Which?', a: 'Acme' }] });
+  const live = { ...was, status: 'doing', webhook: { tokenHash: 'forged' }, humanQA: [{ q: 'Which?', a: 'Changed' }, { q: 'New one?', raisedBy: 'god' }] };
+  const back = restoreDone(was, live);
+  assert.deepEqual(back.humanQA.map((e) => [e.q, e.a]), [['Which?', 'Acme'], ['New one?', undefined]]);
+  assert.equal(back.status, 'done');
+  assert.ok('webhook' in back && back.webhook === undefined, 'dropped when written');
+
+  const { hive } = await officeWith(t, 'md-pass3-');
+  hive.writeTasks([card('d', { status: 'done', result: 'ok' })]);
+  hive.refreshOwnerRequests();
+  setOnDisk(hive, (tasks) => { tasks[0].status = 'doing'; tasks[0].webhook = { tokenHash: 'forged' }; });
+  hive.refreshOwnerRequests();
+  assert.equal(hive.tasks().tasks[0].webhook, undefined, 'the smuggled field is gone from the board');
+  assert.equal(hive.ownerMoveTask('d', 'todo', 'Marked done by mistake'), true);
+  assert.equal(hive.tasks().tasks[0].result, undefined, 'no stale result while it is open');
+  // An app write refreshes the open card's copy: a later move into Triage brings back this one.
+  hive.patchTask('d', { title: 'Renamed by the app' });
+  setOnDisk(hive, (tasks) => { tasks[0].status = 'triage'; tasks[0].title = 'x'; });
+  hive.refreshOwnerRequests();
+  assert.deepEqual([hive.tasks().tasks[0].status, hive.tasks().tasks[0].title], ['todo', 'Renamed by the app']);
+});

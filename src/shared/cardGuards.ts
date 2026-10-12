@@ -84,6 +84,20 @@ export function isNextAt(v: unknown): v is string {
   return typeof v === 'string' && ISO_WITH_OFFSET.test(v) && !Number.isNaN(Date.parse(v));
 }
 
+/** A Done card put back as it was Done (D3). Its question history is the
+ *  saved one; only a question asked since, still open and new by its wording,
+ *  is added after it, so the owner still sees it. A field the reopen added is
+ *  dropped (undefined is not written). */
+export function restoreDone(was: GuardCard, live: GuardCard): GuardCard {
+  const kept = Array.isArray(was.humanQA) ? was.humanQA : [];
+  const known = new Set(kept.map((e) => (e && typeof e === 'object' ? (e as { q?: unknown }).q : undefined)));
+  const liveQA = Array.isArray(live.humanQA) ? live.humanQA : [];
+  const added = openAskIndexes(liveQA as never).map((i) => liveQA[i]).filter((e) => !known.has((e as { q?: unknown }).q));
+  const dropped: Record<string, undefined> = {};
+  for (const k of Object.keys(live)) if (!(k in was)) dropped[k] = undefined;
+  return { ...dropped, ...was, ...(kept.length || added.length ? { humanQA: [...kept, ...added] } : {}), id: was.id, status: 'done' };
+}
+
 /** Where an open card last stood outside Triage, the old record being a bare status. */
 const placedOf = (id: string, p: Placed | string | undefined): Placed | undefined => (typeof p === 'string' ? { id, status: p } : p);
 
@@ -96,10 +110,8 @@ export function guardCards(raw: unknown[], before: GuardState): GuardResult {
   const now: GuardCard[] = tasks.map((t) => {
     const was = before.done[t.id];
     if (was && t.status !== 'done') {
-      reopened.push({ card: t, to: String(t.status ?? ''), openAsk: openAskIndexes(t.humanQA as never).length > 0 });
-      // Back as it was Done, so nothing changed with the reopen stands; only a
-      // question asked meanwhile stays, for the owner to see (D3).
-      fixes[t.id] = { ...was, ...(Array.isArray(t.humanQA) ? { humanQA: t.humanQA } : {}), status: 'done' };
+      fixes[t.id] = restoreDone(was, t);
+      reopened.push({ card: t, to: String(t.status ?? ''), openAsk: openAskIndexes(fixes[t.id].humanQA as never).length > 0 });
       return { ...t, ...fixes[t.id] };
     }
     const placed = placedOf(t.id, before.placed[t.id]);

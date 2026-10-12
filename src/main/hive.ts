@@ -68,7 +68,7 @@ import {
   privateOwnerSentDir, privateOwnerStatePath, privateRoot
 } from '../shared/agentPrivatePaths';
 import { HOUSE_RULES_CHANGED_SUBJECT, houseRulesNoticeBody, houseRulesToTell } from '../shared/houseRulesNotice';
-import { applyGuardFixes, dueReminders, guardSignature, emptyGuardState, guardCards, type GuardCard, type GuardState } from '../shared/cardGuards';
+import { applyGuardFixes, restoreDone, dueReminders, guardSignature, emptyGuardState, guardCards, type GuardCard, type GuardState } from '../shared/cardGuards';
 import { sleepSync } from './atomicFile';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
@@ -2446,8 +2446,14 @@ export class HiveManager {
     const merged = mergeTaskLedger(current?.tasks, tasks);
     this.writeJson(path, { tasks: merged });
     // Cards the app itself marks Done count as seen Done.
+    // What the app writes is what the guard knows: Done cards and where each
+    // open card stands, so a restore never brings back a copy from before it.
     const guard = this.guardState();
-    for (const t of merged as HiveTask[]) if (t?.status === 'done' && typeof t.id === 'string') guard.done[t.id] = t as unknown as GuardCard;
+    for (const t of merged as HiveTask[]) {
+      if (!t || typeof t.id !== 'string') continue;
+      if (t.status === 'done') { guard.done[t.id] = t as unknown as GuardCard; delete guard.placed[t.id]; }
+      else if (t.status && t.status !== 'triage') guard.placed[t.id] = { ...(t as unknown as GuardCard), status: t.status };
+    }
     this.saveGuard();
     this.appendLog({ kind: 'tasks', count: merged.length });
     this.commit(`hive: tasks (${merged.length})`);
@@ -2508,7 +2514,7 @@ export class HiveManager {
       // An agent just moved it out of Done: put it back, not the owner's close.
       // As it was Done, like the tick's put back: only a question asked meanwhile stays.
       const was = this.guardState().done[id];
-      if (was) return this.patchTask(id, { ...(was as unknown as Partial<HiveTask>), ...(Array.isArray(card.humanQA) ? { humanQA: card.humanQA } : {}), status: 'done' });
+      if (was) return this.patchTask(id, restoreDone(was, card as unknown as GuardCard) as unknown as Partial<HiveTask>);
       return this.ownerCloseTask(id);
     }
     // Out of Done only to correct a card marked done by mistake: into To do,
@@ -2519,7 +2525,9 @@ export class HiveManager {
     const wasDone = card.status === 'done' || !!this.guardState().done[id];
     if (wasDone && (status !== 'todo' || !why)) return false;
     const from = wasDone ? 'done' : card.status;
-    if (!this.patchTask(id, { status, waitingOn: undefined, closedBy: undefined, closedAt: undefined, closedReason: undefined })) return false;
+    // A card out of Done no longer has a result: none of it is sent or shown
+    // as the outcome until the work finishes again.
+    if (!this.patchTask(id, { status, waitingOn: undefined, closedBy: undefined, closedAt: undefined, closedReason: undefined, ...(wasDone ? { result: undefined } : {}) })) return false;
     if (wasDone && card.status !== 'done') { delete this.guardState().done[id]; this.saveGuard(); }
     if (from !== status) this.tellGodOwnerChange(card, { kind: 'moved', from, to: status, ...(why ? { reason: why } : {}) });
     return true;
@@ -2784,11 +2792,17 @@ export class HiveManager {
       const a = t.assignee ? reg.agents[t.assignee] : undefined;
       return a && !a.archived && !a.isAssistant ? t.assignee! : null;
     };
+    // Record each reminder as sent before it goes out, so a crash between the
+    // two never sends it twice; a lost one is still caught by the backstop.
+    const prev = this.guard.reminders;
+    if (!godId) for (const t of reminders.backstop) reminders.reminders[t.id] = { ...reminders.reminders[t.id], backstopSentAt: undefined };
+    this.guard.reminders = reminders.reminders;
+    this.saveGuard();
     for (const t of reminders.due) {
       const person = personOf(t);
       const to = person ?? godId;
       const unsent = (): void => {
-        if (this.guard?.reminders[t.id]) reminders.reminders[t.id] = this.guard.reminders[t.id];
+        if (prev[t.id]) reminders.reminders[t.id] = prev[t.id];
         else delete reminders.reminders[t.id];
       };
       if (!to) { unsent(); continue; } // nobody to tell yet: tried again next tick
@@ -2801,9 +2815,7 @@ export class HiveManager {
         }
       } catch { unsent(); }
     }
-    this.guard.reminders = reminders.reminders;
     if (godId) for (const t of reminders.backstop) tell(nextStepBackstopNote(t, reminders.reminders[t.id]?.to), t.id);
-    else for (const t of reminders.backstop) reminders.reminders[t.id] = { ...reminders.reminders[t.id], backstopSentAt: undefined };
     if (sent) this.commit(`hive: board guard (${sent} message${sent === 1 ? '' : 's'})`);
     this.saveGuard();
   }
