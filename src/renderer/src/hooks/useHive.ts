@@ -28,6 +28,7 @@ import { ACTION_AT_PROMPT, ACTION_CLOCKING_IN } from '@/store/store';
 import { ENGINE_READY_EVENT } from '@/shell/useNeedsYou';
 import { seedStarterJobs } from '@/shell/seedStarterJobs';
 import { PromptSubmits, confirmSubmit } from '../../../shared/submitConfirm';
+import { isTerminalPrompt } from '../../../shared/hookEvents';
 
 const GOD_ID = 'god';
 /** Accent palette for MAIN-spawned (voice-hired) agents — picked deterministically
@@ -740,17 +741,9 @@ export function useHive(config: HarnessConfig | null): void {
         //      input") — i.e. the agent answered and has nothing queued.
         // Only (1) is a real "needs you". Treating (2) as blocked made Michael
         // march to the door with a red "!" right after finishing, so detect the
-        // idle case and let him linger on the floor instead.
-        const msg = (e.message ?? '').toLowerCase();
-        const idleWaiting = !msg
-          || msg.includes('waiting for your input')
-          || msg.includes('is idle')
-          || msg.includes('waiting for input');
-        const needsHuman = msg.includes('permission')
-          || msg.includes('approve')
-          || msg.includes('confirm')
-          || msg.includes('needs your');
-        if (needsHuman && !idleWaiting) {
+        // idle case and let him linger on the floor instead. One rule shared
+        // with main (isTerminalPrompt): prompt types or permission messages.
+        if (isTerminalPrompt(e)) {
           // Only the god agent escalates to the human; sub-agents are autonomous
           // and read as "waiting" (parked on god, not on you).
           updateAgent(e.agentId, self.isGod ? { status: 'blocked' } : { status: 'waiting', action: ACTION_AT_PROMPT, actionDetail: undefined, actionAt: Date.now() });

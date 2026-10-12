@@ -378,6 +378,7 @@ agent idle, with no coral bar and Talk 1:1 not leading. Found by the red team in
 review of feat/per-agent-schedules (2026-09-25); the owner chose a follow-up.
 
 **Priority:** P2
+**Completed:** `isTerminalPrompt` moved to `src/shared/hookEvents.ts` and consumed in `useHive.ts`'s Notification hook handler alongside `notificationType`.
 
 ### Block mouse and focus reports in a watch-only terminal
 
