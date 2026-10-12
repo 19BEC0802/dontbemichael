@@ -169,7 +169,7 @@ export interface HiveTask {
   title: string;
   description?: string;
   assignee?: string;
-  status: 'todo' | 'doing' | 'waiting' | 'blocked' | 'done';
+  status: 'triage' | 'todo' | 'doing' | 'waiting' | 'blocked' | 'done';
   /** Who a Waiting card waits on (Michael writes it). */
   waitingOn?: string;
   dependsOn: string[];

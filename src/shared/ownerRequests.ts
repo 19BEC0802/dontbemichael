@@ -226,7 +226,7 @@ export type OwnerCardChange =
   | { kind: 'closed'; reason?: string }
   | { kind: 'moved'; from: string; to: string };
 
-const STATUS_WORDS: Record<string, string> = { todo: 'To do', doing: 'Doing', blocked: 'Blocked', done: 'Done' };
+const STATUS_WORDS: Record<string, string> = { triage: 'Triage', todo: 'To do', doing: 'Doing', waiting: 'Waiting', blocked: 'Blocked', done: 'Done' };
 
 export function ownerChangeNote(task: { id: string; title?: string }, change: OwnerCardChange): { subject: string; body: string } {
   const card = `card ${cardText(task.id, 60)}${task.title ? ` "${cardText(task.title)}"` : ''}`;
@@ -247,7 +247,7 @@ export function ownerChangeNote(task: { id: string; title?: string }, change: Ow
 
 /** A card Michael has to tidy: in Blocked with nothing asked (no `issue`), or
  *  holding an open question the wrong way (`issue`). */
-export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'ask-off-blocked' | 'several-asks' }
+export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'triage' | 'ask-off-blocked' | 'several-asks' }
 
 const stuckOf = (t: CardLike, issue?: StuckCard['issue']): StuckCard => ({
   id: t.id,
@@ -281,6 +281,9 @@ export function asksToTidy(tasks: CardLike[]): StuckCard[] {
   const out: StuckCard[] = [];
   for (const t of tasks) {
     if (!t) continue;
+    // Filed by a team member, waiting for Michael to check and release it
+    // (card-lifecycle.md section 10); its ask is not on Ask me yet.
+    if (t.status === 'triage') { out.push(stuckOf(t, 'triage')); continue; }
     const open = openAskIndexes(t.humanQA as never).length;
     if (!open) continue;
     if (t.status !== 'blocked') out.push(stuckOf(t, 'ask-off-blocked'));
@@ -290,6 +293,7 @@ export function asksToTidy(tasks: CardLike[]): StuckCard[] {
 }
 
 const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', string> = {
+  triage: 'CARDS TO TRIAGE. Team members filed these with what their work needs; the owner does not see them yet. For each one: answer it from your memory or the board when you can (tell the team member, then move it to "done" with a "result"); merge it into an open ask that covers the same thing; route a question a teammate can answer; rewrite its ask into the Ask me shape, one numbered ask per card; keep one card per source of answers. Then release it: "blocked" when it asks the owner, "waiting" with "waitingOn" when it waits on someone else.',
   'nothing-asked': 'BLOCKED CARDS WITH NOTHING ASKED. These cards are in Blocked, but none has a question for the owner on Ask me or an open request from the owner, so nothing is moving them. Blocked means waiting on the owner\'s answer. For each one: if it needs the owner, add the question to its humanQA so it shows on Ask me; if it waits on someone outside the office or on a team member, move it to "waiting" and name who in "waitingOn"; if the work is finished, or the owner decided to stop it, move it to "done".',
   'ask-off-blocked': 'OPEN QUESTIONS ON CARDS OUT OF BLOCKED. Each of these cards left Blocked with a question still open, and the owner still sees it on Ask me until they answer it or you withdraw it. For each one: if you moved the card out of Blocked and the work still needs the answer, move it back to "blocked". If the owner moved it, the card is done, or the question no longer matters, withdraw the question by setting "dismissedAt" (the time) and a short "dismissedReason" on that humanQA entry. Never move a card the owner moved.',
   'several-asks': 'CARDS WITH MORE THAN ONE OPEN QUESTION. The owner sees every one of them on Ask me. Keep one open question per card: fold what still matters into the newest, and withdraw the others by setting "dismissedAt" (the time) and a short "dismissedReason" on each.'
@@ -299,7 +303,7 @@ const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', str
 export function stuckCardsContext(stuck: StuckCard[]): string | null {
   if (!stuck.length) return null;
   const parts: string[] = [];
-  for (const kind of ['nothing-asked', 'ask-off-blocked', 'several-asks'] as const) {
+  for (const kind of ['triage', 'nothing-asked', 'ask-off-blocked', 'several-asks'] as const) {
     const cards = stuck.filter((c) => (c.issue ?? 'nothing-asked') === kind);
     if (!cards.length) continue;
     parts.push([

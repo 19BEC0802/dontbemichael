@@ -176,7 +176,7 @@ export interface HiveTask {
   title: string;
   description?: string;
   assignee?: string;
-  status: 'todo' | 'doing' | 'waiting' | 'blocked' | 'done';
+  status: 'triage' | 'todo' | 'doing' | 'waiting' | 'blocked' | 'done';
   /** Who a Waiting card waits on, in a few words ("customer Gopi", "Nick"); never its own assignee (house rule 8). */
   waitingOn?: string;
   /** When a To do card's one off next step is due, ISO with its offset (house rule 8). */
@@ -2478,7 +2478,8 @@ export class HiveManager {
     if (status === 'blocked' || status === 'waiting') return false;
     const ledger = this.tasks() as { tasks?: HiveTask[] };
     const card = (Array.isArray(ledger?.tasks) ? ledger.tasks : []).find((t) => t?.id === id);
-    if (!card) return false;
+    // A card in triage is Michael's until he releases it; the owner never sees it.
+    if (!card || card.status === 'triage') return false;
     if (status === 'done') return card.status === 'done' ? true : this.ownerCloseTask(id);
     const from = card.status;
     if (!this.patchTask(id, { status, waitingOn: undefined, closedBy: undefined, closedAt: undefined, closedReason: undefined })) return false;

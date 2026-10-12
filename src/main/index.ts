@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
+import { ownerLedger } from '../shared/taskLedger';
 import { execFile, spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
@@ -4645,7 +4646,8 @@ ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
   return hive.setAgentHold(id, hold);
 });
 ipcMain.handle('hive:board', () => hive.board());
-ipcMain.handle('hive:tasks', () => hive.tasks());
+// The owner's surfaces never see a card still in triage (card-lifecycle.md 10).
+ipcMain.handle('hive:tasks', () => ownerLedger(hive.tasks()));
 ipcMain.handle('hive:log', (_evt, n: unknown, kind: unknown, since: unknown) => hive.logTail(typeof n === 'number' ? n : 200, typeof kind === 'string' ? kind : undefined, typeof since === 'number' ? since : undefined));
 ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? hive.memory(id) : ''));
 ipcMain.handle('hive:memoryDetail', (_evt, id: unknown) => (typeof id === 'string' ? hive.memoryDetail(id) : { index: '', waiting: 0 }));
@@ -6466,7 +6468,7 @@ const completionWatcher = initCompletionWatcher({
 registerRealtimeActionIpc({
   hiveEnabled: () => hive.enabled(),
   hiveSend: (partial, from) => hive.send(partial, from),
-  hiveTasks: () => hive.tasks(),
+  hiveTasks: () => ownerLedger(hive.tasks()),
   hiveAddTask: (task) => hive.addTask(task as HiveTask),
   hivePatchTask: (id, patch) => hive.patchTask(id, patch as Partial<Omit<HiveTask, 'id'>>),
   hiveMoveTask: (id, status) => hive.ownerMoveTask(id, status),
@@ -6552,7 +6554,7 @@ completionWatcher.onCompletion((evt) => { try { liveWebContents()?.send('realtim
 const floorWatcher = new RealtimeFloorWatcher({
   enabled: () => hive.enabled(),
   registry: () => hive.registry(),
-  tasks: () => hive.tasks(),
+  tasks: () => ownerLedger(hive.tasks()),
   ptys: () => ptyManager.list().map((p) => ({ id: p.id, lastOutputAt: p.lastOutputAt })),
   push: (text) => { try { liveWebContents()?.send('realtime:floorDelta', { text }); } catch { /* window gone */ } }
 });
