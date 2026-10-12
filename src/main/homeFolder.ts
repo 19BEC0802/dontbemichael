@@ -14,7 +14,7 @@
  */
 import { cpSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { privateOwnerDir } from '../shared/agentPrivatePaths';
+import { privateOwnerDir, privateRoot } from '../shared/agentPrivatePaths';
 
 export interface HomeFolderStatus {
   path: string | null;
@@ -49,14 +49,17 @@ export function homeReadyAtLaunch(cfg: { onboardingComplete?: boolean; harnessHo
  * roster.json + its backups ride along with hive/palace: the roster is the
  * renderer's half of the same state, and leaving it behind would move the
  * agents' sessions and memory to the new home while their names, notes and
- * worktree paths stayed at the old one. The owner's questions to Michael and
- * their state live outside the hive, in private/owner (#63), so they are
- * copied too: without them the conversation with Michael came up empty after a
- * move. private/agent-mcp stays behind on purpose: it holds mail tokens, which
- * are written again each time a team member starts.
+ * worktree paths stayed at the old one. The board guard and the house rules
+ * each agent has heard ride along, so a move neither resends old reminders nor
+ * forgets a Done card. The owner's questions to Michael and their state live
+ * outside the hive, in private/owner (#63), so they are copied too: without
+ * them the conversation with Michael came up empty after a move.
+ * private/agent-mcp stays behind on purpose: it holds mail tokens, which are
+ * written again each time a team member starts.
  */
 export function copyOfficeData(oldHome: string, newHome: string): void {
   const pairs = ['hive', 'palace', 'roster.json', 'roster-backups'].map((sub): [string, string] => [join(oldHome, sub), join(newHome, sub)]);
+  for (const f of ['card-guard.json', 'house-rules-seen.json']) pairs.push([join(privateRoot(oldHome), f), join(privateRoot(newHome), f)]);
   pairs.push([privateOwnerDir(oldHome), privateOwnerDir(newHome)]);
   for (const [src, dest] of pairs) {
     if (!existsSync(src)) continue;

@@ -114,6 +114,7 @@ test('moving the office takes the owner\'s questions to Michael along', async (t
   const token = path.join(agentMcpDir(oldHome, 'kelly'), 'md-mail.mcp.json');
   fs.mkdirSync(path.dirname(token), { recursive: true });
   fs.writeFileSync(token, '{}');
+  fs.writeFileSync(path.join(oldHome, 'private', 'card-guard.json'), '{"done":["c1"]}');
 
   fs.mkdirSync(newHome, { recursive: true });
   copyOfficeData(oldHome, newHome);
@@ -125,6 +126,7 @@ test('moving the office takes the owner\'s questions to Michael along', async (t
     JSON.parse(fs.readFileSync(privateOwnerStatePath(oldHome), 'utf8')),
     'with the state it had'
   );
+  assert.equal(fs.readFileSync(path.join(newHome, 'private', 'card-guard.json'), 'utf8'), '{"done":["c1"]}', 'the board guard still rides along');
   assert.equal(fs.existsSync(agentMcpDir(newHome, 'kelly')), false, 'mail tokens are written again at start, never copied');
   assert.ok(fs.existsSync(path.join(privateOwnerSentDir(oldHome), `${q.id}.json`)), 'the old folder stays as a backup');
 });
