@@ -74,17 +74,6 @@
 **Effort:** S
 **Priority:** P1
 
-### A build switch for the mailbox feature
-
-**What:** A `buildFeatures.ts` flag that hides Mailboxes and the Email section, with the hook falling back to the Claude account switch alone when off.
-
-**Why:** Plan Section 9 rollout.
-
-**Context:** Deferred from plan: docs/designs/multi-mailbox.md
-
-**Effort:** S
-**Priority:** P1
-
 ### Read one email without downloading its attachments
 
 **What:** `MailService.read` fetches the whole message, attachments included, before trimming the text to 50K. Fetch the body structure plus the text part only, and take attachment names and sizes from the structure.
