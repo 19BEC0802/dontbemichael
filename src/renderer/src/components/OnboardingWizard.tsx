@@ -629,7 +629,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                     width: 56, height: 56, flexShrink: 0,
                     background: 'var(--cth-sky-light)',
                     boxShadow: 'inset 0 0 0 1.5px var(--cth-indigo)',
-                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden'
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden'
                   }}>
                     <SpritePortrait character="michael" scale={2} />
                   </div>
@@ -742,7 +742,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                     width: 56, height: 56, flexShrink: 0,
                     background: 'var(--cth-sky-light)',
                     boxShadow: 'inset 0 0 0 1.5px var(--cth-indigo)',
-                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden'
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden'
                   }}>
                     <SpritePortrait character="michael" scale={2} />
                   </div>
