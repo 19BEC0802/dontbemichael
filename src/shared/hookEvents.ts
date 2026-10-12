@@ -37,3 +37,18 @@ export function validateHookEvent(value: unknown): value is HookEvent {
 
   return candidate.blocked === undefined || typeof candidate.blocked === 'boolean';
 }
+
+/** A Notification that means the session is stopped on a prompt a person must
+ *  answer in the terminal: a permission request or a question dialog, never the
+ *  plain idle "waiting for your input". */
+export const TERMINAL_PROMPT_TYPES = new Set(['permission_prompt', 'elicitation_dialog']);
+
+export function isTerminalPrompt(
+  p: { notificationType?: string; notification_type?: string; message?: string } | null | undefined
+): boolean {
+  if (!p) return false;
+  const rawType = p.notificationType ?? p.notification_type ?? '';
+  const type = rawType.toLowerCase();
+  if (type) return TERMINAL_PROMPT_TYPES.has(type);
+  return /needs your permission|needs your approval/i.test(p.message ?? '');
+}

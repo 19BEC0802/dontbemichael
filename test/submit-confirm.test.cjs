@@ -17,6 +17,7 @@ const loadTs = require('./load-ts.cjs');
 
 const { confirmSubmit, PromptSubmits } = loadTs('src/shared/submitConfirm.ts');
 const { isClaudeProvider } = loadTs('src/shared/agentProvider.ts');
+const { isTerminalPrompt } = loadTs('src/shared/hookEvents.ts');
 const read = (p) => fs.readFileSync(path.resolve(__dirname, '..', p), 'utf8');
 const instant = () => Promise.resolve();
 
@@ -55,6 +56,7 @@ function rendererSubmission(onPoll, breaker = 'healthy') {
     setTimeout: (callback) => { callback(); return 0; },
     breakerLevel: { current: { alice: breaker } },
     ACTION_AT_PROMPT: 'at prompt',
+    isTerminalPrompt,
     console: { warn: () => {} }
   };
   runtime = new Function('deps', `const { ${Object.keys(deps).join(', ')} } = deps;\n${compiled}\nreturn { submitToPty, onHook };`)(deps);

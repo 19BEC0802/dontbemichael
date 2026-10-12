@@ -20,7 +20,8 @@ import type { HarnessConfig } from './config';
 import type { ControlRegistry } from './control';
 import type { CircuitBreaker } from './breaker';
 import { estimateCostUsd } from './pricing';
-import { MAX_HOOK_FRAME_BYTES, validateHookEvent } from '../shared/hookEvents';
+import { MAX_HOOK_FRAME_BYTES, TERMINAL_PROMPT_TYPES, isTerminalPrompt, validateHookEvent } from '../shared/hookEvents';
+export { TERMINAL_PROMPT_TYPES, isTerminalPrompt };
 import { resolveGodName } from '../shared/godIdentity';
 import { APP_NAME } from '../shared/appName';
 
@@ -68,15 +69,6 @@ export const ASK_TOOL = 'AskUserQuestion';
 export const ASK_TOOL_REFUSAL =
   "Don't ask the owner here: nobody answers your terminal. File it as one new file in the hive's triage folder (your questions as one \"ask\", what you were doing in \"description\"). Michael checks it and puts it on the owner's ASK ME board.";
 
-/** A Notification that means the session is stopped on a prompt a person must
- *  answer in the terminal: a permission request or a question dialog, never the
- *  plain idle "waiting for your input". */
-const TERMINAL_PROMPT_TYPES = new Set(['permission_prompt', 'elicitation_dialog']);
-export function isTerminalPrompt(p: { notification_type?: string; message?: string }): boolean {
-  const type = (p.notification_type ?? '').toLowerCase();
-  if (type) return TERMINAL_PROMPT_TYPES.has(type);
-  return /needs your permission|needs your approval/i.test(p.message ?? '');
-}
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
 import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget } from '../shared/folderAccess';
 import { folderLayoutFor } from './officeFile';
