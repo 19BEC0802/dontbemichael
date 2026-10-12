@@ -409,6 +409,11 @@ export class CircuitBreaker {
         } else {
           s.noProgressBeats = 0;
         }
+      } else {
+        // An idle beat (no new output) ends the run too: the arm needs
+        // CONSECUTIVE burning beats, so two lone bursts an hour apart never
+        // add up to a steer.
+        s.noProgressBeats = 0;
       }
     }
     return { tripping: false, reason: '' };
