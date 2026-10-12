@@ -1,6 +1,6 @@
 # Don't Be Michael: features and changes
 
-Everything the app does today, and every release that got it here (0.0.1 to 0.1.7). Part 1 is
+Everything the app does today, and every release that got it here (0.0.1 to 0.1.8). Part 1 is
 written to be lifted onto the GitHub page and the website as it is; Part 2 is the full list, release
 by release.
 
@@ -22,9 +22,14 @@ moving, and brings you only the decisions that need you.
   when the facts can't settle it, sources disagree, or it is sensitive.
 - Your answer to a question becomes Michael's work: he routes it and closes it, and the Tasks view
   shows which cards sit with him. Blocked always means waiting on you, Waiting shows who a card
-  waits on, and a card ends only as Done.
+  waits on, and a card ends only as Done. A Done card shows the first line of Michael's result,
+  and the whole result leads its details.
 - A question stays on Ask me until you answer it or Michael withdraws it, and your answer goes only
-  to Michael. When a question names a file saved in the office, open it right from the card.
+  to Michael.
+- A file Michael names in a reply, an Ask me card or a task shows as a chip. Markdown, text, JSON,
+  CSV and pictures open in an office tab beside Who talks to whom and refresh when the file
+  changes; PDF and Office files open in their own app. Only files in the office and team folders
+  open.
 - Ask Michael anything from the Talk to Michael box: he answers in a conversation that opens above
   it, and each question shows where it stands until it is answered. Scheduled outcomes, such as a
   weekly summary, arrive on Ask me as quiet Report cards you clear with Got it.
@@ -86,7 +91,8 @@ moving, and brings you only the decisions that need you.
 - A pod for each department around Michael's glass office, each with its painted floor sign, and
   every team member with a signature prop on their desk and as their avatar. Desks light up as team members clock
   in and go dark at closing time, envelopes fly between pods as work moves, and idle teammates
-  trade lines across the office by paper plane.
+  trade lines across the office by paper plane. Your message to Michael flies to him as a paper
+  plane too.
 - Every team member has a Profile, Access, Messages, Memory and Work tab written for owners, not
   developers. Views for the task board and for who talks to whom, over any time from the last hour
   to the last month.
@@ -96,10 +102,40 @@ moving, and brings you only the decisions that need you.
   SaaS and consulting, or anything else. Each comes with a suggested team.
 - Runs on your computer with the Claude plan you already have. Plain words, no developer settings.
   A Windows 11 (x64) build ships with every release.
+- When your Claude plan reaches its usage limit, the office takes a break. Ask me, the top bar and
+  the floor say when work starts again. Nothing is typed into a Claude terminal meanwhile, and
+  scheduled jobs still go out on time and wait in the inbox. At the reset the team carries on by
+  itself.
 - Setup ends on Get Michael ready: it installs Claude Code and signs you in where you can see it,
   or takes an Anthropic API key instead. Skip it, and Ask me keeps a card until Michael can start.
+- If your settings file was damaged, setup says that is why it starts again and where a copy of
+  the file was kept.
 
 ## Part 2: Every change, release by release
+
+### 0.1.8 (2026-10-11)
+- Office break: when the Claude plan reaches its usage limit, Ask me, the top bar and the floor say
+  so and when work starts again. Nothing is typed into a Claude terminal meanwhile; scheduled jobs
+  still go out on time and wait in the inbox. At the reset Michael is told, and the team members
+  who stopped mid task carry on once a turn goes through.
+- Files Michael names in replies, Ask me cards and tasks are chips. Markdown, text, JSON, CSV and
+  pictures open in an office tab that refreshes on change; PDF and Office files open in their own
+  app. Only files in the office and team folders open.
+- A Done card shows the first line of Michael's result; the owner's message flies to Michael as a
+  paper plane; setup says why it starts again when the settings file was damaged.
+- No team member, Michael included, can change the hook program or any agent's settings. The
+  webhook and Slack listeners answer this computer only.
+- Mail: a send that may have gone out is held, never sent twice; a server never reached reads Not
+  sent; a damaged approvals file is refused, not emptied.
+- A config.json that cannot be read is copied aside before any save, and a failed save keeps the
+  old file.
+- Contributor fixes: connectors say when they cannot be reached and stop everything a hung check
+  started; team members that failed their first start are tried again; messages are not typed
+  twice; the standup keeps to its times at launch; one webhook cannot use up the others' limit;
+  memory notes use your local day; setup text is 14 px or larger; Settings folds animate; Open at
+  login is hidden on Linux; Windows reads "this computer"; tab rows scroll with the wheel; Skills
+  search has a Clear button; and smaller fixes to secrets, QuickBooks access and the closing time
+  list.
 
 ### 0.1.7 (2026-10-09)
 - Microsoft 365 on your own domain: testing such a mailbox looks up where the domain's mail goes and

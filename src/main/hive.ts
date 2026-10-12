@@ -23,6 +23,7 @@ import { CLOSING_COMPLETE_RE } from '../shared/closingTime';
 import {
   entriesBlock, isProcedureSlug, MAX_PROCEDURE_CHARS, parseIndex, parseInbox, renderIndex, type MemoryEntry
 } from '../shared/memoryIndex';
+import { localDay } from '../shared/messageView';
 import type { AgentFolderPolicy } from '../shared/folderAccess';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
@@ -329,11 +330,11 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
     'You manage the office, so you decide the team\'s schedule requests. Each arrives from the scheduler as "Schedule request from <name>" with what would change, why, and its id; it is the one scheduler message you answer. Approve what fits the team member\'s job and uses runs well, decline what doesn\'t with a note they can act on, and answer in your outbox with "to": "scheduler" and "schedule": {"op": "approve" | "decline", "request": "<id>", "note": "..."}. Bring it to the owner with {"op": "ask-owner", "request": "<id>", "note": "what you can\'t settle"} only when the facts can\'t settle it, sources conflict, or it is sensitive (money, customers, legal or security). {"op": "pending"} lists what is waiting. Change your own schedules by sending the request yourself; it applies at once.',
     '',
     '## The owner\'s conversation with you',
-    'The owner can also ask you things directly, in a conversation the app shows them beside their message box. Each question reaches you typed, with its id. Handle it like any request: answer small things yourself and route the rest. The owner reads your answer only in that conversation, never in your terminal, so always answer with a message "to": "human" and "in_reply_to" the question\'s id. Lead with the answer in one or two plain sentences, then what happens next. Name files by their full path so the owner can open them; never paste a report. Use "act": "done" when it is answered, "refuse" with a one line reason when it cannot be done, "query" to ask the owner something you need for it, and "inform" with "expect_by" (an ISO time) and "waiting_on" (who it is with) while it is in progress. A question you have about something the owner asked in the conversation goes in the conversation, not on Ask me; they answer it there. When the owner\'s answer there also settles a question on Ask me, withdraw that ask ("dismissedAt" and "dismissedReason": "Answered in your conversation with the owner"), never write an answer into it, and route the work.',
+    'The owner can also ask you things directly, in a conversation the app shows them beside their message box. Each question reaches you typed, with its id. Handle it like any request: answer small things yourself and route the rest. The owner reads your answer only in that conversation, never in your terminal, so always answer with a message "to": "human" and "in_reply_to" the question\'s id. Lead with the answer in one or two plain sentences, then what happens next. Name files by their full path in backticks so the owner can open them; never paste a report. Use "act": "done" when it is answered, "refuse" with a one line reason when it cannot be done, "query" to ask the owner something you need for it, and "inform" with "expect_by" (an ISO time) and "waiting_on" (who it is with) while it is in progress. A question you have about something the owner asked in the conversation goes in the conversation, not on Ask me; they answer it there. When the owner\'s answer there also settles a question on Ask me, withdraw that ask ("dismissedAt" and "dismissedReason": "Answered in your conversation with the owner"), never write an answer into it, and route the work.',
     '',
     '## Scheduled runs',
     'A scheduled run names a job, and its message carries that job\'s focus for this run only, such as what to cover at the hourly ops standup. A scheduled run needs no reply, so do not answer it.',
-    'When a scheduled job produces something the owner should see, such as the weekly money summary, put it on Ask me as a report: a card with "status": "done" and the team member as assignee, holding one humanQA entry {"kind": "report", "q": "<one bold line with the result, then the full paths of its files>", "askedAt": "<time>", "raisedBy": "<id>"}. A report is for reading, not deciding, so it needs no Blocked card and the owner clears it with Got it. When the office could not resolve something on its own, ask the owner on Ask me as usual.',
+    'When a scheduled job produces something the owner should see, such as the weekly money summary, put it on Ask me as a report: a card with "status": "done" and the team member as assignee, holding one humanQA entry {"kind": "report", "q": "<one bold line with the result, then the full paths of its files, each in backticks>", "askedAt": "<time>", "raisedBy": "<id>"}. A report is for reading, not deciding, so it needs no Blocked card and the owner clears it with Got it. When the office could not resolve something on its own, ask the owner on Ask me as usual.',
     '',
     '## Staying cheap',
     'The owner pays for every message each agent reads and writes. Keep hand-offs short, and when you wake to nothing that needs you, end your turn without writing.',
@@ -1269,7 +1270,13 @@ export class HiveManager {
       // A Git Bash the app found is pinned, so Claude Code picks the same one.
       const shell = hookShell();
       if (shell.gitBash) env.CLAUDE_CODE_GIT_BASH_PATH = shell.gitBash;
-      const settingsPath = join(dir, 'settings.json');
+      // Outside the hive (issue 100): the shell sandbox lets an agent write
+      // anywhere in the hive, and these settings set its sandbox at its next
+      // start, so they live in the app's own folder, out of every agent's reach.
+      // The copy an older build left in the agent folder is removed.
+      const settingsPath = this.settingsPathFor(dir);
+      rmSync(join(dir, 'settings.json'), { force: true });
+      mkdirSync(dirname(settingsPath), { recursive: true });
       this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell));
       args.push('--settings', settingsPath);
     }
@@ -1478,6 +1485,12 @@ export class HiveManager {
    * This is what lets auto mode keep the OS sandbox on — the old full-bypass
    * posture existed only because these paths sit outside the project cwd.
    */
+  /** An agent's per-session Claude settings: in `<harnessHome>/agent-settings`,
+   *  outside the hive and so outside every agent's writable sandbox (issue 100). */
+  private settingsPathFor(dir: string): string {
+    return join(dirname(this.root() ?? dirname(dir)), 'agent-settings', `${basename(dir)}.json`);
+  }
+
   private sandboxWritableDirs(meta: AgentMeta, dir: string, root: string, extra?: string[]): string[] {
     const out = [dir, root, ...(extra ?? [])].filter((d) => typeof d === 'string' && d.length > 0);
     return Array.from(new Set(out));
@@ -1528,6 +1541,11 @@ export class HiveManager {
       // No `shell` field here: Claude Code runs it in its default shell, which
       // the pinned Git Bash (or its absence) makes the same as `shell`.
       statusLine: { type: 'command', command: shellCommand(shell, node, shim, '--status'), padding: 0 },
+      // After a plan usage limit, Claude Code waits in the session and continues
+      // the task by itself at the reset (issue 124, the office break). On by
+      // default; set here so the owner's own Claude settings can't turn it off
+      // for the team. Read from --settings (user scope), never ~/.claude.
+      autoContinueAtUsageLimit: true,
       // Native OS sandbox for Bash subprocesses (macOS Seatbelt / Linux bubblewrap).
       // Auto mode spawns with `--permission-mode bypassPermissions`, which only
       // silences PROMPTS; the sandbox is a separate, opt-in layer that was never
@@ -1555,7 +1573,9 @@ export class HiveManager {
               ...(folders?.sandboxOnly && process.platform !== 'win32' ? { allowUnsandboxedCommands: false } : {}),
               filesystem: {
                 allowWrite: writableDirs,
-                ...(folders?.sandbox.denyWrite.length ? { denyWrite: folders.sandbox.denyWrite } : {}),
+                // The hook program runs outside the sandbox on every tool call,
+                // so no agent's shell may rewrite its folder (issue 100).
+                denyWrite: Array.from(new Set([dirname(shim), ...(folders?.sandbox.denyWrite ?? [])])),
                 ...(folders?.sandbox.denyRead.length ? { denyRead: folders.sandbox.denyRead } : {}),
                 ...(folders?.sandbox.allowRead.length ? { allowRead: folders.sandbox.allowRead } : {})
               }
@@ -1577,7 +1597,9 @@ export class HiveManager {
         // #5C: surface mid-`/compact` so an agent boxing up its context reads as
         // 'compacting' on the floor instead of looking frozen.
         PreCompact: [entry()],
-        PostCompact: [entry()]
+        PostCompact: [entry()],
+        // A turn cut off by the usage limit starts the office break (issue 124).
+        StopFailure: [entry('rate_limit')]
       }
     };
   }
@@ -2518,7 +2540,7 @@ export class HiveManager {
     const dir = this.agentDir(id);
     if (!existsSync(dir)) return false;
     const line = (v: string) => v.replace(/\s+/g, ' ').trim();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDay(new Date().toISOString());
     const note = `- From the owner (${today}), answering a question on "${line(task)}": Q: ${line(q)} A: ${line(a)}\n`;
     try {
       mkdirSync(join(dir, 'memory'), { recursive: true });

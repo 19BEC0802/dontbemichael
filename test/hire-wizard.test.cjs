@@ -242,8 +242,9 @@ test('every connector is offered for a binding: switched off ones greyed, QuickB
   assert.doesNotMatch(modal.slice(modal.indexOf('const bindConnectors ='), modal.indexOf('const [bindConnector,')), /filter/, 'nothing filtered out');
   assert.match(modal, /<option key=\{c\.key\} value=\{c\.key\} disabled=\{!c\.on\}>/, 'switched off: shown, not bindable');
   assert.match(modal, /bindConnectors\.some\(\(c\) => c\.key === bindConnector && c\.on\)/, 'only a switched on one binds');
-  assert.match(modal, /isQuickBooksKey\(binding\.connectorKey\)\s*\? window\.cth\.quickbooksSetAccess\(id, \{ enabled: true, changes: false \}\)/, 'QuickBooks bound read only');
-  assert.match(modal, /window\.cth\.quickbooksSetAccess\(id, \{ enabled: false, changes: false \}\)/, 'and taken back if the spawn fails');
+  // A hire saves for its new id before the spawn, so it says it is hiring (issue 132).
+  assert.match(modal, /isQuickBooksKey\(binding\.connectorKey\)\s*\? window\.cth\.quickbooksSetAccess\(id, \{ enabled: true, changes: false \}, \{ hiring: true \}\)/, 'QuickBooks bound read only');
+  assert.match(modal, /window\.cth\.quickbooksSetAccess\(id, \{ enabled: false, changes: false \}, \{ hiring: true \}\)/, 'and taken back if the spawn fails');
 });
 
 test('binding clears an earlier overlap message, and the message names every way to bind', () => {

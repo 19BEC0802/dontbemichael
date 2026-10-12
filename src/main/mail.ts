@@ -23,6 +23,7 @@ import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { simpleParser } from 'mailparser';
 import { writeFileAtomic } from './atomicFile';
+import { SECRETS_FILE_UNREADABLE } from '../shared/secretStore';
 import {
   MAIL_TOOL_OPS,
   agentMailboxes,
@@ -68,7 +69,26 @@ const REFERENCE_TOO_LARGE = 'That email is too large to forward or attach from (
 export type MailErrorKind = 'auth' | 'provider-blocked' | 'network' | 'not-found' | 'bad-request' | 'refused' | 'unsupported' | 'timeout' | 'unknown';
 
 export class MailError extends Error {
-  constructor(readonly kind: MailErrorKind, message: string) { super(message); }
+  /** `uncertain`: the server may have taken the email though the send failed
+   *  (issue 101), so it must not be sent again until Sent shows otherwise. */
+  constructor(readonly kind: MailErrorKind, message: string, readonly uncertain = false) { super(message); }
+}
+
+/** A connection that dropped or timed out after it was made: the server may
+ *  have taken the email. A server that was never reached is not uncertain
+ *  (neverReachedServer). ECONNECTION is the SMTP library's "Connection closed
+ *  unexpectedly", which can come after the server took the email. */
+const MID_SEND_DROP = new Set(['ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'ESOCKET', 'ECONNECTION']);
+
+/** A failure before the mail server took anything: the connection was never
+ *  made (refused, no such host, timed out connecting) or the server never said
+ *  hello. The SMTP library tags every socket error and timeout as the
+ *  connection phase, so the original connect error and its own messages for
+ *  these two timeouts are what tell them apart. */
+export function neverReachedServer(e: unknown): boolean {
+  const err = e as { syscall?: unknown; message?: unknown } | null;
+  if (err?.syscall === 'connect' || err?.syscall === 'getaddrinfo') return true;
+  return typeof err?.message === 'string' && /^(Connection timeout|Greeting never received)\b/.test(err.message);
 }
 
 /** The slice of ImapFlow this module uses (so tests can inject a fake). */
@@ -708,13 +728,13 @@ export class MailService {
    *  Sent, it may still have gone out (only Gmail files sent mail itself; for
    *  the rest the app adds the copy after the server answers), so it is refused. */
   private async settleInterrupted(key: string, id: string, left: { at: number; messageId: string }): Promise<{ sent: boolean; messageId: string }> {
-    const mayHaveGone = 'This email may already have gone out: the app stopped while sending it, and it is not in Sent yet. Do not send it again; tell Michael, so the owner can check with the recipient.';
+    const mayHaveGone = 'This email may already have gone out: sending it was interrupted, and it is not in Sent yet. Do not send it again; tell Michael, so the owner can check with the recipient.';
     let found: boolean;
     try { found = await this.inSent(id, left.messageId); } catch (e) {
       const err = classifyMailError(e);
       // Only a passing problem is worth another try; any other leaves it unknown.
       if (err.kind === 'network' || err.kind === 'timeout') {
-        throw new MailError(err.kind, `Not sent now. The app stopped while sending this email before, and Sent could not be checked for it: ${err.message} Try again in a moment.`);
+        throw new MailError(err.kind, `Not sent now. Sending this email was interrupted before, and Sent could not be checked for it: ${err.message} Try again in a moment.`);
       }
       throw new MailError('refused', mayHaveGone);
     }
@@ -743,6 +763,14 @@ export class MailService {
         // The server may have accepted it before the line dropped: look in Sent.
         const found = await this.inSent(id, messageId).catch(() => false);
         if (found) { this.recordSent(key, now, messageId); return { sent: true, messageId }; }
+        // Not in Sent yet, but a drop mid-send may still have delivered it
+        // (issue 101): it stays recorded as pending, so a repeat is checked in
+        // Sent instead of sent, and an approved card stays sending.
+        const code = (e as { code?: unknown } | null)?.code;
+        if ((err.kind === 'timeout' || (typeof code === 'string' && MID_SEND_DROP.has(code))) && !neverReachedServer(e)) {
+          this.note(id, err);
+          throw new MailError(err.kind, 'This email may already have gone out: the connection dropped before the mail server answered, and it is not in Sent yet. Do not send it again; tell Michael, so the owner can check Sent.', true);
+        }
       }
       // Reported as not sent, so a retry may send it.
       this.pending.delete(key);
@@ -1043,7 +1071,11 @@ async function runMailRequest(
         return a.ok ? null : a.reason;
       };
       try { out = await svc.send(agentId, mailbox!, approved, stillSendable); } catch (e) {
-        try { deps.proposals.unmarkSending(p!.id); } catch { /* stays sending: never resent */ }
+        // A send that may have gone out keeps the card sending, so it is never
+        // sent a second time (issue 101); any other failure returns it to approved.
+        if (!(e instanceof MailError && e.uncertain)) {
+          try { deps.proposals.unmarkSending(p!.id); } catch { /* stays sending: never resent */ }
+        }
         throw e;
       } finally { sendingProposals.delete(p!.id); }
       // The email is out: bookkeeping that fails is logged, never reported as a failed send.
@@ -1192,7 +1224,8 @@ export interface MailAdminDeps {
   getConfig(): MailAccessConfig & { mailboxes?: MailboxRecord[] };
   saveConfig(patch: { mailboxes?: MailboxRecord[]; agentCapabilities?: MailAccessConfig['agentCapabilities'] }): void;
   setSecret(ref: string, value: string): { ok: boolean; error?: string };
-  deleteSecret(ref: string): void;
+  /** False when the secret may still be stored (the file could not be read or written). */
+  deleteSecret(ref: string): boolean;
   /** A Send only grant ended: withdraw its emails, revoke its standing
    *  approvals (D13). Optional so tests can leave it out. */
   endGrant?(agentId: string, mailbox: string, reason: string): void;
@@ -1203,6 +1236,30 @@ export interface MailAdminDeps {
   sendingChanged?(agentId: string, mailbox: string, address: string, sending: SendingMode, handBack: boolean): void;
   /** Whether a team member is on the roster, for a grant's pause. Absent: assumed. */
   present?(agentId: string): boolean;
+  /** Whether this computer can encrypt a password right now. Absent: assumed. */
+  canStoreSecrets?(): boolean;
+}
+
+/** What the owner reads when the password could not be kept encrypted on this
+ *  computer: the OS secret store (Keychain, DPAPI, or a Linux keyring) is
+ *  unavailable or refused. Says what to do, never the raw error. */
+/** Why a password that passed the encryption check was still not saved: the
+ *  keychain went away meanwhile, or the secrets file is damaged (its own plain
+ *  words), or anything else. Never the raw error, which goes to the log. */
+function storeFailedReason(admin: MailAdminDeps, error: string | undefined): string {
+  if (admin.canStoreSecrets && !admin.canStoreSecrets()) return cannotStoreReason();
+  if (error === SECRETS_FILE_UNREADABLE) return error;
+  return "Couldn't store the password securely on this computer, so nothing was saved. Try again.";
+}
+
+export function cannotStoreReason(platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'darwin') {
+    return 'This Mac could not store the password safely in its keychain, so nothing was saved. If macOS asks whether this app may use your keychain, choose Allow. Then try again, and restart the Mac if it keeps happening.';
+  }
+  if (platform === 'linux') {
+    return 'This computer could not store the password safely because no keyring is unlocked, so nothing was saved. Set up a keyring such as GNOME Keyring or KWallet, unlock it, then try again.';
+  }
+  return 'This computer could not store the password safely, so nothing was saved. Restart the computer, then try again.';
 }
 
 export interface AddMailboxInput {
@@ -1233,13 +1290,19 @@ export async function saveMailbox(svc: MailService, admin: MailAdminDeps, preset
   if (existing.some((m) => m.address.toLowerCase() === address.toLowerCase() && m.id !== fixing?.id)) {
     return { ok: false, kind: 'invalid', reason: `${address} is already connected.` };
   }
+  // A password this computer cannot encrypt is never saved, so say so before
+  // logging in to the provider, not after a test that worked.
+  if (admin.canStoreSecrets && !admin.canStoreSecrets()) return { ok: false, kind: 'unsupported', reason: cannotStoreReason() };
   const password = input.password.replace(/\s+/g, '');
   const tested = await svc.test({ address, imap, smtp }, password);
   if (!tested.ok) return { ok: false, kind: tested.kind, reason: tested.reason };
 
   const id = fixing ? fixing.id : mailboxIdFor(address, existing.map((m) => m.id));
   const stored = admin.setSecret(secretRefForMailbox(id), password);
-  if (!stored.ok) return { ok: false, kind: 'unknown', reason: stored.error ?? "Couldn't store the password securely on this computer." };
+  if (!stored.ok) {
+    console.error('[mail] password not stored:', id, stored.error);
+    return { ok: false, kind: 'unknown', reason: storeFailedReason(admin, stored.error) };
+  }
   const now = Date.now();
   const prior = existing.find((m) => m.id === id);
   const record: MailboxRecord = { id, address, provider: input.provider, imap, smtp, status: 'connected', createdAt: prior?.createdAt ?? now, updatedAt: now };
@@ -1279,7 +1342,7 @@ export function removeMailbox(svc: MailService, admin: MailAdminDeps, id: string
   for (const agentId of ended) {
     try { admin.endGrant?.(agentId, id, `${address} was removed in Settings.`); } catch (e) { console.error('[mail] end grant:', e); }
   }
-  admin.deleteSecret(secretRefForMailbox(id));
+  if (admin.deleteSecret(secretRefForMailbox(id)) === false) console.error('[mail] the mailbox was removed, but its saved password could not be:', id);
   svc.close(id);
   return { ok: true, affected };
 }

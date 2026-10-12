@@ -3,7 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
-  readlinkSync, symlinkSync
+  readlinkSync, symlinkSync, watch as watchFs
 } from 'node:fs';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
@@ -21,11 +21,11 @@ import { setHiddenClaudeAuthEnv } from './hiddenClaude';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
-  readConfig, writeConfig, setAgentTokenCap, resetConfig, onConfigWritten, ensureHarnessHome, ensureClaudePermissionsAccepted, approveClaudeApiKey,
+  readConfig, damagedConfigCopy, writeConfig, setAgentTokenCap, resetConfig, onConfigWritten, ensureHarnessHome, ensureClaudePermissionsAccepted, approveClaudeApiKey,
   modelForRole, OPS_STANDUP_MISSION, OPS_STANDUP_BUILT_IN_BODIES, OPS_STANDUP_FOCUS, OPS_STANDUP_BUILT_IN_FOCUSES, HEARTBEAT_MISSION, COMPACT_MAINTENANCE_MISSION, type HarnessConfig, type ScheduledMission
 } from './config';
 import { terminalLaunches } from './terminalAtFolder';
-import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder, type AskFileAgent } from './fs';
+import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder, readAskFile, type AskFileAgent } from './fs';
 import { answerMessages, cardConversation, mergeHumanQA, MICHAEL_ID, raiserOf } from '../shared/askMeRouting';
 import { FIRST_TASK_EDITED_MAX, firstTaskCard, firstTaskCardFromText } from '../shared/firstTask';
 import { answerKey, catchUpRequests, ownerWorkOrder } from '../shared/ownerRequests';
@@ -48,7 +48,9 @@ import {
 } from './git';
 import { linkWorktreeDeps, unlinkWorktreeDeps } from './worktreeDeps';
 import { HiveManager, type AgentMeta, type HiveMessage, type HiveTask } from './hive';
-import { HookServer } from './hooks';
+import { HookServer, type PlanSignal } from './hooks';
+import { OfficeBreak, type OfficeBreakState } from './officeBreak';
+import { heldByBreak } from '../shared/officeBreak';
 import { loadBundledPacks, packsResourceDir } from './packs';
 import { businessFolderRoot, ensureFolder, safeFolderName } from './agentFolders';
 import { CircuitBreaker, type BreakerInput } from './breaker';
@@ -95,6 +97,7 @@ import { PROVIDER_PRESETS, grantPaused, hasMailTools, mailAccess, mailboxAddress
 import { levelFor } from '../shared/agentDefinition';
 import { claudeBinFor, readClaudeMcpList } from './claudeMcpList';
 import { connectorCarryOver, isEmailCalendarKey, isQuickBooksKey, renamedKeys, spawnConnectorPlan, usableConnectors, type SpawnConnectorPlan } from '../shared/claudeConnectors';
+import { quickbooksAccessToSave } from '../shared/quickbooks';
 import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -428,7 +431,8 @@ const hookServer = new HookServer(
   () => ({ ...knowledge.agentAccess(), meaning: meaningSearch() }),
   companyProfileForAgents,
   (agentId) => booksReadRoleIds().has(agentId),
-  memberPresent
+  memberPresent,
+  (signal) => onPlanSignal(signal)
 );
 const memory = new MemoryManager(
   () => readConfig().harnessHome,
@@ -668,7 +672,8 @@ const mailAdmin = {
   endGrant: (agentId: string, mailbox: string, reason: string) => mailApprovals.endGrant(agentId, mailbox, reason),
   cancelFor: (agentId: string, mailbox: string, reason: string) => { mailApprovals.cancel({ agentId, mailbox }, reason); },
   sendingChanged: (agentId: string, mailbox: string, address: string, sending: SendingMode, handBack: boolean) => mailApprovals.sendingChanged(agentId, mailbox, address, sending, handBack),
-  present: memberPresent
+  present: memberPresent,
+  canStoreSecrets: () => integrations.canStoreSecrets()
 };
 
 /**
@@ -1024,6 +1029,25 @@ function clearMissionTimers(): void {
   missionTimers.clear();
 }
 
+/** Send one schedule run to its agent and stamp lastFiredAt. A 'compact'
+ *  maintenance mission carries no dispatch (firePayload is null), so only the
+ *  stamp happens. */
+function sendMission(m: ScheduledMission): void {
+  const payload = firePayload(m);
+  if (payload && hive.enabled()) {
+    hive.send({ to: payload.to, act: 'inform', subject: payload.subject, body: payload.body }, 'scheduler');
+  }
+  // No compaction here: that is Claude Code's own auto compact now, with its
+  // window set per agent at spawn (AUTO_COMPACT_WINDOW_TOKENS).
+  const current = readConfig().missions ?? [];
+  const next = current.map((x) =>
+    x.id === m.id ? { ...x, lastFiredAt: Date.now() } : x
+  );
+  writeConfig({ missions: next });
+  // Let the SCHEDULES panel refresh its "last fired" without a reload (#2.3).
+  try { liveWebContents()?.send('missions:updated'); } catch { /* window gone */ }
+}
+
 /** Rebuild the scheduler from persisted config: clear every existing timer,
  *  then arm each enabled mission honoring its lastFiredAt — a setTimeout for the
  *  time remaining until its next due fire, which then settles into a steady
@@ -1044,21 +1068,9 @@ function syncMissions(): void {
     if (plan.type === 'heartbeat') { armHeartbeat(m); continue; }
     const fire = (): void => {
       try {
-        // A 'compact' maintenance mission carries no dispatch (firePayload is
-        // null), so only the stamp below happens.
-        const payload = firePayload(m);
-        if (payload && hive.enabled()) {
-          hive.send({ to: payload.to, act: 'inform', subject: payload.subject, body: payload.body }, 'scheduler');
-        }
-        // No compaction here: that is Claude Code's own auto compact now, with its
-        // window set per agent at spawn (AUTO_COMPACT_WINDOW_TOKENS).
-        const current = readConfig().missions ?? [];
-        const next = current.map((x) =>
-          x.id === m.id ? { ...x, lastFiredAt: Date.now() } : x
-        );
-        writeConfig({ missions: next });
-        // Let the SCHEDULES panel refresh its "last fired" without a reload (#2.3).
-        try { liveWebContents()?.send('missions:updated'); } catch { /* window gone */ }
+        // Runs as configured, a break included (owner): the job lands in the
+        // inbox, and the break only holds the nudge that delivers it.
+        sendMission(m);
       } catch (e) {
         console.error('[scheduler] mission', m.id, e);
       }
@@ -1765,6 +1777,117 @@ function ownerToast(title: string, body: string): void {
   try { if (Notification.isSupported()) new Notification({ title, body }).show(); }
   catch { /* unsupported platform */ }
 }
+
+// ─── Office break (issue 124) ────────────────────────────────────────────────
+// The Claude plan reached its usage limit: the office says so and stops typing
+// into Claude terminals, and starts again by itself. Schedules still run on
+// time; their jobs wait in the inboxes until the break ends.
+// The state and its steps are OfficeBreak's (src/main/officeBreak.ts).
+const OFFICE_BREAK_KV_KEY = 'office.break';
+const officeBreak = new OfficeBreak({
+  load: () => persist.getKv<OfficeBreakState>(OFFICE_BREAK_KV_KEY) ?? null,
+  save: (state) => persist.setKv(OFFICE_BREAK_KV_KEY, state)
+});
+let officeBreakTimer: ReturnType<typeof setTimeout> | null = null;
+
+function breakClock(at: number): string {
+  return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function publishOfficeBreak(): void {
+  try { liveWebContents()?.send('office:break', officeBreak.view()); } catch { /* window gone */ }
+}
+
+function armOfficeBreak(): void {
+  if (officeBreakTimer) clearTimeout(officeBreakTimer);
+  officeBreakTimer = null;
+  const s = officeBreak.current();
+  if (!s) return;
+  officeBreakTimer = setTimeout(runOfficeBreakTick, Math.max(1_000, s.due - Date.now()));
+  officeBreakTimer.unref?.();
+}
+
+/** Team member names for Michael, his own id left out. */
+function cutOffNames(ids: string[]): string {
+  const reg = hive.registry();
+  return ids.filter((id) => id !== reg.godId).map((id) => reg.agents[id]?.name ?? id).join(', ');
+}
+
+function onPlanSignal(signal: PlanSignal): void {
+  if (!onClaudePlan(signal.agentId)) return;
+  if (signal.kind === 'limits') {
+    if (officeBreak.noteRateLimits(signal.rateLimits)) { armOfficeBreak(); publishOfficeBreak(); }
+    return;
+  }
+  if (signal.kind === 'prompt') { officeBreak.promptSubmitted(signal.agentId); return; }
+  if (signal.kind === 'turn') {
+    const ended = officeBreak.turnFinished(signal.agentId);
+    if (ended) endOfficeBreak(ended);
+    return;
+  }
+  const step = officeBreak.limitReached(signal.agentId);
+  const view = officeBreak.view();
+  try { hive.appendLog({ kind: 'office-break', step, agentId: signal.agentId, until: view?.until ?? null }); } catch { /* best-effort */ }
+  if (step === 'started') {
+    ownerToast(michaelName(), view?.until
+      ? `The office is on a break. Your Claude plan reached its limit. Work starts again around ${breakClock(view.until)}.`
+      : 'The office is on a break. Your Claude plan reached its limit. Work starts again when it resets.');
+  }
+  armOfficeBreak();
+  publishOfficeBreak();
+}
+
+/** Whether the agent runs on the Claude plan, whatever the break state. */
+function onClaudePlan(agentId: string): boolean {
+  try { return (hive.registry().agents[agentId]?.provider ?? 'claude') === 'claude'; } catch { return true; }
+}
+
+function runOfficeBreakTick(): void {
+  officeBreakTimer = null;
+  const r = officeBreak.tick();
+  if (!r) { armOfficeBreak(); return; }
+  if (r.step === 'over') { endOfficeBreak(r.ended); return; }
+  // The reset time has passed: delivery is open again, and Michael's turn on
+  // this message shows whether the plan answers.
+  const cut = cutOffNames(officeBreak.current()?.cutOff ?? []);
+  try {
+    if (hive.enabled()) {
+      hive.send({
+        to: 'god', act: 'inform', subject: 'Usage limit reset',
+        body: `The Claude plan's usage limit should have reset, so the office's break may be over. Carry on with what was waiting.${cut ? ` ${cut} stopped mid task when the limit was reached; they are told to carry on once a turn goes through.` : ''}`
+      }, 'system');
+    }
+    hive.appendLog({ kind: 'office-break', step: 'check' });
+  } catch (e) { console.error('[office break] check', e); }
+  armOfficeBreak();
+  publishOfficeBreak();
+}
+
+/** The plan answers again: tell the team members who were cut off to carry on
+ *  (Michael first), and tell the owner. Schedules were never held: their runs
+ *  waited in the inboxes, whose delivery opens again now. */
+function endOfficeBreak(ended: OfficeBreakState): void {
+  if (officeBreakTimer) clearTimeout(officeBreakTimer);
+  officeBreakTimer = null;
+  try {
+    const reg = hive.registry();
+    const godId = reg.godId ?? 'god';
+    const cutOff = [...ended.cutOff].sort((a, b) => (a === godId ? -1 : b === godId ? 1 : 0));
+    if (hive.enabled()) {
+      for (const id of cutOff) {
+        hive.send({
+          to: id, act: 'inform', subject: 'Usage limit reset',
+          body: 'The Claude plan\'s usage limit has reset. Continue the task you were working on when it was reached; do not repeat work that is already done.'
+        }, 'system');
+      }
+    }
+    hive.appendLog({ kind: 'office-break', step: 'over', cutOff: cutOff.length });
+  } catch (e) { console.error('[office break] end', e); }
+  ownerToast(michaelName(), 'The break is over. The team is back at work.');
+  publishOfficeBreak();
+}
+
+ipcMain.handle('office:breakView', () => officeBreak.view());
 
 /** One circuit-breaker beat: pull a fresh usage sample per active agent, append
  *  it to the durable cost ledger (the SOLE durable cost store), tick the breaker,
@@ -4007,7 +4130,8 @@ ipcMain.handle('providerKey:has', (_evt, backend: unknown) =>
 ipcMain.handle('providerKey:clear', (_evt, backend: unknown) => {
   if (typeof backend !== 'string' || !(backend in BACKEND_KEY_ENV)) return { ok: false, error: 'unknown backend' };
   try {
-    integrations.deleteSecret(providerKeyRef(backend));
+    // deleteSecret never throws: false means the key may still be stored.
+    if (!integrations.deleteSecret(providerKeyRef(backend))) return { ok: false, error: 'The saved key could not be removed. Try again; if it keeps failing, the saved secrets file needs repair.' };
     if (backend === 'anthropic' && readConfig().claudeAuth === 'apiKey') noticeEngineSetup('api-key');
     return { ok: true };
   }
@@ -4043,6 +4167,7 @@ ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
 
 // ─── IPC: config ────────────────────────────────────────────────────────────
 ipcMain.handle('config:get', (): HarnessConfig => readConfig());
+ipcMain.handle('config:damagedCopy', (): string | null => damagedConfigCopy());
 ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
   // FIRST RUN: every hive-bound service is started by bootstrapHiveServices(),
   // which runs once at app-ready and early-returns on `!hive.enabled()` — i.e.
@@ -4293,7 +4418,106 @@ ipcMain.handle('fs:askFiles', async (_evt, paths: unknown, who: unknown) => {
   if (!Array.isArray(paths)) return [];
   // Each root's realpath once for the whole card, not once per path.
   const roots = await resolveAskFileRoots(askFileRoots(who));
-  return Promise.all(paths.slice(0, 20).map((p) => (askFilePathOk(p) ? askFileVerdict(p, roots).then((r) => r.verdict) : 'missing')));
+  return Promise.all(paths.slice(0, 20).map((p) => (askFilePathOk(p)
+    ? askFileVerdict(p, roots).then((r) => ({ verdict: r.verdict, tab: r.tab, path: r.path }))
+    : { verdict: 'missing' as const, tab: false, path: String(p) })));
+});
+
+/** Where a file sits, in office terms, for the file tab's folder line
+ *  (docs/designs/open-file-tab.md, DD4): the office, or the team member whose
+ *  folder holds it, and the folders below that. */
+function askFilePlace(root: string, real: string, path: string): { place: string; folder: string[] } {
+  const cfg = readConfig();
+  const office = cfg.businessFolder ?? legacyBusinessFolder(cfg.officeFolder);
+  const same = (a?: string) => !!a && resolve(expandTilde(a)) === resolve(root);
+  let place = 'office';
+  if (!same(office)) {
+    let agents: Record<string, AskFileAgent> = {};
+    try { agents = hive.registry().agents; } catch { /* no hive yet */ }
+    place = Object.keys(agents).find((id) => same(agents[id]?.cwd)) ?? 'office';
+  }
+  // The read path is canonical, so the folders below are taken from the root's
+  // canonical path; which root it was is matched as configured.
+  const below = path.startsWith(real) ? path.slice(real.length) : basename(path);
+  return { place, folder: dirname(below).split(/[\\/]/).filter((f) => f && f !== '.') };
+}
+
+/** Read a named file for its office tab. The same folder check as Open runs
+ *  again here; the renderer's earlier verdict never decides. */
+ipcMain.handle('fs:readAskFile', async (_evt, p: unknown, who: unknown) => {
+  if (!askFilePathOk(p)) return { ok: false, error: 'not found' };
+  const r = await readAskFile(p, askFileRoots(who));
+  if (!r.ok) {
+    if (r.error !== 'not found') console.warn(`[fs:readAskFile] ${r.error}: ${p}`);
+    return r;
+  }
+  return { ...r, ...askFilePlace(r.root, r.real, r.path) };
+});
+
+/**
+ * Live refresh for open file tabs (open-file-tab.md, E1). Main watches the
+ * file's FOLDER, filtered to its name: editors and agents often write a new
+ * file and rename it over the old one, which ends a watch on the file itself,
+ * and a deleted file cannot be watched until it comes back. At most 5 per
+ * window, the same as the tabs; a window that reloads, crashes or closes drops
+ * its watchers.
+ */
+const askFileWatches = new Map<number, Map<string, { close: () => void }>>();
+const MAX_ASK_FILE_WATCHES = 5;
+ipcMain.handle('fs:watchAskFile', async (evt, id: unknown, p: unknown, who: unknown) => {
+  if (typeof id !== 'string' || !askFilePathOk(p)) return { ok: false };
+  const v = await askFileVerdict(p, askFileRoots(who));
+  if (v.verdict === 'missing' || !v.tab) return { ok: false };
+  const wc = evt.sender;
+  let mine = askFileWatches.get(wc.id);
+  if (!mine) {
+    const forWindow = new Map<string, { close: () => void }>();
+    askFileWatches.set(wc.id, forWindow);
+    mine = forWindow;
+    // Each drop removes its own listeners, so a window that reloads many times
+    // never stacks them, and an old drop never clears a newer map.
+    const onNavigate = (details: { isMainFrame: boolean; isSameDocument: boolean }) => {
+      if (details.isMainFrame && !details.isSameDocument) drop();
+    };
+    const drop = () => {
+      for (const w of forWindow.values()) w.close();
+      forWindow.clear();
+      if (askFileWatches.get(wc.id) === forWindow) askFileWatches.delete(wc.id);
+      wc.off('destroyed', drop);
+      wc.off('render-process-gone', drop);
+      wc.off('did-start-navigation', onNavigate);
+    };
+    wc.once('destroyed', drop);
+    wc.once('render-process-gone', drop);
+    wc.on('did-start-navigation', onNavigate);
+  }
+  mine.get(id)?.close();
+  if (mine.size >= MAX_ASK_FILE_WATCHES) {
+    const [oldest] = mine.keys();
+    mine.get(oldest)?.close();
+    mine.delete(oldest);
+  }
+  const name = basename(v.path);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const watcher = watchFs(dirname(v.path), (_type, file) => {
+      if (file && file.toString() !== name) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { if (!wc.isDestroyed()) wc.send('fs:askFileChanged', id); }, 300);
+    });
+    watcher.on('error', (e) => console.warn(`[fs:watchAskFile] ${(e as NodeJS.ErrnoException).code ?? e}: ${v.path}`));
+    mine.set(id, { close: () => { if (timer) clearTimeout(timer); watcher.close(); } });
+    return { ok: true };
+  } catch (e) {
+    console.warn(`[fs:watchAskFile] ${(e as NodeJS.ErrnoException).code ?? e}: ${v.path}`);
+    return { ok: false };
+  }
+});
+ipcMain.handle('fs:unwatchAskFile', (evt, id: unknown) => {
+  const mine = askFileWatches.get(evt.sender.id);
+  if (typeof id !== 'string' || !mine) return;
+  mine.get(id)?.close();
+  mine.delete(id);
 });
 
 /** Open an Ask me question's file. The check runs again here, so the renderer's
@@ -4459,14 +4683,16 @@ ipcMain.handle('mail:setSendOnly', (_evt, agentId: unknown, grant: unknown) => {
 /** Roles that may use QuickBooks, Read only, before the owner chooses. */
 ipcMain.handle('quickbooks:roleDefaults', () => [...booksReadRoleIds()]);
 /** Save one agent's QuickBooks capability. The hook reads it on the agent's
- *  next call, so nothing restarts. */
-ipcMain.handle('quickbooks:setAccess', (_evt, agentId: unknown, cap: unknown) => {
-  if (typeof agentId !== 'string' || !cap || typeof cap !== 'object') return { ok: false };
-  const c = cap as { enabled?: unknown; changes?: unknown };
-  const quickbooks = { enabled: c.enabled === true, changes: c.enabled === true && c.changes === true };
+ *  next call, so nothing restarts. Only for a team member, or the new id of a
+ *  hire in progress (issue 132); anything else writes nothing. */
+ipcMain.handle('quickbooks:setAccess', (_evt, agentId: unknown, cap: unknown, opts: unknown) => {
+  const onTeam = (id: string): boolean => { try { return Object.prototype.hasOwnProperty.call(hive.registry().agents, id); } catch { return false; } };
+  const quickbooks = quickbooksAccessToSave(agentId, cap, onTeam, (opts as { hiring?: unknown } | undefined)?.hiring === true);
+  if (!quickbooks) return { ok: false };
+  const id = agentId as string;
   const cfg = readConfig();
   const caps = cfg.agentCapabilities ?? {};
-  writeConfig({ agentCapabilities: { ...caps, [agentId]: { ...(caps[agentId] ?? {}), quickbooks } } });
+  writeConfig({ agentCapabilities: { ...caps, [id]: { ...(caps[id] ?? {}), quickbooks } } });
   return { ok: true };
 });
 // ─── Claude connectors (docs/designs/claude-connectors.md, owner 2026-10-02) ───
@@ -5844,6 +6070,7 @@ ipcMain.handle('app:openExternal', async (_evt, url: unknown) => {
 /** Toggle macOS "Open at Login" — fully programmatic, no permission prompt.
  *  Returns the resulting state so the renderer toggle reflects reality. */
 ipcMain.handle('app:setLoginItem', (_evt, enabled: unknown) => {
+  if (process.platform === 'linux') return false;
   app.setLoginItemSettings({ openAtLogin: enabled === true });
   return app.getLoginItemSettings().openAtLogin;
 });
@@ -7051,6 +7278,8 @@ function runWorkerWakeBeat(): void {
   const facts: WorkerWakeFacts[] = [];
   for (const [agentId, a] of Object.entries(reg.agents)) {
     if (agentId === reg.godId || a?.archived) continue;
+    // Nothing types into a terminal the usage limit has stopped (issue 124).
+    if (heldByBreak(officeBreak.view(), a?.provider)) continue;
     const ptyId = ptyForAgent(agentId);
     if (!ptyId) continue;
     const snap = control.snapshot(agentId);
@@ -7100,6 +7329,8 @@ function armAlwaysOnBeats(): void {
   if (safeClearTimer) clearInterval(safeClearTimer);
   safeClearTimer = setInterval(() => { try { safeClearer.beat(); } catch (e) { console.error('[safe-clear beat]', e); } }, 60_000);
   runWorkerWakeBeat(); // catch-up on arm — power-resume re-arms and drains the backlog
+  // A break's timer freezes in system sleep like the beats above.
+  armOfficeBreak();
 }
 
 /** Wall-clock instant we last observed the machine suspend or lock, so a resume
@@ -7221,6 +7452,8 @@ app.whenReady().then(() => {
   // Guarded: a DB failure (e.g. a bad native build) must degrade to defaults,
   // never block app startup.
   try { persist.open(); } catch (e) { console.error('[db] open failed:', e); }
+  // A break saved before quitting is still on (issue 124).
+  armOfficeBreak();
   // Auto-update from GitHub releases (installed builds only; always on since
   // 2026-10-02). Download-in-background + restart-to-apply toast;
   // never restarts on its own. Falls back to a notify-only releases/latest

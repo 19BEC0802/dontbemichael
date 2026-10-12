@@ -1,4 +1,4 @@
-- **Microsoft 365 on your own domain:** a clear message.
-- **Large Office files** are refused, not unpacked.
-- **No repeat emails** after a restart.
-- **Web links** open in your browser.
+- **Office break** at your Claude plan limit.
+- **Files Michael names** open in an office tab.
+- **Done cards** show the result.
+- **No repeat sends** when a send drops.

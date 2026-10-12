@@ -606,3 +606,8 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .cth-engine-spin { animation: none; }
   .cth-engine-bar > i, [dir="rtl"] .cth-engine-bar > i { animation: none; width: 100%; opacity: .5; }
 }
+
+/* File chips in replies and Ask me cards (docs/designs/open-file-tab.md, DD1). */
+.cth-file-chip:hover:not(:disabled) { background: var(--cth-indigo-soft) !important; }
+.cth-file-chip:focus-visible { outline: 2px solid var(--cth-indigo); outline-offset: 1px; }
+.cth-file-tab-close:hover { background: var(--cth-neutral-soft) !important; color: var(--cth-ink) !important; opacity: 1 !important; }

@@ -37,7 +37,7 @@ require.cache[electron] = {
     }
   }
 };
-const { setSecret, getSecret, hasSecret, deleteSecret } = loadTs('src/main/integrations.ts');
+const { setSecret, getSecret, hasSecret, deleteSecret, canStoreSecrets } = loadTs('src/main/integrations.ts');
 const { writeFileAtomic, sweepStaleTemps } = loadTs('src/main/atomicFile.ts');
 const scratch = [userData];
 test.after(() => { for (const d of scratch) fs.rmSync(d, { recursive: true, force: true }); });
@@ -90,6 +90,16 @@ test('with OS encryption off, nothing is written in plaintext and nothing is los
     encryptionOn = true;
   }
   assert.equal(fs.readFileSync(secretsFile, 'utf8'), before, 'the file is untouched');
+});
+
+test('canStoreSecrets follows OS encryption, so a mailbox is refused before its login test', () => {
+  assert.equal(canStoreSecrets(), true);
+  encryptionOn = false;
+  try {
+    assert.equal(canStoreSecrets(), false);
+  } finally {
+    encryptionOn = true;
+  }
 });
 
 test('a write that fails before the rename leaves the old file intact and no temp file', () => {
@@ -231,3 +241,85 @@ function realOps() {
 function t_cleanup(dir) {
   scratch.push(dir);
 }
+
+// ── deleteSecret says whether the secret is gone (issue 133) ─────────────────
+const { removeRecord } = loadTs('src/main/integrations.ts');
+
+/** Runs `fn` with console.error captured; returns what was logged. */
+function captureErrors(fn) {
+  const logged = [];
+  const real = console.error;
+  console.error = (...args) => { logged.push(args.join(' ')); };
+  try { fn(); } finally { console.error = real; }
+  return logged;
+}
+
+test('deleteSecret says the secret is gone when it removed it, or when there was nothing to remove (issue 133)', () => {
+  // Value: protects=removal paths can tell a removed secret from one left behind; fails_when=deleteSecret stops returning true after a real removal; why_new=deleteSecret returned nothing; seam=none
+  setSecret('mail:support', 'app-password-9');
+  setSecret('apikey:gemini', 'gm-key');
+  assert.equal(deleteSecret('mail:support'), true);
+  assert.equal(hasSecret('mail:support'), false);
+  assert.equal(getSecret('apikey:gemini'), 'gm-key', 'the others stay');
+  assert.equal(deleteSecret('mail:support'), true, 'already gone: nothing left to remove');
+  assert.equal(deleteSecret(undefined), true);
+  assert.equal(deleteSecret('apikey:gemini'), true);
+});
+
+test('with an unreadable secrets file, deleteSecret does not throw, says so, and leaves the file as it was (issue 133)', () => {
+  // Value: protects=a removal never reports success while the old encrypted secret is still on disk; fails_when=an unreadable file reads as empty again, or deleteSecret throws; why_new=it read as empty and returned quietly; seam=none
+  const before = fs.existsSync(secretsFile) ? fs.readFileSync(secretsFile) : null;
+  try {
+    for (const bad of ['{"mail:sales":"enc', '[1,2]', 'null']) {
+      fs.writeFileSync(secretsFile, bad);
+      assert.equal(deleteSecret('mail:sales'), false, bad);
+      assert.equal(fs.readFileSync(secretsFile, 'utf8'), bad, 'left exactly as it was');
+    }
+  } finally {
+    if (before) fs.writeFileSync(secretsFile, before); else fs.rmSync(secretsFile, { force: true });
+  }
+});
+
+test('when the secrets file cannot be written, deleteSecret says so and the secret is still there (issue 133)', { skip: process.platform === 'win32' ? 'POSIX folder modes' : false }, () => {
+  // Value: protects=a failed write is reported, not taken as removed; fails_when=deleteSecret swallows a failed write as success; why_new=a failed write threw out of deleteSecret; seam=a read-only userData folder
+  setSecret('mail:billing', 'app-password-7');
+  setSecret('apikey:openai', 'sk-keep');
+  fs.chmodSync(userData, 0o500);
+  try {
+    assert.equal(deleteSecret('mail:billing'), false);
+  } finally {
+    fs.chmodSync(userData, 0o700);
+  }
+  assert.equal(getSecret('mail:billing'), 'app-password-7', 'still stored, as reported');
+  assert.equal(deleteSecret('mail:billing'), true, 'removed once the folder is writable again');
+  deleteSecret('apikey:openai');
+});
+
+test('removing a connected app logs when its secret could not be removed, and stays quiet when it could (issue 133)', () => {
+  // Value: protects=a connected app's leftover secret is never silently kept; fails_when=removeRecord ignores deleteSecret's answer; why_new=the removal path reported nothing; seam=console.error captured
+  setSecret('int:crm', 'client-secret');
+  let quiet;
+  const ok = captureErrors(() => { quiet = removeRecord('crm'); });
+  assert.deepEqual(quiet, { ok: true });
+  assert.deepEqual(ok, [], 'removed: nothing logged');
+  assert.equal(hasSecret('int:crm'), false);
+  const before = fs.existsSync(secretsFile) ? fs.readFileSync(secretsFile) : null;
+  try {
+    fs.writeFileSync(secretsFile, '{"int:crm":"enc');
+    let res;
+    const logged = captureErrors(() => { res = removeRecord('crm'); });
+    assert.deepEqual(res, { ok: true }, 'the record is still removed, and nothing throws');
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /^\[integrations\] .*could not be: crm$/);
+  } finally {
+    if (before) fs.writeFileSync(secretsFile, before); else fs.rmSync(secretsFile, { force: true });
+  }
+});
+
+test('clearing an engine key still reports a key that could not be removed (issue 133)', () => {
+  // Value: protects=Settings is not told a key is gone when it may still be stored; fails_when=providerKey:clear ignores deleteSecret's answer now that it no longer throws; why_new=the handler relied on a throw; seam=source pin (index.ts does not load under node)
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'index.ts'), 'utf8');
+  const start = main.indexOf("ipcMain.handle('providerKey:clear'");
+  const handler = main.slice(start, main.indexOf('\n});', start));
+  assert.match(handler, /if \(!integrations\.deleteSecret\(providerKeyRef\(backend\)\)\) return \{ ok: false, error: '[^']+' \};/);
+});
