@@ -76,7 +76,7 @@ test('a card never waits on its own person; its own step at a set time is todo',
   // 2026-10-11: Erin read rule 8 as covering her scheduled inbox checks and
   // reopened her done card; routines live in Schedules and done stays done.
   assert.match(HOUSE_RULES, /When a card's one off next step is its own person's at a set time/);
-  assert.match(HOUSE_RULES, /Work that repeats on a schedule needs no card: its runs live in Schedules, and a done card stays done\./);
+  assert.match(HOUSE_RULES, /Work that repeats on a schedule needs no card: its runs live in Schedules\. A done card stays done: only the owner reopens one, to correct a card marked done by mistake\./);
   assert.equal((fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8').match(/scheduled routines get no card/g) || []).length, 3, 'Michael\'s two board texts and the protocol');
   const hive = fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8');
   assert.equal((hive.match(/never the card\\'s own person/g) || []).length, 4, 'rule 8, Michael\'s two board texts and the protocol');
@@ -116,4 +116,22 @@ test('a resumed agent is told the house rules that changed, once; a fresh one is
   assert.deepEqual(hive.tellHouseRules('nick', true), [all[6]]);
   assert.equal(inbox('nick').length, 2);
   assert.deepEqual(hive.tellHouseRules('oscar', true), [], 'oscar was recorded at his fresh start');
+});
+
+// 2026-10-11 (card-lifecycle.md section 10): a card is one activity's needs;
+// the team member files it as triage, Michael triages and releases it.
+test('team members file triage cards, Michael triages, bundles and re-asks, and done stays done', () => {
+  // Value: protects=the owner's card model reaches every agent; fails_when=a prompt drops the triage filing, the numbered bundle, the split by who answers, the partial re-ask or the done rule; why_new=owner decisions 2026-10-11; seam=prompt text
+  const hive = fs.readFileSync(path.resolve(__dirname, '..', 'src/main/hive.ts'), 'utf8');
+  assert.match(hive, /file a card yourself in tasks\.json \(in \$\{p\.hiveRoot\}\) with "status": "triage"/, 'team member files');
+  assert.match(hive, /Put all the questions one activity raised for the owner in one ask, a numbered list in one humanQA entry/);
+  assert.match(hive, /file a second card for them with "waitingOn" naming who, instead of an ask/, 'split by who answers');
+  assert.match(hive, /never set a card to blocked or waiting yourself, and never reopen a done card/);
+  assert.match(hive, /'## Triage',\n\s*'Team members file the cards their work needs/, 'Michael triages');
+  assert.match(hive, /Triage cards are yours alone; the owner never sees them/);
+  assert.match(hive, /the questions one activity raised go in that ask as a numbered list, answered together/);
+  assert.match(hive, /Questions from a different activity get a card of their own, never a parked note\./);
+  assert.match(hive, /When the answer leaves any question of the ask unanswered, first add one new ask on the same card holding only those questions and keep the card Blocked/);
+  assert.match(hive, /Only the owner takes a card out of Done, to correct one marked done by mistake/);
+  assert.doesNotMatch(hive, /never add a different question to a card that already has one open/);
 });

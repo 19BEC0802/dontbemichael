@@ -191,6 +191,42 @@ into one, or withdraws what no longer matters. He never moves a card the owner
 moved. Offices with questions left over from the old rule (a newer ask hid the
 older one) are tidied this way too; there is no migration (owner, 2026-10-05).
 
+### 10. A card is one activity's needs; the doer files it, Michael triages (2026-10-11)
+
+Owner decisions, 2026-10-11, after cards turned into long umbrellas carrying up
+to nine past questions and ten one question "held" cards appeared (the old
+one question rule made Michael park the rest):
+
+- **What a card is.** While a team member does an activity (an email check, a
+  CRM review), what it needs from others becomes a card: one or more questions,
+  related or not, with the context. Similar ones are merged. One activity's
+  questions for the owner are one ask holding them as a numbered list,
+  answered together on Ask me. Questions from a different activity get their
+  own card; nothing is parked.
+- **Split by who answers.** When one activity needs answers from the owner and
+  from someone outside (a customer), it is two cards: the owner's in Blocked
+  (Ask me), the outside party's in Waiting, naming them.
+- **The doer files, Michael triages (pattern: anyone files, one person
+  triages).** The team member writes the card itself with status "triage":
+  its title, the context in "description", and either one ask for the owner in
+  humanQA (raisedBy itself) or "waitingOn" for an outside party. Triage cards
+  are Michael's alone: the owner's board, Ask me and the floor never show them.
+  Michael sees them each turn and, for each: answers it from memory or the
+  board when he can (then tells the doer and closes it), merges it into an open
+  ask that covers the same thing, rewrites the ask for the owner (Ask me shape),
+  routes a question a teammate can answer, keeps the split by who answers, then
+  releases it to Blocked or Waiting. Michael still assigns work and is the only
+  voice to the owner. Research behind the choice: orchestrator, shared board
+  and file then triage patterns (Anthropic, LangGraph, CrewAI, blackboard
+  papers, Kanban inbox practice).
+- **Partial answers come back.** When the owner's answer leaves any question
+  of a bundle unanswered, Michael adds one new ask on the same card holding
+  only those questions, keeps the card Blocked, and only then closes the
+  owner's request. The request stays in his context every turn until he does.
+- **Done is final.** A card ends in Done. Only the owner takes one out, to
+  correct a card wrongly marked done: into To do, with a short reason. When an
+  agent reopens a Done card, the app puts it back to Done and tells Michael.
+
 ## What is not built
 
 The first proposal's history file, duties engine and thresholds (gone quiet,

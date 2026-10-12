@@ -66,7 +66,7 @@ export function pickIdleLine(previous: string | null, rand: () => number = Math.
 /** Claude Code's in-terminal question tool. Refused for team members. */
 export const ASK_TOOL = 'AskUserQuestion';
 export const ASK_TOOL_REFUSAL =
-  "Don't ask the owner here: nobody answers your terminal. Send the question to Michael through your outbox (\"to\": \"michael\", \"act\": \"query\"). He answers it, or puts it on the owner's ASK ME board.";
+  "Don't ask the owner here: nobody answers your terminal. File it as a card in tasks.json with \"status\": \"triage\" (one ask in humanQA, what you were doing in description). Michael checks it and puts it on the owner's ASK ME board.";
 
 /** A Notification that means the session is stopped on a prompt a person must
  *  answer in the terminal: a permission request or a question dialog, never the
