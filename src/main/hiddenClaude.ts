@@ -53,6 +53,10 @@ export interface HiddenClaudeOptions {
   idleMs?: number;
   /** Total timeout ms. Default 180000. */
   timeoutMs?: number;
+  /** ms after the prompt by which its transcript must exist. A session stuck
+   *  on a sign-in or trust screen never takes the prompt, so the call gives up
+   *  then instead of at timeoutMs. Default 20000. */
+  promptTakenMs?: number;
   /** Extra env merged over the resolved shell env (e.g. the shared MemPalace). */
   env?: Record<string, string>;
   /** False for a quick judgment (the hire overlap check, the focus check):
@@ -125,6 +129,7 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
     const bootCapMs = opts.bootCapMs ?? 7000;
     const idleMs = opts.idleMs ?? 3500;
     const timeoutMs = opts.timeoutMs ?? 180_000;
+    const promptTakenMs = opts.promptTakenMs ?? 20_000;
 
     // Windows: node-pty's CreateProcess can't exec the npm `.cmd`/extensionless
     // `claude` shim directly (ERROR_BAD_EXE_FORMAT, error 193) — route non-.exe
@@ -160,6 +165,7 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
     let bootMaxTimer: NodeJS.Timeout;
     let globalTimer: NodeJS.Timeout;
     let answerPoll: NodeJS.Timeout | null = null;
+    let promptTimer: NodeJS.Timeout | null = null;
     // The live preview: the PTY output rendered by a headless terminal, read
     // a few times a second once the prompt is in.
     const screen = opts.onScreenText ? new Terminal({ cols: COLS, rows: ROWS, scrollback: 2000, allowProposedApi: true }) : null;
@@ -194,6 +200,7 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
       if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
       if (answerPoll) { clearInterval(answerPoll); answerPoll = null; }
+      if (promptTimer) { clearTimeout(promptTimer); promptTimer = null; }
       if (screenTimer) { clearInterval(screenTimer); screenTimer = null; }
       opts.signal?.removeEventListener('abort', onAbort);
       screen?.dispose();
@@ -222,6 +229,12 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
       // Bracketed paste + enter — same mechanism as submitToPty in useHive.ts.
       ptyProc.write(`\x1b[200~${prompt}\x1b[201~`);
       setTimeout(() => { if (!settled) ptyProc.write('\r'); }, 140);
+      // Claude writes the prompt to the session's transcript as soon as it
+      // takes it. None at all means a sign-in or trust screen is waiting, so
+      // the caller's fallback answers now instead of after the timeout.
+      promptTimer = setTimeout(() => {
+        if (!existsSync(transcriptFile(projectDir(opts.cwd), sessionId))) finish({ ok: false, error: 'hidden session never took the prompt (signed out, or a screen is waiting)' });
+      }, promptTakenMs);
       // With no tools the first answer is the last one, so it is taken the
       // moment it lands in this session's transcript instead of after the
       // screen has been quiet for idleMs (which added 3.5s to every call).
