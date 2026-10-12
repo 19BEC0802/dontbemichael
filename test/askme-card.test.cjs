@@ -181,3 +181,9 @@ test('askTitle never throws on agent-written data, stays fast, and keeps readabl
   const tab = read('src/renderer/src/components/AskMeTab.tsx');
   assert.match(tab, /const who = nameFor\(typeof t\.assignee === 'string' \? t\.assignee : undefined\);/);
 });
+
+test('a reply that does not save says so and keeps the draft', () => {
+  const tab = read('src/renderer/src/components/AskMeTab.tsx');
+  assert.match(tab, /catch \{[\s\S]{0,300}setFailed\(row\.key\);[\s\S]{0,80}refreshNeedsYou\(\);/);
+  assert.match(tab, /failed === row\.key && \([\s\S]{0,200}role="alert"[\s\S]{0,200}translate\('askMe\.mailFailed'\)/);
+});

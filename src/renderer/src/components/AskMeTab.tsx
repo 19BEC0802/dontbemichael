@@ -76,6 +76,8 @@ export function AskMeTab() {
   const setAnswerDraft = useStore((s) => s.setAnswerDraft);
   const openTaskDetail = useStore((s) => s.openTaskDetail);
   const [sending, setSending] = useState<string | null>(null);
+  // The row whose last Reply did not save, so its card can say so.
+  const [failed, setFailed] = useState<string | null>(null);
   // The open row: undefined means the newest, null means none.
   const [openId, setOpenId] = useState<string | null | undefined>(undefined);
   // Which cards have their "holding up" list open.
@@ -153,6 +155,7 @@ export function AskMeTab() {
     const text = (drafts[row.key] ?? '').trim();
     if (!text || sending) return;
     setSending(row.key);
+    setFailed(null);
     try {
       // 1) Document the answer ON the card, on this question only.
       const next = tasks.map((t) => {
@@ -188,7 +191,12 @@ export function AskMeTab() {
       setAnswerDraft(row.key, '');
       setAnsweredHere((list) => [{ id: row.key, title: task.title, a: text, who: nameFor(typeof task.assignee === 'string' ? task.assignee : undefined), whoId: typeof task.assignee === 'string' ? task.assignee : undefined }, ...list.filter((x) => x.id !== row.key)]);
       refreshNeedsYou();
-    } catch { /* leave the draft so the user can retry */ }
+    } catch {
+      // Keep the draft so the owner can try again, and reload the board in
+      // case the question changed or was withdrawn meanwhile.
+      setFailed(row.key);
+      refreshNeedsYou();
+    }
     setSending(null);
   };
 
@@ -330,6 +338,9 @@ export function AskMeTab() {
                 {sending === row.key ? translate('askMe.sending') : translate('askMe.respond')}
               </PixelButton>
             </div>
+            {failed === row.key && (
+              <div role="alert" style={{ marginTop: 6, fontSize: 11, lineHeight: '15px', color: 'var(--cth-coral-text)' }}>{translate('askMe.mailFailed')}</div>
+            )}
             {/* The cascade: what is stuck behind this answer, folded to one line. */}
             {stuck.length > 0 && (
               <div style={{ marginTop: 9 }}>
