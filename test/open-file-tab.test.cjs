@@ -146,6 +146,9 @@ test('CSV and TSV become a table; broken quoting falls back to text (E3)', () =>
   assert.deepEqual(parseDelimited('name,note\n"Acme, Inc","said ""hi"""\r\nB,\n', ','), [['name', 'note'], ['Acme, Inc', 'said "hi"'], ['B', '']]);
   assert.deepEqual(parseDelimited('a\tb\n1\t2', '\t'), [['a', 'b'], ['1', '2']]);
   assert.equal(parseDelimited('a,"b\n1,2', ','), null);
+  // Excel's CSV UTF-8 starts with a byte order mark; the quoted header still reads as one column.
+  assert.deepEqual(parseDelimited('﻿"Client, name",Amount\r\n"Acme, Inc",10', ','), [['Client, name', 'Amount'], ['Acme, Inc', '10']]);
+  assert.deepEqual(parseDelimited('﻿name\tnote\n1\t2', '\t'), [['name', 'note'], ['1', '2']]);
   assert.equal(CSV_ROW_LIMIT, 1000);
 });
 
