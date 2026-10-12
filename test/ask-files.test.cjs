@@ -136,7 +136,10 @@ test('the open card, Task detail and Michael\'s replies show chips in place of p
   const chip = read('src/renderer/src/components/FileChip.tsx');
   assert.match(chip, /background: 'var\(--cth-neutral-soft\)'/, 'soft chip (DD1)');
   assert.match(chip, /if \(missing\) \{\n\s+return \(\n\s+<span/, 'Not found is text, not a button');
-  assert.match(chip, /const win = window\.cth\.platform === 'win32';/, 'Windows says folder, not Finder');
+  for (const file of ['FileChip.tsx', 'FileTabView.tsx']) {
+    // Value: protects=Linux and Windows never read "Finder", the Mac's file manager; fails_when=the folder wording is keyed to Windows alone again, so Linux reads "Show in Finder"; why_new=Linux showed the Mac wording; seam=source pin
+    assert.match(read(`src/renderer/src/components/${file}`), /const win = window\.cth\.platform !== 'darwin';/, `${file}: only a Mac says Finder`);
+  }
   assert.match(chip, /catch \{\n\s+for \(const p of chunk\) out\[p\] = \{ verdict: 'reveal', tab: false, path: p \};/, 'a failed check leaves a working chip');
   for (const loc of ['en', 'zh-CN', 'ar']) {
     const a = JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`)).askMe;
