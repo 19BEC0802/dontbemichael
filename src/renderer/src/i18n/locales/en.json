@@ -1964,6 +1964,7 @@
     "michaelWaiting": "waiting for the team",
     "michaelBoard": "updating the board",
     "minutes": "{{count}} min",
+    "agentWords": "“{{text}}”",
     "sendFailed": "Didn't send. Try again.",
     "michaelEnded": "terminal ended: Cancel and go back to work, or Force quit now",
     "confirmedCount": "{{acked}} / {{total}} workers confirmed",
