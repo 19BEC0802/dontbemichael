@@ -146,7 +146,7 @@ import {
   codexRemoteSocketFits,
   withCodexRemoteArgs
 } from '../shared/codexRemote';
-import { restartApp } from './restart';
+import { canRelaunch, restartApp } from './restart';
 import { PromptSubmits, confirmSubmit } from '../shared/submitConfirm';
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
@@ -5738,7 +5738,7 @@ const closingTime = new ClosingTimeController(
   () => liveWebContents(),
   (relaunch) => {
     // Same dev-mode caveat as restart.ts: a relaunched dev build opens blank.
-    if (relaunch && !process.env.ELECTRON_RENDERER_URL) app.relaunch();
+    if (relaunch && canRelaunch()) app.relaunch();
     teardownAndQuit();
   },
   // #7C.2 steering — the graceful interrupt that reaches deeply busy agents
@@ -5746,8 +5746,9 @@ const closingTime = new ClosingTimeController(
   control
 );
 hive.setRoutedObserver((msg, targets) => closingTime.onRouted(msg, targets));
+// A dev build quits instead of reopening, so the dialog must not say "Reopening".
 ipcMain.handle('app:startClosingTime', (_evt, opts?: { relaunch?: boolean }) =>
-  closingTime.start({ relaunch: opts?.relaunch === true }));
+  closingTime.start({ relaunch: opts?.relaunch === true && canRelaunch() }));
 ipcMain.handle('app:cancelClosingTime', () => closingTime.cancel());
 /** The closing-time dialog's Remind and Close without them (owner, 2026-09-29). */
 ipcMain.handle('app:closingTimeRemind', (_evt, id: unknown) => closingTime.remind(id));
