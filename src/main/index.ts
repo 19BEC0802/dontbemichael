@@ -103,6 +103,7 @@ import { quickbooksAccessToSave } from '../shared/quickbooks';
 import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
+import { pastesDir, savePaste, sweepOldPastes } from './pastes';
 import { buildWorkerLaunch } from './workerLaunch';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
@@ -5664,19 +5665,15 @@ ipcMain.handle('dialog:attachFiles', async (evt) => {
   return { ok: true as const, files: res.filePaths.map((p) => ({ path: p, name: basename(p) })) };
 });
 
-// Persist the current native clipboard image to a temp PNG so a pasted
-// screenshot can be attached by PATH. Returns an error result when the
-// clipboard holds no image (e.g. a normal text paste).
+// Save the current native clipboard image as a PNG so a pasted screenshot can
+// be attached by PATH. It goes to the app's own folder, so a message still
+// queued across a restart points at a file that is there (pastes.ts). Returns
+// an error result when the clipboard holds no image (e.g. a normal text paste).
 ipcMain.handle('clipboard:saveImage', async () => {
   try {
     const img = clipboard.readImage();
     if (img.isEmpty()) return { ok: false as const, error: 'no image in clipboard' };
-    const dir = join(app.getPath('temp'), 'cth-pastes');
-    mkdirSync(dir, { recursive: true });
-    const name = `paste-${Date.now()}.png`;
-    const dest = join(dir, name);
-    writeFileSync(dest, img.toPNG());
-    return { ok: true as const, file: { path: dest, name } };
+    return { ok: true as const, file: savePaste(pastesDir(app.getPath('userData')), img.toPNG()) };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
   }
@@ -7097,6 +7094,7 @@ function bootstrapHiveServices(): void {
   hive.onScheduleRequest(receiveScheduleRequest);
   hive.ensureHive();
   try { sweepOrphanAgentMcp(); } catch (e) { console.error('[mail] orphan agent-mcp sweep failed', e); }
+  sweepOldPastes(pastesDir(app.getPath('userData')));
   // Read the Claude account's connectors in the background (D11).
   void refreshClaudeConnectors('start');
   // Waiting schedule requests reach Michael, and ones he leaves undecided
