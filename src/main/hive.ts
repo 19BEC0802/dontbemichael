@@ -604,6 +604,16 @@ function repairLiteralLineBreaksInJsonStrings(raw: string): { text: string; chan
 /** How far ahead of now a reply's own time may move the read mark (clock skew). */
 const OWNER_READ_SKEW_MS = 5 * 60 * 1000;
 
+/** A folder as Gemini CLI's --include-directories can carry it. The flag splits
+ *  every value on commas, so a path with one ("Acme, LLC") goes relative to
+ *  the agent's cwd, which Gemini resolves against. Undefined when that still
+ *  holds a comma; the per-agent settings file names the folder either way. */
+export function geminiIncludeDirArg(cwd: string, dir: string): string | undefined {
+  if (!dir.includes(',')) return dir;
+  const rel = cwd ? relative(cwd, dir) : '';
+  return rel && !rel.includes(',') ? rel : undefined;
+}
+
 export class HiveManager {
   /**
    * @param getHome  Lazily resolve harnessHome so the hive follows config changes.
@@ -1191,7 +1201,16 @@ export class HiveManager {
             else if (desc.shim === 'gemini') {
               // Point only this worker at a per-agent system settings file so
               // the bridge is trusted and ~/.gemini/settings.json stays untouched.
-              env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = this.installGeminiHooks(dir);
+              const writable = this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs);
+              env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = this.installGeminiHooks(dir, writable);
+              // The agent folder and hive root join its workspace, the folders
+              // codex gets with --add-dir above. On argv too: Gemini CLI 0.60
+              // and later skip a system settings file in a folder the user owns.
+              for (const d of writable) {
+                const arg = geminiIncludeDirArg(meta.cwd, d);
+                if (arg) preArgs.push('--include-directories', arg);
+                else console.error(`[hive] ${meta.id}: a comma in ${d} keeps it off Gemini's --include-directories`);
+              }
             }
             else if (desc.shim === 'grok') this.installGrokHooks();
           } else if (desc.kind === 'proxy') {
@@ -3566,8 +3585,19 @@ export class HiveManager {
    *
    *  The system settings path is per agent. Gemini merges object and array
    *  settings across layers, so auth and user settings remain in their normal
-   *  GEMINI_CLI_HOME while this trusted bridge stays isolated. */
-  private installGeminiHooks(dir: string): string {
+   *  GEMINI_CLI_HOME while this trusted bridge stays isolated.
+   *
+   *  `writableDirs` become `context.includeDirectories`. Gemini's file tools
+   *  refuse any path outside the workspace ("Path not in workspace"), and the
+   *  agent folder and hive root sit outside cwd, so without them write_file
+   *  and replace cannot touch memory.md or anything else in the agent folder
+   *  or the hive. The codex counterpart is `--add-dir`. Gemini concatenates
+   *  this array with the owner's own, so theirs still apply.
+   *
+   *  Gemini CLI 0.60 and later read a system settings file only from a folder
+   *  owned by root or an administrator, and skip this one (hooks included).
+   *  The spawn also passes the folders as --include-directories for them. */
+  private installGeminiHooks(dir: string, writableDirs: string[] = []): string {
     const home = join(dir, '.gemini-hive');
     const settingsPath = join(home, 'system-settings.json');
     try {
@@ -3594,7 +3624,8 @@ export class HiveManager {
           BeforeTool: [hook('before-tool', '.*')],
           AfterTool: [hook('after-tool', '.*')],
           AfterAgent: [hook('after-agent')]
-        }
+        },
+        ...(writableDirs.length ? { context: { includeDirectories: writableDirs } } : {})
       };
       writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
     } catch (e) { console.error('[hive] installGeminiHooks failed:', e); }
