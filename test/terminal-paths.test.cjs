@@ -104,6 +104,35 @@ test('absolute, home, and Windows paths are all recognised', () => {
   assert.deepEqual(tokensIn('at C:\\Users\\x\\a.ts'), ['C:\\Users\\x\\a.ts']);
 });
 
+test('quoted paths with spaces keep their entire path, including the Windows drive', () => {
+  assert.deepEqual(
+    tokensIn('saved "C:\\Users\\Jane\\Business Reports\\summary.md"'),
+    ['C:\\Users\\Jane\\Business Reports\\summary.md']
+  );
+  assert.deepEqual(tokensIn("saved '/Users/Jane/Business Reports/summary.md'"), ['/Users/Jane/Business Reports/summary.md']);
+  assert.deepEqual(tokensIn('saved `~/Business Reports/summary.md`'), ['~/Business Reports/summary.md']);
+  assert.deepEqual(tokensIn('saved "./Business Reports/summary.md"'), ['./Business Reports/summary.md']);
+  assert.deepEqual(tokensIn('saved "../Business Reports/summary.md"'), ['../Business Reports/summary.md']);
+  assert.deepEqual(tokensIn('saved "\\Business Reports\\summary.md"'), ['\\Business Reports\\summary.md']);
+});
+
+test('quoted paths coexist with unquoted paths and preserve line suffix handling', () => {
+  assert.deepEqual(
+    tokensIn('see "./src/my folder/index.ts:42", build/icon.png and \'./docs/my notes.md\''),
+    ['./src/my folder/index.ts', 'build/icon.png', './docs/my notes.md']
+  );
+});
+
+test('quoted prose keeps linking the file name inside it', () => {
+  assert.deepEqual(tokensIn('git commit -m "Update README.md"'), ['README.md']);
+  assert.deepEqual(tokensIn('error: "Could not read config.yml"'), ['config.yml']);
+  assert.deepEqual(tokensIn("Michael's notes: see plan.md' later"), ['plan.md']);
+});
+
+test('quoted versions and prose do not become file paths', () => {
+  assert.deepEqual(tokensIn('version "v0.4.5", cost \'0.92\', called `spring.thaw`'), []);
+});
+
 test('a dotted directory name cannot masquerade as an extension', () => {
   // extensionOf looks at the LAST segment only, so v1.2 here is not the extension.
   assert.equal(classifyPathToken('reports/v1.2/summary.md'), 'preview');
