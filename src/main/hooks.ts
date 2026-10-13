@@ -12,7 +12,7 @@
  */
 import { createServer, type Server } from 'node:net';
 import { existsSync, lstatSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { Notification, type WebContents } from 'electron';
 import { redactSecrets, type HiveManager } from './hive';
@@ -1027,7 +1027,9 @@ export function realPathOf(p: string): string | null {
     if (to !== null) {
       // The most links an OS follows in one path (Linux allows 40).
       if (++links > 40) return null;
-      dir = resolve(dirname(dir), to);
+      // Joined as written, not tidied: the OS follows `sub` in `sub/../x`
+      // before it goes up, so the climb has to resolve it the same way.
+      dir = isAbsolute(to) ? to : dirname(dir) + sep + to;
       continue;
     }
     const up = dirname(dir);

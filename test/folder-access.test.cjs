@@ -189,16 +189,21 @@ test('a link to a file not there yet is judged by where it leads, so a Write can
   fs.symlinkSync(path.join(finance, 'planted.txt'), path.join(sales, 'notes.txt'));
   fs.symlinkSync(path.join('..', 'Finance', 'rel.txt'), path.join(sales, 'rel.txt'));
   fs.symlinkSync(path.join(finance, 'new'), path.join(sales, 'drafts'));
+  fs.mkdirSync(path.join(finance, 'deep'));
+  fs.symlinkSync(path.join(finance, 'deep'), path.join(sales, 'sub'));
+  fs.symlinkSync(['sub', '..', 'planted2.txt'].join(path.sep), path.join(sales, 'trick'));
   fs.symlinkSync(path.join(sales, 'b'), path.join(sales, 'a'));
   fs.symlinkSync(path.join(sales, 'a'), path.join(sales, 'b'));
   assert.equal(realPathOf(path.join(sales, 'notes.txt')), path.join(finance, 'planted.txt'));
   assert.equal(realPathOf(path.join(sales, 'rel.txt')), path.join(finance, 'rel.txt'), 'a relative link is read from its own folder');
   assert.equal(realPathOf(path.join(sales, 'drafts', 'june.txt')), path.join(finance, 'new', 'june.txt'), 'a link to a folder not there yet');
+  assert.equal(realPathOf(path.join(sales, 'trick')), path.join(finance, 'planted2.txt'), 'a link through another link goes up from where that one leads');
   assert.equal(realPathOf(path.join(sales, 'a')), null, 'links that go round end');
   assert.equal(realPathOf(path.join(sales, 'plain.txt')), path.join(sales, 'plain.txt'), 'a new file with no link stays where it is');
   const l = { business: biz, teamFolders: [sales, finance] };
   const me = { isGod: false, cwd: sales };
   assert.equal(folderDecision(me, l, 'Write', realPathOf(path.join(sales, 'notes.txt')), true).deny, true);
+  assert.equal(folderDecision(me, l, 'Write', realPathOf(path.join(sales, 'trick')), true).deny, true);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
