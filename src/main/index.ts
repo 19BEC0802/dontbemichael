@@ -109,7 +109,7 @@ import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
-import { COLLECT_USAGE_STATS, SHOW_DELIVERY_SWITCH, SHOW_VOICE, SHOW_SLACK } from '../shared/buildFeatures';
+import { COLLECT_USAGE_STATS, SHOW_DELIVERY_SWITCH, SHOW_VOICE, SHOW_SLACK, SHOW_MAILBOXES } from '../shared/buildFeatures';
 import { fetchHireManifest, readHireManifestFiles } from './hire';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
@@ -613,7 +613,7 @@ const standingFit = standingFitCheck({
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
   getSecret: integrations.getSecret,
-  mail: (agentId, op, body) => handleMailRequest(mailService, { getConfig: () => readConfig(), audit: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }, proposals: mailApprovals, fitCheck: standingFit, present: memberPresent, log: (line) => console.log(line) }, agentId, op, body)
+  mail: SHOW_MAILBOXES ? (agentId, op, body) => handleMailRequest(mailService, { getConfig: () => readConfig(), audit: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }, proposals: mailApprovals, fitCheck: standingFit, present: memberPresent, log: (line) => console.log(line) }, agentId, op, body) : undefined
 });
 
 /** Absolute path to the bundled md-mail MCP server (same resolution as the
@@ -3920,8 +3920,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // Capabilities include email gets the md-mail MCP server, which Claude Code
   // starts outside the Bash sandbox, holding this agent's own broker token.
   // Revoked in teardownPty with the rest of this PTY's grants. `--mcp-config`
-  // takes several values, so it must stay the last argument.
-  if (claudeProvider && opts.hive?.id && opts.hive.role !== 'worker' && integrationBroker.running()) {
+  // takes several values, so it must stay the last argument. Never while
+  // SHOW_MAILBOXES is off, even with email saved earlier.
+  if (SHOW_MAILBOXES && claudeProvider && opts.hive?.id && opts.hive.role !== 'worker' && integrationBroker.running()) {
     const agentId = opts.hive.id;
     const home = readConfig().harnessHome ? expandTilde(readConfig().harnessHome!) : null;
     const root = hive.root();

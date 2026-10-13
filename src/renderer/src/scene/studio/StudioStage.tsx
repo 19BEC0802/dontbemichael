@@ -31,6 +31,7 @@ import { P, STAGE_H, STAGE_W, type Pt } from './iso';
 import { family, sceneTokens, type Family } from './theme';
 import { HUB, HUB_CARD, POST_GY, cardRect, departmentOf, planStudio, postGx, roleOf, type PodPlan } from './layout';
 import { FLIGHT_MS, bendFor, useStudioLife } from './life';
+import { SHOW_MAILBOXES } from '@shared/buildFeatures';
 import { DECOR, Decor, Flow, Hub, MailPost, Platform, Pod, PodGlow, StudioDefs, plateAt, plateWidth, type DeskState } from './StudioArt';
 
 
@@ -242,8 +243,9 @@ export const StudioStage = memo(function StudioStage({ config: initialConfig, bl
     return m;
   }, [plan]);
 
-  // Mailbox posts: every connected mailbox, and who watches it.
-  const mailboxes = config.mailboxes ?? [];
+  // Mailbox posts: every connected mailbox, and who watches it. None while
+  // SHOW_MAILBOXES is off, which also drops their tags and wires.
+  const mailboxes = SHOW_MAILBOXES ? config.mailboxes ?? [] : [];
   const ownerOf = (mailboxId: string): Agent | undefined => {
     const entry = Object.entries(config.agentCapabilities ?? {})
       .find(([, c]) => c.email?.enabled && c.email.mailboxes?.[0] === mailboxId);
