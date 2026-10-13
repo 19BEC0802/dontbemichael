@@ -56,6 +56,20 @@
 **Priority:** P3
 **Depends on:** Named links shipped.
 
+## Terminal links (from the ship review of mit/named-links, 2026-10-13)
+
+### A quoted phrase that starts with a slash links as a path
+
+**What:** Since #280, a whole quoted match that starts with a path prefix and ends in a file ending is linked, so quoted prose like "/ see notes.md" underlines the whole phrase and ⌘-click finds nothing.
+
+**Why:** A link that leads nowhere reads as broken.
+
+**Context:** `PATH_TOKEN_RE` in `src/shared/terminalPaths.ts`. Fix: link a quoted match only when it holds no run of two or more words before the last path separator, or check it exists before underlining (the chip path already does).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Attachments (from the Codex adversarial review of design/studio-v2, 2026-10-01)
 
 ### Keep pasted screenshots somewhere durable
@@ -509,7 +523,7 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 
 **Context:** Design and eng review in `docs/designs/research-agent-privacy.md` (owner direction and decisions D1 to D7, 2026-10-13). Research is walled off from the hive, business folder, palace and company knowledge (sandbox deny rules), excluded from broadcasts; other members cannot write its inbox, and the app sweeps any message it did not deliver; its replies are screened as outside text. Known limit: on Windows (no sandbox, #187) Research can be turned on with a warning, but its shell is not confined there. Michael's shell reaches no host in a business office (D9.1). Replaces the per member Sites code applied uncommitted on mit/named-links (keep the hook gate, `sandbox.network` plumbing and restart reason; remove the Sites group). Upgrade impact: every office loses web research until the owner turns Research on.
 
-**Status (2026-10-13):** built on mit/named-links; at /ship the refuse only guard became a two way trust layer (pass, clean or deny in; clean and flag out), see the design doc's "Trust layer" section and its review pass 2 decisions (D6.1 to D6.7). Live sandbox checks on a Mac passed: Research cannot read `tasks.json`, the home folder, other sessions' temp output or teammates' moved session files; a member cannot read or write Research's folders. Left: Windows (no sandbox, #187) and members on other engines (P1 above); Research on engines other than Claude is refused until they have equal walls.
+**Status (2026-10-13):** built on mit/named-links; at /ship the refuse only guard became a two way trust layer (pass, clean or deny in; clean and flag out), see the design doc's "Trust layer" section and its review pass 2 decisions (D6.1 to D6.7). Live sandbox checks on a Mac passed: Research cannot read `tasks.json`, the home folder, other sessions' temp output or teammates' moved session files; a member cannot read or write Research's folders. Left: Windows (no sandbox, #187) and members on other engines (P1 above); Research on engines other than Claude is refused until they have equal walls. Named Pete (a name nobody else may take); the second ship's three review passes made every file tool call judged on its real path (trimmed and resolved, kept when a big call is cut), walled each agent's session scratch folder from the others, and made a path from agent text only ever shown in Finder (D12).
 
 **Effort:** L
 **Priority:** P1
