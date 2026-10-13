@@ -680,8 +680,8 @@ stands on its own.
   with only reports waiting the quiet pill reads "Reports: N" and opens the board.
 - **Research card** (issue #230, once, updated offices only): the same Report card, "Your team no
   longer uses the internet", "This keeps your private data in. One team member, Pete, can look
-  things up for them, after a privacy check. He's off until you turn him on.", Got it and Open
-  Research settings (primary, opens Settings on Research & privacy); either clears it for good.
+  things up for them, after a privacy check. Pete is off until you turn them on.", Got it and Open
+  Research & privacy (primary, opens Settings on Research & privacy); either clears it for good.
 
 ### 7.9 Schedule request card (ScheduleRequestCards)
 
@@ -1066,7 +1066,7 @@ failed read is one line with the time of the last good read and Try again.
 **Research & privacy** (Settings, after Connections; `docs/designs/research-agent-privacy.md`,
 owner 2026-10-13). Only Pete, the Research team member, uses the internet; this section turns him on
 and sets what the team may send him. Pete first: a `sectionHead` "Research" with an info icon, then
-one row whose state line is `role="status"`: grey dot "Off. Your team can't look things up online."
+one row whose state line is `role="status"`: grey dot "Off. Pete can't look things up for your team."
 with Turn on; a 12 px `indigo` spinner and "Hiring Pete…" or "Turning off Pete…" with no
 button; green dot "On. Pete looks things up for the team." with Turn off; coral dot "Pete
 couldn't start." with Try again. Turn on and Turn off act at once, never at Save. Turn off with asks

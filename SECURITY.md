@@ -47,7 +47,7 @@ credit you (unless you prefer to stay anonymous).
   agents only write plain files.
 - **The internet boundary** (every office; `docs/designs/research-agent-privacy.md`):
   only the Research team member (agent id `research`, named Pete unless the owner renames
-  it; every rule checks the id), may use web tools or a shell
+  it; every rule checks the id) may use web tools or a shell
   network. Everyone else, Michael included, is refused WebFetch and WebSearch by the
   PreToolUse hook and gets an empty strict `sandbox.network` list, with commands kept
   inside the sandbox. Every message to Pete passes an inbound trust layer (pass, clean or
