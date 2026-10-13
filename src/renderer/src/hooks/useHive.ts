@@ -720,6 +720,8 @@ export function useHive(config: HarnessConfig | null): void {
         // With parallel calls, the row goes back to the latest one still running.
         const running = e.event === 'PostToolUse' ? runningCalls.end(e.agentId, e.toolUseId) : undefined;
         if (running && !breakerArmed) updateAgent(e.agentId, { action: `using ${running.tool}`, actionDetail: running.detail, actionAt: running.at });
+        // Nothing still running: the row stops naming the tool that finished.
+        else if (e.event === 'PostToolUse' && !breakerArmed) updateAgent(e.agentId, { action: 'thinking' });
         // The prompt landed: a submit waiting on it stops pressing Enter.
         if (e.event === 'UserPromptSubmit') { promptSubmits.note(e.agentId); runningCalls.clear(e.agentId); }
       } else if (e.event === 'PreInvocation') {
