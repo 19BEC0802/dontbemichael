@@ -1,3 +1,5 @@
+import { RESEARCH_ID } from '../../../shared/research';
+import { startResearch } from '@/shell/research';
 import { useEffect, useRef } from 'react';
 import { useStore, type Agent, type QueuedMessage, type StationKind, type ToolKind } from '@/store/store';
 import {
@@ -438,6 +440,11 @@ async function startBusinessTeam(config: HarnessConfig): Promise<void> {
     }
   }
   await window.cth.updateConfig({ businessTeamStarted: true, businessTeamRetry: failed }).catch(() => undefined);
+  // Research, when the owner picked it in the Team step (issue #230).
+  if (!retry && config.research?.on && !useStore.getState().agents.some((a) => a.id === RESEARCH_ID)) {
+    const r = await startResearch(config);
+    if (!r.ok) console.warn(`[team] Research did not start: ${r.error ?? 'unknown error'}`);
+  }
 }
 
 /**

@@ -19,7 +19,10 @@ import {
   claudeAuthStatusCommand, findClaudeFast, isEngineSetupPty, makeClaudeAuthReader, makeNoticeCoalescer, readEngineSetupStatus,
   shouldStartInstall, type EngineSetupStatus, type KeyCheckFetch
 } from './engineSetup';
-import { setHiddenClaudeAuthEnv } from './hiddenClaude';
+import { runHiddenClaude, setHiddenClaudeAuthEnv } from './hiddenClaude';
+import { makePrivacyGuard } from './privacyGuard';
+import { dataClassSettings } from '../shared/dataClasses';
+import { RESEARCH_DESK_DIR, RESEARCH_ID } from '../shared/research';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
@@ -132,7 +135,9 @@ import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { APP_NAME, APP_DATA_DIR, APP_URL_SCHEME } from '../shared/appName';
 import { homeFolderStatus, homeReadyAtLaunch } from './homeFolder';
 import { backfillOfficeRecord, findOffice, folderLayoutFor, isUsableTeamFolder, syncOfficeRecord } from './officeFile';
-import { folderPolicy, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
+import { folderPolicy, researchFolderPolicy, withResearchWall, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
+import { sandboxNetwork } from '../shared/webAccess';
+import { MCP_CATALOG } from '../shared/mcpCatalog';
 import { legacyBusinessFolder, touchesOffice } from '../shared/officeRecord';
 import { cleanCompanyProfile, companyProfileContext } from '../shared/companyProfile';
 import { scheduledRunBody } from '../shared/scheduleMessage';
@@ -608,6 +613,40 @@ const standingFit = standingFitCheck({
   env: () => memory.env(),
   log: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
 });
+
+/** The privacy check on every message to Research (main/privacyGuard.ts):
+ *  the standing check's runner, in the same app-only folder, no tools. */
+const researchGuard = makePrivacyGuard({
+  run: async (prompt) => {
+    const dir = join(app.getPath('userData'), 'standing-check');
+    mkdirSync(dir, { recursive: true });
+    try { ensureClaudePermissionsAccepted(dir); } catch { /* the check fails closed */ }
+    const r = await runHiddenClaude(prompt, {
+      model: 'claude-haiku-4-5',
+      cwd: dir,
+      command: readConfig().defaultCommand ?? 'claude',
+      noTools: true,
+      settingSources: 'user',
+      thinking: false,
+      timeoutMs: 60_000
+    });
+    return r.ok && r.text ? r.text : null;
+  },
+  settings: () => dataClassSettings(readConfig().dataClasses),
+  log: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
+});
+
+/** Research's desk: its own working folder, in the app's home, outside the
+ *  hive and the business folder. */
+function researchDesk(): string | null {
+  const home = readConfig().harnessHome;
+  return home ? join(expandTilde(home), RESEARCH_DESK_DIR) : null;
+}
+/** Research's own folders, which nobody else writes into (eng R2). */
+function researchFolders(): string[] {
+  const root = hive.root();
+  return [root ? join(root, 'agents', RESEARCH_ID) : '', researchDesk() ?? ''].filter(Boolean);
+}
 
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
@@ -1300,6 +1339,7 @@ function closeAgentByOwner(id: string): { ok: boolean; paused: number } {
  * asking agent.
  */
 function receiveScheduleRequest(actor: string, payload: unknown, why = ''): string {
+  if (actor === RESEARCH_ID) return 'Research has no schedules: it answers the questions teammates send it.';
   const cfg = readConfig();
   const godId = hiveGodId();
   const op = payload && typeof payload === 'object' ? (payload as { op?: unknown }).op : undefined;
@@ -3664,13 +3704,54 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // out once, passed to the spawn and recorded as what this agent started with,
   // so a change in between still asks for a restart. Until the hive injection
   // has applied it, the agent counts as unprotected and is stripped below.
-  const connectorPlan = opts.hive && claudeProvider ? connectorStart(readConfig(), opts.hive.id) : undefined;
+  // Research (shared/research.ts): the reserved id while the owner has it on.
+  // It runs in its desk, sees no office data and is the only one on the web.
+  const isResearch = !!opts.hive && opts.hive.id === RESEARCH_ID && !opts.hive.isGod && !!readConfig().research?.on;
+  if (opts.hive?.id === RESEARCH_ID && !isResearch) {
+    return { ok: false, error: 'Research is off. Turn it on in Settings.' };
+  }
+  if (isResearch) {
+    const desk = researchDesk();
+    if (!desk) return { ok: false, error: 'No office folder yet' };
+    mkdirSync(desk, { recursive: true });
+    opts.cwd = desk;
+    if (opts.hive) opts.hive = { ...opts.hive, cwd: desk };
+  }
+  const connectorPlan = opts.hive && claudeProvider && !isResearch ? connectorStart(readConfig(), opts.hive.id) : undefined;
   let connectorsApplied = false;
   if (opts.hive && hive.enabled()) {
     try {
+      const home = readConfig().harnessHome ? expandTilde(readConfig().harnessHome!) : '';
+      const teamFolders = [...(readConfig().businessTeam ?? []).map((m) => m.folder),
+        ...Object.values(hive.registry().agents).filter((a) => a.id !== RESEARCH_ID && a.cwd).map((a) => a.cwd)];
+      const memberPolicy = (): AgentFolderPolicy | undefined => {
+        const base = businessFolder
+          ? folderPolicy({ isGod: !!opts.hive!.isGod, cwd: opts.cwd }, businessFolderLayout(businessFolder), process.platform !== 'linux')
+          : privateOnlyFolderPolicy(!!opts.hive!.isGod, opts.cwd);
+        return base ? withResearchWall(base, researchFolders()) : undefined;
+      };
       const inj = await hive.ensureAgent(
-        { ...opts.hive, cwd: opts.cwd, provider },
-        {
+        { ...opts.hive, cwd: opts.cwd, provider, isResearch },
+        isResearch ? {
+          // Research's walls (eng review R1): no shared memory, no company
+          // knowledge, no business folder, no default servers, no connectors;
+          // the business's name, type and city only.
+          semanticMemory: false,
+          knowledgeGraph: false,
+          theme: readConfig().terminalTheme ?? 'light',
+          mcpDefaults: Object.fromEntries(MCP_CATALOG.map((m) => [m.id, { enabled: false }])),
+          skillsDir: skillsResourceDir(),
+          extraWritableDirs: [],
+          business: (() => {
+            const cfg = readConfig();
+            const pack = businessPackInfo(cfg.businessType);
+            return { name: cfg.businessName, city: cfg.businessCity, typeName: pack.displayName };
+          })(),
+          folderPolicy: researchFolderPolicy(
+            [home, businessFolder ?? '', knowledge.env().KG_ROOT ?? '', memory.env().MEMPALACE_PALACE_PATH ?? '', ...teamFolders],
+            researchFolders()
+          )
+        } : {
           semanticMemory: memory.active(),
           knowledgeGraph: knowledge.active(),
           // Bake the ABSOLUTE KG CLI path into the agent's prompt. The prompt used
@@ -3699,15 +3780,12 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
               briefing: pack.briefing
             };
           })(),
-          folderPolicy: businessFolder
-            ? folderPolicy(
-              { isGod: !!opts.hive.isGod, cwd: opts.cwd },
-              businessFolderLayout(businessFolder),
-              process.platform !== 'linux'
-            )
-            : privateOnlyFolderPolicy(!!opts.hive.isGod, opts.cwd),
+          folderPolicy: memberPolicy(),
           docTextCliPath: docTextCliPath(),
-          connectors: connectorPlan?.plan
+          connectors: connectorPlan?.plan,
+          // Only Research uses the internet (shared/webAccess.ts): every other
+          // team member's shell reaches no host. Michael runs unsandboxed.
+          network: sandboxNetwork(false, !!opts.hive.isGod)
         }
       );
       opts.args = [...(opts.args ?? []), ...inj.args];
@@ -3719,7 +3797,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       if (inj.degraded) ownerToast('Agent running degraded', inj.degraded);
       // Point the agent's mempalace CLI at the shared palace + the `kg` CLI at the
       // enterprise knowledge store (both no-ops / empty when their flags are off).
-      opts.env = { ...(opts.env ?? {}), ...inj.env, ...memory.env(), ...knowledge.env() };
+      opts.env = isResearch ? { ...(opts.env ?? {}), ...inj.env } : { ...(opts.env ?? {}), ...inj.env, ...memory.env(), ...knowledge.env() };
     } catch (e) {
       // Hive provisioning is best-effort; never block a spawn on it.
       console.error('[hive] ensureAgent failed:', e);
@@ -4740,11 +4818,13 @@ ipcMain.handle('mail:remove', (_evt, id: unknown) => {
 });
 ipcMain.handle('mail:setCapabilities', (_evt, agentId: unknown, caps: unknown) => {
   if (typeof agentId !== 'string' || !caps || typeof caps !== 'object') return { ok: false, restartNeeded: false };
+  // Research holds no office data (issue #230): no mailbox, ever.
+  if (agentId === RESEARCH_ID) return { ok: false, restartNeeded: false };
   return setAgentCapabilities(mailAdmin, agentId, caps as Parameters<typeof setAgentCapabilities>[2]);
 });
 /** A member's Send only grant (docs/designs/shared-mailboxes.md), or null to remove it. */
 ipcMain.handle('mail:setSendOnly', (_evt, agentId: unknown, grant: unknown) => {
-  if (typeof agentId !== 'string') return { ok: false, restartNeeded: false };
+  if (typeof agentId !== 'string' || agentId === RESEARCH_ID) return { ok: false, restartNeeded: false };
   if (grant !== null && (!grant || typeof grant !== 'object')) return { ok: false, restartNeeded: false };
   return setSendOnly(mailAdmin, agentId, grant as { mailbox?: unknown; sending?: unknown } | null);
 });
@@ -4755,6 +4835,7 @@ ipcMain.handle('quickbooks:roleDefaults', () => [...booksReadRoleIds()]);
  *  hire in progress (issue 132); anything else writes nothing. */
 ipcMain.handle('quickbooks:setAccess', (_evt, agentId: unknown, cap: unknown, opts: unknown) => {
   const onTeam = (id: string): boolean => { try { return Object.prototype.hasOwnProperty.call(hive.registry().agents, id); } catch { return false; } };
+  if (agentId === RESEARCH_ID) return { ok: false };
   const quickbooks = quickbooksAccessToSave(agentId, cap, onTeam, (opts as { hiring?: unknown } | undefined)?.hiring === true);
   if (!quickbooks) return { ok: false };
   const id = agentId as string;
@@ -4932,11 +5013,42 @@ ipcMain.handle('connectors:setOn', (_evt, key: unknown, on: unknown) => {
 });
 /** Give or take one connector from one agent. */
 ipcMain.handle('connectors:setGrant', (_evt, agentId: unknown, key: unknown, granted: unknown) => {
-  if (typeof agentId !== 'string' || !agentId || typeof key !== 'string' || !key || isQuickBooksKey(key)) return { ok: false };
+  if (typeof agentId !== 'string' || !agentId || agentId === RESEARCH_ID || typeof key !== 'string' || !key || isQuickBooksKey(key)) return { ok: false };
   const caps = readConfig().agentCapabilities ?? {};
   const cur = caps[agentId]?.connectors ?? [];
   const connectors = granted === true ? [...new Set([...cur, key])] : cur.filter((k) => k !== key);
   writeConfig({ agentCapabilities: { ...caps, [agentId]: { ...(caps[agentId] ?? {}), connectors } } });
+  return { ok: true };
+});
+/** Research (shared/research.ts, issue #230): is it on, and how many asks
+ *  wait for it (turning it off sends them back, design review D7). */
+ipcMain.handle('research:status', () => {
+  const cfg = readConfig();
+  return { on: !!cfg.research?.on, live: hive.researchOn(), waiting: hive.researchOn() ? hive.researchWaiting() : 0, notice: !!cfg.research?.notice };
+});
+/** Turning Research on: the owner's choice is saved first, so the spawn that
+ *  follows is allowed, and its desk is made. The renderer then hires it. */
+ipcMain.handle('research:prepare', () => {
+  const desk = researchDesk();
+  if (!desk) return { ok: false as const };
+  mkdirSync(desk, { recursive: true });
+  const cfg = readConfig();
+  writeConfig({ research: { ...(cfg.research ?? {}), on: true, notice: false } });
+  return { ok: true as const, cwd: desk };
+});
+/** Turning Research off: its waiting asks go back to their senders. The
+ *  renderer closes its terminal and archives it. */
+ipcMain.handle('research:off', () => {
+  const cfg = readConfig();
+  writeConfig({ research: { ...(cfg.research ?? {}), on: false } });
+  let returned = 0;
+  try { returned = hive.returnResearchInbox(); } catch (e) { console.error('[research] return inbox failed', e); }
+  return { ok: true, returned };
+});
+/** The one time update card was read (Got it or Open Research settings). */
+ipcMain.handle('research:noticeSeen', () => {
+  const cfg = readConfig();
+  if (cfg.research?.notice) writeConfig({ research: { ...cfg.research, notice: false } });
   return { ok: true };
 });
 /** Forget a connector that left the Claude account: its switch and grants. */
@@ -6036,6 +6148,9 @@ const isMission = (m: unknown): m is ScheduledMission =>
 ipcMain.handle('missions:list', () => readConfig().missions ?? []);
 ipcMain.handle('missions:upsert', (_evt, mission: unknown): MissionOpResult => {
   if (!isMission(mission)) return { ok: false, error: 'invalid schedule' };
+  // Research answers asks only; a schedule's text would skip the privacy
+  // check (design review D19).
+  if (mission.to === RESEARCH_ID) return { ok: false, error: 'Research has no schedules' };
   // Several "when" lines are stored canonical, or the save is refused: a bad
   // line would run on a clock nobody set.
   // The focus area is stored clean (FA1); an empty one is no focus.
@@ -7166,6 +7281,14 @@ function bootstrapHiveServices(): void {
   // A business office gets the plain PROTOCOL.md and no COMMANDS.md.
   hive.setBusinessOffice(!!(readConfig().businessFolder || readConfig().officeFolder));
   hive.onScheduleRequest(receiveScheduleRequest);
+  hive.setResearchGuard(researchGuard);
+  // The update that took the internet from the team (issue #230): an office
+  // that was already running gets the one time card; a new one decides in
+  // the onboarding Team step instead.
+  {
+    const cfg = readConfig();
+    if (!cfg.research) writeConfig({ research: { on: false, notice: !!cfg.onboardingComplete } });
+  }
   hive.ensureHive();
   try { sweepOrphanAgentMcp(); } catch (e) { console.error('[mail] orphan agent-mcp sweep failed', e); }
   // Read the Claude account's connectors in the background (D11).

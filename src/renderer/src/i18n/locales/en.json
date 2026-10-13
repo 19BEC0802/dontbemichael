@@ -234,7 +234,8 @@
       "connections": "Connections",
       "voice": "Voice",
       "memoryKnowledge": "Memory & Knowledge",
-      "companyProfile": "Company profile"
+      "companyProfile": "Company profile",
+      "research": "Research & privacy"
     },
     "changeHome": {
       "newHome": "New office folder",
@@ -1949,7 +1950,9 @@
     "connectorsPending": "Restarts when {{name}} is idle to apply.",
     "restartNow": "Restart now",
     "restarting": "Restarting {{name}} to apply…",
-    "restartFailed": "Couldn't restart {{name}}. It tries again shortly, or press Restart now."
+    "restartFailed": "Couldn't restart {{name}}. It tries again shortly, or press Restart now.",
+    "research": "Research uses the internet and holds no office data, so it has no mailboxes, connectors or schedules.",
+    "researchSettings": "Research & privacy settings"
   },
   "closingTime": {
     "listLabel": "Who is still working",
@@ -2232,5 +2235,86 @@
   "crash": {
     "line": "Something went wrong on this screen.",
     "reload": "Reload"
+  },
+  "research": {
+    "title": "Research",
+    "tip": "One team member who can use the internet. It sees no office data, only what your team sends it, after the privacy check.",
+    "off": "Off. Your team can't look things up online.",
+    "on": "On. Research looks things up for the team.",
+    "starting": "Hiring Research…",
+    "stopping": "Turning off Research…",
+    "failed": "Research couldn't start.",
+    "turnOn": "Turn on",
+    "turnOff": "Turn off",
+    "tryAgain": "Try again",
+    "cancel": "Cancel",
+    "waitingOne": "1 ask is waiting. It goes back to the sender.",
+    "waitingMany": "{{count}} asks are waiting. They go back to the sender.",
+    "windows": "On Windows, Research can still reach your office files.",
+    "windowsTip": "Windows can't fence in Research's commands yet, so the privacy check doesn't fully hold there.",
+    "sendTitle": "What your team may send to Research",
+    "sendTip": "Every message to Research is checked. Anything private goes back to the sender, and nothing leaves.",
+    "count": "{{allowed}} allowed, {{private}} private",
+    "usedWhenOn": "Used when Research is on.",
+    "allowed": "Allowed",
+    "private": "Private",
+    "alwaysPrivate": "Always private",
+    "lockedLabel": "{{name}}, always private",
+    "teamSummary": "Looks things up on the internet for the team, and sees no office data.",
+    "teamTag": "uses the internet",
+    "privacyCheck": "Privacy check",
+    "noticeTitle": "Your team no longer uses the internet",
+    "noticeBody": "This keeps your private data in. One team member, Research, can look things up for them, after a privacy check. It's off until you turn it on.",
+    "noticeOpen": "Open Research settings",
+    "class": {
+      "places": {
+        "name": "Places",
+        "tip": "Countries, regions, cities, time zones."
+      },
+      "industry": {
+        "name": "Industry and market topics",
+        "tip": "Product types, trends, regulations, standards."
+      },
+      "dates": {
+        "name": "Dates and general timing",
+        "tip": "Next quarter, holidays, deadlines in general."
+      },
+      "general": {
+        "name": "General questions",
+        "tip": "How to, definitions, reference facts."
+      },
+      "names": {
+        "name": "People's names",
+        "tip": "Customers, staff, contacts."
+      },
+      "contact": {
+        "name": "Contact details",
+        "tip": "Emails, phone numbers, street addresses."
+      },
+      "companies": {
+        "name": "Company and brand names",
+        "tip": "Customers, suppliers, competitors, any named business."
+      },
+      "money": {
+        "name": "Money",
+        "tip": "Your prices, invoices, revenue, bank and card details."
+      },
+      "accounts": {
+        "name": "Account numbers and IDs",
+        "tip": "Customer IDs, order numbers, government IDs."
+      },
+      "health": {
+        "name": "Health and personal life",
+        "tip": "Medical, family, personal circumstances."
+      },
+      "quoted": {
+        "name": "Text from your files and email",
+        "tip": "Quoted passages from documents or messages."
+      },
+      "secrets": {
+        "name": "Passwords and keys",
+        "tip": "Passwords, API keys, tokens. Never sent, whatever you choose."
+      }
+    }
   }
 }

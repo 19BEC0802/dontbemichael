@@ -66,7 +66,7 @@ export function AskMeTab() {
   const agents = useStore((s) => s.agents);
   const restorable = useStore((s) => s.restorableAgents);
   // One shared read with the pill, the strip and the chips (D3, eng R4).
-  const { tasks, requests: scheduleRequests, offers, proposals, engineSetup, stop } = useNeedsYou();
+  const { tasks, requests: scheduleRequests, offers, proposals, engineSetup, stop, researchNotice } = useNeedsYou();
   // A sign in stop already asks the owner to sign in: one card (eng R3).
   const engineCard = setupCardShown({ engineSetup, stop });
   const onBreak = !!useOfficeBreak();
@@ -200,12 +200,13 @@ export function AskMeTab() {
     <div ref={rootRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '2px 2px 10px', margin: '-2px -2px 0' }}>
       <OfficeBreakCard />
       <EngineSetupCard status={engineCard ? engineSetup : null} />
+      {researchNotice && <ResearchNoticeCard />}
       <ScheduleRequestCards requests={scheduleRequests} refresh={refreshScheduleRequests} />
       <WorkStyleUpdateCards offers={offers} />
       <MailProposalCards proposals={proposals} refresh={refreshNeedsYou} />
       {/* Nothing left (D4, D8): All clear, one light line, and what was just
           answered. The column closes on the next click outside it. */}
-      {!engineCard && !onBreak && waiting.length === 0 && scheduleRequests.length === 0 && offers.length === 0 && proposals.length === 0 && (
+      {!engineCard && !onBreak && !researchNotice && waiting.length === 0 && scheduleRequests.length === 0 && offers.length === 0 && proposals.length === 0 && (
         <div style={{ padding: '4px 2px 2px' }}>
           <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--cth-ink)' }}>{translate('shell.allClear')}</div>
           <div style={{ marginTop: 4, fontSize: 13, lineHeight: '19px', color: 'var(--cth-ink-3)' }}>{translate(`shell.allClearLine${line}`, { godName })}</div>
@@ -411,6 +412,30 @@ const quietLink: CSSProperties = {
   padding: 0, border: 'none', background: 'transparent', cursor: 'pointer',
   fontFamily: 'var(--cth-font-ui)', fontSize: 11, color: 'var(--cth-ink-3)'
 };
+
+/** The one time card after the update that took the internet from the team
+ *  (issue #230, design review D9 and D20): a report, so it never turns the
+ *  Needs you pill coral; either button clears it for good. */
+function ResearchNoticeCard() {
+  const { t } = useTranslation();
+  const seen = (): void => { void window.cth.researchNoticeSeen().then(() => refreshNeedsYou()).catch(() => undefined); };
+  return (
+    <section aria-label={t('research.noticeTitle')} style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--cth-ink)' }}>{t('research.noticeTitle')}</span>
+        <span style={reportTag}>{t('askMe.report')}</span>
+      </div>
+      <p style={{ margin: '8px 0 12px', fontSize: 12.5, lineHeight: '18px', color: 'var(--cth-ink)' }}>{t('research.noticeBody')}</p>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        <PixelButton variant="secondary" size="sm" onClick={seen}>{t('askMe.gotIt')}</PixelButton>
+        <PixelButton variant="primary" size="sm" onClick={() => {
+          seen();
+          window.dispatchEvent(new CustomEvent('cth:open-settings', { detail: { section: 'Research & privacy' } }));
+        }}>{t('research.noticeOpen')}</PixelButton>
+      </div>
+    </section>
+  );
+}
 
 const reportTag: CSSProperties = {
   fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 'var(--cth-r-pill)',

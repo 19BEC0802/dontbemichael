@@ -1,3 +1,5 @@
+import type { ResearchConfig } from '../shared/research';
+import type { DataClassId, DataClassSetting } from '../shared/dataClasses';
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { OfficeRecord } from '../shared/officeRecord';
 import type { MailboxRecord, AgentCapabilities, MailProvider, MailServer } from '../shared/mailboxes';
@@ -287,6 +289,11 @@ export interface HarnessConfig {
   businessTeam?: Array<{ agentId: string; folder: string }>;
   /** Set once the onboarding team has been started, so it is started once. */
   businessTeamStarted?: boolean;
+  /** Research, the one team member on the internet (shared/research.ts). */
+  research?: ResearchConfig;
+  /** The owner's data classes that differ from the seeded defaults
+   *  (shared/dataClasses.ts): what the team may send to Research. */
+  dataClasses?: Partial<Record<DataClassId, DataClassSetting>>;
   /** Team members that failed their first start, tried again (and only they)
    *  on each later launch until they start. */
   businessTeamRetry?: string[];
@@ -982,6 +989,11 @@ const api = {
   connectorsClear: (key: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('connectors:clear', key),
   /** The owner saw the list: nothing in it is new any more. */
   connectorsSeen: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('connectors:seen'),
+  /** Research, the one team member on the internet (shared/research.ts). */
+  researchStatus: (): Promise<{ on: boolean; live: boolean; waiting: number; notice: boolean }> => ipcRenderer.invoke('research:status'),
+  researchPrepare: (): Promise<{ ok: true; cwd: string } | { ok: false }> => ipcRenderer.invoke('research:prepare'),
+  researchOff: (): Promise<{ ok: boolean; returned: number }> => ipcRenderer.invoke('research:off'),
+  researchNoticeSeen: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('research:noticeSeen'),
   /** Agents whose connectors changed since they started (missed pushes). */
   connectorsPendingRestarts: (): Promise<string[]> => ipcRenderer.invoke('connectors:pendingRestarts'),
   /** An agent's connectors changed since it started: restart it when idle. */

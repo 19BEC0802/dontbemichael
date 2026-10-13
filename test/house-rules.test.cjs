@@ -97,7 +97,8 @@ test('a resumed agent is told the house rules that changed, once; a fresh one is
     .map((f) => JSON.parse(fs.readFileSync(path.join(hive.root(), 'agents', id, 'inbox', f), 'utf8')))
     .filter((m) => m.subject === N.HOUSE_RULES_CHANGED_SUBJECT);
   const all = N.houseRuleLines(HOUSE_RULES);
-  assert.equal(all.length, 8);
+  // Rule 9: only Research uses the internet (issue #230).
+  assert.equal(all.length, 9);
 
   assert.deepEqual(hive.tellHouseRules('oscar', false), [], 'a fresh conversation reads them in its instructions');
   assert.equal(inbox('oscar').length, 0);

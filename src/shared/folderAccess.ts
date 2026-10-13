@@ -163,6 +163,53 @@ export function folderDecision(
   return { deny: false };
 }
 
+/**
+ * Research's walls (issue #230, eng review R1): it uses the internet, so it
+ * opens nothing of the office. `walled` are the folders it may not open (the
+ * app's home with the hive, the business folder, team folders, the shared
+ * memory and company knowledge); `own` its own folders inside them (its agent
+ * folder and its desk), which the sandbox opens again. Its shell writes only
+ * its own folders (hive.sandboxWritableDirs), and the hook judges its file
+ * tools (researchFolderDecision), since a deny rule can't be opened again.
+ */
+export function researchFolderPolicy(walled: string[], own: string[]): AgentFolderPolicy {
+  const clean = (l: string[]) => Array.from(new Set(l.filter((f) => !!f && isAbsolute(f)).map((f) => resolve(f))));
+  return { sandbox: { denyWrite: [], denyRead: clean(walled), allowRead: clean(own) }, deny: [], sandboxOnly: true };
+}
+
+/** One file tool call by Research: inside its own folders, or outside every
+ *  wall. */
+export function researchFolderDecision(walled: string[], own: string[], tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
+  if (!FOLDER_WRITE_TOOLS.has(tool) && !FOLDER_READ_TOOLS.has(tool)) return { deny: false };
+  const inside = insideFn(caseInsensitive);
+  if (own.some((f) => f && inside(f, target))) return { deny: false };
+  if (walled.some((f) => f && inside(f, target))) {
+    return { deny: true, reason: 'You work only from the internet and your own folder: the office\'s files, task board and memory are kept from you on purpose. Everything you need is in the message you were sent.' };
+  }
+  return { deny: false };
+}
+
+/** Every other agent's guard on Research's folders (eng review R2): nobody
+ *  writes into them, so nothing reaches Research without the privacy check. */
+export function withResearchWall(policy: AgentFolderPolicy, researchFolders: string[]): AgentFolderPolicy {
+  const dirs = Array.from(new Set(researchFolders.filter((f) => !!f && isAbsolute(f)).map((f) => resolve(f))));
+  return {
+    ...policy,
+    sandbox: { ...policy.sandbox, denyWrite: Array.from(new Set([...policy.sandbox.denyWrite, ...dirs])) },
+    deny: Array.from(new Set([...policy.deny, ...dirs.map((d) => rule('Edit', d))]))
+  };
+}
+
+/** A file tool writing into Research's folders, by anyone but Research. */
+export function researchWallDecision(researchFolders: string[], tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
+  if (!FOLDER_WRITE_TOOLS.has(tool)) return { deny: false };
+  const inside = insideFn(caseInsensitive);
+  if (researchFolders.some((f) => f && inside(f, target))) {
+    return { deny: true, reason: 'That is Research\'s folder. To ask Research something, write a message to "research" in your own outbox; the app checks it and delivers it.' };
+  }
+  return { deny: false };
+}
+
 /** A Claude Code permission rule for everything under an absolute folder. */
 function rule(tool: 'Read' | 'Edit', folder: string): string {
   const p = resolve(folder).replace(/\\/g, '/');

@@ -42,9 +42,11 @@ export interface NeedsYouFeed {
   count: number;
   /** Reports Michael put on Ask me (michael-replies.md, 14A): never coral, never in `count`. */
   reports: number;
+  /** The one time Research card after the update (issue #230, design D9): a report. */
+  researchNotice: boolean;
 }
 
-let feed: NeedsYouFeed = { status: 'unknown', tasks: [], requests: [], ownerRequests: [], offers: [], proposals: [], engineSetup: null, stop: null, count: 0, reports: 0 };
+let feed: NeedsYouFeed = { status: 'unknown', tasks: [], requests: [], ownerRequests: [], offers: [], proposals: [], engineSetup: null, stop: null, count: 0, reports: 0, researchNotice: false };
 // The offers need the team and the packs, which this module does not import;
 // the app hands it the reader at start (App.tsx).
 let offersSource: (() => Promise<WorkStyleOffer[]>) | null = null;
@@ -91,7 +93,7 @@ let taskReads = 0;
 let requestReads = 0;
 let ownerReads = 0;
 
-function publish(next: Partial<Pick<NeedsYouFeed, 'status' | 'tasks' | 'requests' | 'ownerRequests' | 'offers' | 'proposals' | 'engineSetup' | 'stop'>>): void {
+function publish(next: Partial<Pick<NeedsYouFeed, 'status' | 'tasks' | 'requests' | 'ownerRequests' | 'offers' | 'proposals' | 'engineSetup' | 'stop' | 'researchNotice'>>): void {
   // A poll that brings nothing new changes nothing, so nobody re-renders.
   const changed = (Object.keys(next) as Array<keyof typeof next>).some((k) => JSON.stringify(next[k]) !== JSON.stringify(feed[k]));
   if (!changed) return;
@@ -100,7 +102,7 @@ function publish(next: Partial<Pick<NeedsYouFeed, 'status' | 'tasks' | 'requests
   feed = {
     ...merged,
     count: merged.tasks.reduce((n, t) => n + openQuestions(t).length, 0) + merged.requests.length + merged.offers.length + merged.proposals.length,
-    reports: merged.tasks.reduce((n, t) => n + openReportIndexes(t.humanQA).length, 0)
+    reports: merged.tasks.reduce((n, t) => n + openReportIndexes(t.humanQA).length, 0) + (merged.researchNotice ? 1 : 0)
   };
   // One more while Michael cannot start for want of his engine (get-michael-ready.md),
   // unless a sign in stop already says so: one problem, one card (eng R3).
@@ -130,6 +132,18 @@ function readTasks(): void {
     .catch(() => { /* keep the last value */ });
   readOffers(false);
   readEngine(false);
+  readResearchNotice(false);
+}
+
+// The Research card changes only on the update and when the owner reads it,
+// so the poll reads it at most once a minute; refreshNeedsYou reads it at once.
+let researchReadAt = 0;
+function readResearchNotice(force = true): void {
+  if (!force && Date.now() - researchReadAt < 60_000) return;
+  researchReadAt = Date.now();
+  void window.cth.researchStatus?.()
+    .then((s) => publish({ researchNotice: !!s?.notice }))
+    .catch(() => { /* keep the last value */ });
 }
 
 function readRequests(): void {
@@ -226,6 +240,7 @@ export function refreshNeedsYou(): void {
   readRequests();
   readProposals();
   readOffers();
+  readResearchNotice();
 }
 
 /** Show a local change at once (an answer just saved, a card dismissed); the

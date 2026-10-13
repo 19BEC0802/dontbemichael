@@ -78,12 +78,14 @@ export function isTerminalPrompt(p: { notification_type?: string; message?: stri
   return /needs your permission|needs your approval/i.test(p.message ?? '');
 }
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
-import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget } from '../shared/folderAccess';
+import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, researchFolderDecision, researchWallDecision } from '../shared/folderAccess';
+import { RESEARCH_DESK_DIR, RESEARCH_ID } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
 import { CONNECTOR_UNDECIDED, connectorAccess, MCP_RESOURCE_TOOLS } from '../shared/claudeConnectors';
 import { accessLine, agentAccessSummary } from '../shared/agentAccess';
 import { MAIL_TOOL_OPS, mailAccess } from '../shared/mailboxes';
+import { WEB_SETTINGS_UNREADABLE, WEB_TOOLS, webAccess } from '../shared/webAccess';
 import { isQuickBooksConnectorTool, isQuickBooksResourceCall, quickbooksAccess, quickbooksCapability } from '../shared/quickbooks';
 import { handoffContext } from '../shared/safeClear';
 import { ownerQuestionsContext, ownerRequestsContext, stuckCardsContext } from '../shared/ownerRequests';
@@ -581,6 +583,30 @@ export class HookServer {
       }
     }
 
+    // The internet (shared/webAccess.ts, issue #230): only Research uses web
+    // pages and web search. Everyone else, Michael included, is refused with
+    // how to ask Research, or that it is off. Read per call.
+    if (event === 'PreToolUse' && agentId && WEB_TOOLS.has(p.tool_name ?? '')) {
+      // An unreadable registry fails closed, like the connector gate (D8).
+      let d: ReturnType<typeof webAccess>;
+      try {
+        const me = this.hive.registry().agents[agentId];
+        d = webAccess(!!me?.isResearch && !me.archived, this.hive.researchOn(), p.tool_name ?? '');
+      } catch {
+        d = { ok: false, reason: WEB_SETTINGS_UNREADABLE };
+      }
+      if (!d.ok) {
+        this.emit(agentId, event, p);
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'deny',
+            permissionDecisionReason: d.reason
+          }
+        };
+      }
+    }
+
     // Decision 48 — the harness folder is plumbing only. On a business install
     // (one with a business folder), a file write into it is refused unless it's a
     // protocol file; the reason tells the agent where the work belongs instead.
@@ -734,7 +760,8 @@ export class HookServer {
     // included, works from. Delivered at the start of each session and again
     // when the owner changes it, never repeated unchanged.
     let profile: string | null = null;
-    if ((event === 'SessionStart' || event === 'UserPromptSubmit') && agentId && this.getCompanyProfile) {
+    const isResearchAgent = !!agentId && !!this.safeRegistryAgent(agentId)?.isResearch;
+    if ((event === 'SessionStart' || event === 'UserPromptSubmit') && agentId && this.getCompanyProfile && !isResearchAgent) {
       const text = this.getCompanyProfile();
       const sessionId = p.session_id ?? null;
       const delivered = this.deliveredProfileByAgent.get(agentId);
@@ -786,7 +813,7 @@ export class HookServer {
       : null;
 
     // Company knowledge turned on or off since this agent was last told.
-    const knowledgeNote = (event === 'SessionStart' || event === 'UserPromptSubmit') && agentId && this.getKnowledge
+    const knowledgeNote = (event === 'SessionStart' || event === 'UserPromptSubmit') && agentId && this.getKnowledge && !isResearchAgent
       ? this.hive.knowledgeUpdate(agentId, this.getKnowledge())
       : null;
 
@@ -909,6 +936,24 @@ export class HookServer {
     if (!target) return { deny: false };
     const reg = this.hive.registry();
     const me = reg.agents[agentId];
+    const ci = process.platform !== 'linux';
+    // Research's walls, and everyone else's guard on its folders (issue #230).
+    const hiveRoot = this.hive.root();
+    const researchOwn = [hiveRoot ? join(hiveRoot, 'agents', RESEARCH_ID) : '', home ? join(home, RESEARCH_DESK_DIR) : ''].filter(Boolean);
+    if (me?.isResearch) {
+      const walled = [home ?? '', cfg.businessFolder ?? '', this.getKnowledge?.().root ?? '',
+        ...(cfg.businessTeam ?? []).map((m) => m.folder),
+        ...Object.values(reg.agents).filter((a) => a.id !== agentId && a.cwd).map((a) => a.cwd)].filter(Boolean);
+      for (const t of [target, realPathOf(target)].filter((x): x is string => !!x)) {
+        const r = researchFolderDecision(walled, researchOwn, tool, t, ci);
+        if (r.deny) return r;
+      }
+      return { deny: false };
+    }
+    for (const t of [target, realPathOf(target)].filter((x): x is string => !!x)) {
+      const r = researchWallDecision(researchOwn, tool, t, ci);
+      if (r.deny) return r;
+    }
     if (!me?.cwd || me.isAssistant) return { deny: false };
     const folders = cfg.businessFolder ? (cfg.businessTeam ?? []).map((m) => m.folder) : [];
     if (cfg.businessFolder) {
@@ -919,7 +964,6 @@ export class HookServer {
     const layout = folderLayoutFor(cfg.businessFolder, folders, home);
     const godName = resolveGodName(reg.agents[reg.godId ?? 'god']?.name);
     const agent = { isGod: !!me.isGod, cwd: me.cwd };
-    const ci = process.platform !== 'linux';
     // Judge the path as asked and the file it really is: a link inside the
     // agent's own folder can point anywhere (review, 2026-09-25).
     const asked = folderDecision(agent, layout, tool, target, ci, godName);
@@ -928,6 +972,10 @@ export class HookServer {
     if (!real || real === target) return asked;
     // The folders in the layout are real paths, so the agent's own is too here.
     return folderDecision({ ...agent, cwd: realPathOf(me.cwd) ?? me.cwd }, layout, tool, real, ci, godName);
+  }
+
+  private safeRegistryAgent(agentId: string): { isResearch?: boolean } | undefined {
+    try { return this.hive.registry().agents[agentId]; } catch { return undefined; }
   }
 
   private displayName(agentId: string | undefined): string {

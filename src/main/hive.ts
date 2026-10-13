@@ -18,6 +18,11 @@
  *
  * Everything here runs in the Electron main process.
  */
+import type { SandboxNetwork } from '../shared/webAccess';
+import {
+  addressedToResearch, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT, PRIVACY_CHECK_SENDER,
+  REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL
+} from '../shared/research';
 import { hookShell, shellCommand, type HookShell } from './hookShell';
 import { CLOSING_COMPLETE_RE } from '../shared/closingTime';
 import {
@@ -34,7 +39,8 @@ import {
 import { join, dirname, basename, isAbsolute, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync, spawn, type ChildProcess } from 'node:child_process';
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, createHmac } from 'node:crypto';
+import type { GuardVerdict } from './privacyGuard';
 import type { AgentUsageSample } from './usage';
 import { COMMAND_GROUPS } from '../shared/claudeCommands';
 import {
@@ -231,7 +237,8 @@ export const HOUSE_RULES = [
   '5. Use real people, customers, quotes and messages only. Make up an example only when the owner asks for a sample, and label it as one.',
   '6. When your instructions or a request ask for something your tools cannot do, because no tool does it or a tool refuses, report it instead of skipping it: what you could not do, for which task, and why. A team member tells Michael; Michael tells the owner on the Ask me board. Do not work around a missing or refused tool. Your instructions can describe work you have no tool for, so check before you call that step done. Say what the tool did or refused; offer the owner a setting or a fix only when a tool result or your instructions name it, because a guessed setting sends the owner looking for something that is not there.',
   '7. Write anything the owner reads, reports and files included, in plain business words a busy owner follows on the first read. Leave out tool names, folder and file names, settings files, message ids, time zones and how you went about the work, unless the owner asked how it was done. Name a source the way the owner knows it ("your IT mailbox", "your notes from 9 Oct", "the supplier\'s invoice"), give times in the owner\'s local time, and name a file only so the owner can open it. When you extend or update an earlier file, rewrite its parts that break this rule.',
-  '8. On the task board, "waiting" names who else a card waits on, never the card\'s own person. When a card\'s one off next step is its own person\'s at a set time, such as a send on Monday or a question to ask after the 20th, the card is "todo", with "nextAt" set to that time as an ISO date and time with its offset; the app shows it in the owner\'s local time. A routine that repeats on a schedule needs no card to track it: its runs live in Schedules. What a run produces for the owner still goes on Ask me as a report card. A done card stays done: only the owner reopens one, to correct a card marked done by mistake. Cards carry no running "notes": what you did is already kept in your own conversation and the office log, and what you keep for good goes in your memory.'
+  '8. On the task board, "waiting" names who else a card waits on, never the card\'s own person. When a card\'s one off next step is its own person\'s at a set time, such as a send on Monday or a question to ask after the 20th, the card is "todo", with "nextAt" set to that time as an ISO date and time with its offset; the app shows it in the owner\'s local time. A routine that repeats on a schedule needs no card to track it: its runs live in Schedules. What a run produces for the owner still goes on Ask me as a report card. A done card stays done: only the owner reopens one, to correct a card marked done by mistake. Cards carry no running "notes": what you did is already kept in your own conversation and the office log, and what you keep for good goes in your memory.',
+  RESEARCH_HOUSE_RULE
 ].join('\n');
 
 /**
@@ -360,6 +367,16 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
  * Work style arrives separately, through the hook. House rules, folders,
  * memory and company knowledge are appended by injectedPrompt.
  */
+export function researchInstructions(b: PromptBusiness, michael: string, p: PromptPaths): string {
+  return [
+    `You are Research, the one team member at ${where(b)} who uses the internet. Teammates and ${michael} send you questions as messages. The app checked each one for private details before it reached you, and it checks every message the same way, so never ask for names, contact details, money or other private details.`,
+    '',
+    'You see no office files, task board, memory store or company knowledge, by design: everything you know about a question is in its message. Answer from the public internet, and name each source with a link.',
+    '',
+    `Act on each message in your inbox (${p.inbox}), then move it to ${p.inboxDone}. Answer the one who asked: write ONE message JSON to your outbox (${p.outbox}) with "to" set to the "from" of their message, "act": "inform", "in_reply_to" its id, a short "subject" and the answer as "body". Write nowhere but your own folder, attach no files, and never ask the owner: if you cannot answer, say so in your reply.`
+  ].join('\n');
+}
+
 export function teamMemberInstructions(name: string, role: string, michael: string, b: PromptBusiness, p: PromptPaths): string {
   return [
     `You are ${name}, the ${role} on the team at ${where(b)}. ${michael} is the office manager: he gives you work and is your only link to the owner. Anything you need from the owner, such as an approval, an answer or a file, you file for ${michael} to check, and he puts it on the owner's Ask me board.`,
@@ -388,6 +405,10 @@ export interface AgentMeta {
   /** Michael's prep assistant — enriches prompts and forwards them to Michael.
    *  Send-only: excluded from broadcast fan-out so it never drains an inbox. */
   isAssistant?: boolean;
+  /** Research (shared/research.ts): the one member who uses the internet,
+   *  walled off from the hive, the business folder and shared memory. Set by
+   *  the app only, for the reserved id while the owner has Research on. */
+  isResearch?: boolean;
 }
 
 export interface RegistryAgent extends AgentMeta {
@@ -1001,6 +1022,9 @@ export class HiveManager {
       /** Its Claude connectors (shared/claudeConnectors.ts): start with none, or
        *  deny everything not given. Absent means none. */
       connectors?: SpawnConnectorPlan;
+      /** Shell network (shared/webAccess.ts): an empty strict list for every
+       *  team member but Research; absent for Research and Michael. */
+      network?: SandboxNetwork;
     } = {}
   ): Promise<SpawnInjection> {
     const root = this.root();
@@ -1289,7 +1313,7 @@ export class HiveManager {
       const settingsPath = this.settingsPathFor(dir);
       rmSync(join(dir, 'settings.json'), { force: true });
       mkdirSync(dirname(settingsPath), { recursive: true });
-      this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell));
+      this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell, opts.network));
       args.push('--settings', settingsPath);
     }
     if (stripConnectors) {
@@ -1504,11 +1528,14 @@ export class HiveManager {
   }
 
   private sandboxWritableDirs(meta: AgentMeta, dir: string, root: string, extra?: string[]): string[] {
+    // Research writes only its own folders: never the hive, the palace or
+    // anything shared (eng review R1).
+    if (meta.isResearch) return Array.from(new Set([dir, meta.cwd].filter((d) => typeof d === 'string' && d.length > 0)));
     const out = [dir, root, ...(extra ?? [])].filter((d) => typeof d === 'string' && d.length > 0);
     return Array.from(new Set(out));
   }
 
-  private hookSettings(shim: string, cwd: string, cfg: McpDefaultsMap, theme?: 'light' | 'dark', writableDirs: string[] = [], folders?: AgentFolderPolicy, connectorDeny: string[] = [], shell: HookShell = 'bash'): unknown {
+  private hookSettings(shim: string, cwd: string, cfg: McpDefaultsMap, theme?: 'light' | 'dark', writableDirs: string[] = [], folders?: AgentFolderPolicy, connectorDeny: string[] = [], shell: HookShell = 'bash', network?: SandboxNetwork): unknown {
     // Bundled node, NOT bare `node` — see nodeLauncherPath(). Claude runs each of
     // these through a shell with a stripped PATH, where `node` is often absent.
     // On Windows that shell is PowerShell when there is no Git Bash, which can't
@@ -1582,7 +1609,13 @@ export class HiveManager {
         ? {
             sandbox: {
               enabled: true,
-              ...(folders?.sandboxOnly && process.platform !== 'win32' ? { allowUnsandboxedCommands: false } : {}),
+              // A member without the internet is held to the sandbox even
+              // without a business folder, or a rerun outside it would reach
+              // the internet (issue #230). Not on Windows: no sandbox there (#187).
+              ...((folders?.sandboxOnly || network) && process.platform !== 'win32' ? { allowUnsandboxedCommands: false } : {}),
+              // No host for the shell of anyone but Research. strictAllowlist
+              // makes the empty list a rule, not a prompt saver, in auto mode.
+              ...(network && process.platform !== 'win32' ? { network } : {}),
               filesystem: {
                 allowWrite: writableDirs,
                 // The hook program runs outside the sandbox on every tool call,
@@ -1928,7 +1961,7 @@ export class HiveManager {
     const folderLine = businessFolder
       ? (meta.isGod
         ? `YOUR FOLDERS: you work in ${meta.cwd}, your folder. It is private: only you and the owner can open it. Each team member has a folder of their own, inside this one unless the owner put it elsewhere. You can read their files, but only they change them, so when something needs to go into a team member's folder, ask them.`
-        : `YOUR FOLDERS: you work in ${meta.cwd}. The owner keeps the documents you need there, so read it for context before searching the internet, and save everything you produce there: drafts, reports, spreadsheets. It is private: only you, anyone sharing this folder, and ${godNameForPrompt} can open it, and other team members' folders are private to them.`)
+        : `YOUR FOLDERS: you work in ${meta.cwd}. The owner keeps the documents you need there, so read it for context first, and save everything you produce there: drafts, reports, spreadsheets. It is private: only you, anyone sharing this folder, and ${godNameForPrompt} can open it, and other team members' folders are private to them.`)
         + ` The hive (${root}) is only for coordination: your memory notes, inbox and outbox. Save documents, drafts and other work outside it. You can open PDFs and images directly.`
       : '';
     // A business office (one with a business folder) gets the rewritten
@@ -1936,6 +1969,16 @@ export class HiveManager {
     // instructions or the shared team member instructions, then the house
     // rules, folders, memory and company knowledge. Older installs keep the
     // text below.
+    if (meta.isResearch) {
+      const paths: PromptPaths = { inbox: inDir('inbox'), inboxDone: inDir('inbox', '.done'), outbox: inDir('outbox'), protocol: inRoot('PROTOCOL.md'), hiveRoot: root };
+      return [
+        researchInstructions(business ?? {}, godNameForPrompt || 'Michael', paths),
+        '',
+        HOUSE_RULES,
+        '',
+        `Your memory: the app gives you your memory index at the start of each session; procedure files it names are in ${inDir('memory')}. When you finish a question, add at most three short notes to ${inDir('memory', 'inbox.md')}, only for things you would otherwise look up again: a good source for a kind of question, with the date you checked it. Save nothing a teammate told you about the business.`
+      ].join('\n');
+    }
     if (businessFolder && !meta.isAssistant) {
       const paths: PromptPaths = {
         inbox: inDir('inbox'),
@@ -2022,8 +2065,154 @@ export class HiveManager {
     if (!this.root()) return false;
     const inbox = join(this.agentDir(toId), 'inbox');
     if (!existsSync(inbox)) return false; // unknown recipient — the caller reports it
-    this.atomicWriteJson(join(inbox, `${msg.id}.json`), msg);
+    // Only the app writes Research's inbox: each message it delivers there
+    // carries a stamp, and the sweep removes any file without one (eng R2).
+    const out = toId === RESEARCH_ID ? { ...msg, stamp: this.researchStamp(msg.id) } : msg;
+    this.atomicWriteJson(join(inbox, `${msg.id}.json`), out);
     return true;
+  }
+
+  // — Research (shared/research.ts, issue #230) —
+
+  /** The privacy check every message to Research passes (main/privacyGuard.ts). */
+  private researchGuard: ((m: { subject?: string; body?: string }) => Promise<GuardVerdict>) | null = null;
+  setResearchGuard(fn: ((m: { subject?: string; body?: string }) => Promise<GuardVerdict>) | null): void {
+    this.researchGuard = fn;
+  }
+  /** Checks under way or finished, by the outbox file's content. A message
+   *  waits in its sender's outbox until its check finishes; an app restart
+   *  checks it again. */
+  private guardChecks = new Map<string, { done: boolean; ok?: boolean; reason?: string }>();
+  private stampKey: Buffer | null = null;
+
+  /** Research while it is on: the reserved id, marked by the app, not archived. */
+  researchOn(): boolean {
+    try {
+      const r = this.registry().agents[RESEARCH_ID];
+      return !!r?.isResearch && !r.archived;
+    } catch { return false; }
+  }
+
+  /** The stamp on a message the app delivered to Research. Its key lives in
+   *  the app's private folder, which no agent opens. */
+  private researchStamp(id: string): string {
+    if (!this.stampKey) {
+      const home = this.getHome();
+      const file = home ? join(privateRoot(home), 'research-stamp.key') : null;
+      try {
+        if (file && existsSync(file)) this.stampKey = Buffer.from(readFileSync(file, 'utf8').trim(), 'hex');
+      } catch { /* made below */ }
+      if (!this.stampKey || this.stampKey.length < 16) {
+        this.stampKey = randomBytes(32);
+        if (file) {
+          try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, this.stampKey.toString('hex'), { mode: 0o600 }); } catch { /* in memory only */ }
+        }
+      }
+    }
+    return createHmac('sha256', this.stampKey).update(id).digest('hex');
+  }
+
+  /** Remove every file in Research's inbox the app did not deliver, so a
+   *  message written straight into it never skips the privacy check. */
+  private sweepResearchInbox(): void {
+    if (!this.researchOn()) return;
+    const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
+    if (!existsSync(inbox)) return;
+    for (const f of readdirSync(inbox)) {
+      if (!f.endsWith('.json')) continue;
+      const full = join(inbox, f);
+      let ok = false;
+      try {
+        const m = JSON.parse(readFileSync(full, 'utf8')) as { id?: unknown; stamp?: unknown };
+        ok = typeof m.id === 'string' && m.stamp === this.researchStamp(m.id);
+      } catch {
+        if (this.stillBeingWritten(full)) continue;
+      }
+      if (ok) continue;
+      try { rmSync(full, { force: true }); } catch { /* next tick */ }
+      this.appendLog({ kind: 'drop', reason: 'unstamped-research-inbox', file: f });
+    }
+  }
+
+  /** What happens to a message to Research: pass it on, hold it while its
+   *  check runs, or refuse it with the reason its sender reads. */
+  private researchGate(msg: HiveMessage, partial: Partial<HiveMessage>, raw: string): 'pass' | 'hold' | { reason: string } {
+    if (!this.researchOn()) return { reason: REFUSAL_OFF };
+    if (hasAttachments(partial)) return { reason: REFUSAL_FILES };
+    if (!this.researchGuard) return { reason: REFUSAL_UNSURE };
+    const key = createHash('sha256').update(raw).digest('hex');
+    const c = this.guardChecks.get(key);
+    if (!c) {
+      this.guardChecks.set(key, { done: false });
+      this.researchGuard({ subject: msg.subject, body: msg.body }).then(
+        (v) => { this.guardChecks.set(key, v.ok ? { done: true, ok: true } : { done: true, ok: false, reason: v.reason }); },
+        () => { this.guardChecks.set(key, { done: true, ok: false, reason: REFUSAL_UNSURE }); }
+      );
+      return 'hold';
+    }
+    if (!c.done) return 'hold';
+    this.guardChecks.delete(key);
+    return c.ok ? 'pass' : { reason: c.reason ?? REFUSAL_UNSURE };
+  }
+
+  /** A refused message goes back to its sender only (owner, 2026-10-13). */
+  private refuseResearchMessage(senderId: string, msg: HiveMessage, reason: string): void {
+    this.appendLog({ kind: 'privacy-refused', from: senderId, id: msg.id });
+    this.routeMessage(this.normalize({ to: senderId, act: 'inform', subject: NOT_SENT_SUBJECT, body: reason, in_reply_to: msg.id }, PRIVACY_CHECK_SENDER));
+  }
+
+  /** Research's answers are outside text (eng A3): each carries a label, and
+   *  one with classic injection markers is flagged to Michael only. */
+  private labelResearchReply(msg: HiveMessage): void {
+    if (typeof msg.body !== 'string') return;
+    const raw = msg.body;
+    msg.body = `${RESEARCH_REPLY_LABEL}\n\n${raw}`;
+    if (!looksLikeInjection(`${msg.subject}\n${raw}`)) return;
+    try {
+      const reg = this.registry();
+      const godId = reg.godId ?? 'god';
+      const toName = reg.agents[msg.to]?.name ?? msg.to;
+      this.appendLog({ kind: 'research-reply-flagged', to: msg.to, id: msg.id });
+      this.deliver(this.normalize({
+        to: godId,
+        act: 'inform',
+        subject: 'Research answer may carry web instructions',
+        body: `Research's answer to ${toName} ("${msg.subject.slice(0, 80)}") holds text that reads like instructions from a web page. It was delivered labelled as information only. Look at it if the work matters.`
+      }, 'system'), godId);
+    } catch { /* the label still holds */ }
+  }
+
+  /** Asks waiting for Research: delivered and not yet read, plus those in a
+   *  check. Turning Research off sends these back (design review D7). */
+  researchWaiting(): number {
+    let n = 0;
+    for (const c of this.guardChecks.values()) if (!c.done) n++;
+    const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
+    try { n += readdirSync(inbox).filter((f) => f.endsWith('.json')).length; } catch { /* none */ }
+    return n;
+  }
+
+  /** As Research turns off: every message waiting in its inbox goes back to
+   *  its sender with the Research off reason. */
+  returnResearchInbox(): number {
+    const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
+    if (!existsSync(inbox)) return 0;
+    const agents = this.registry().agents;
+    let n = 0;
+    for (const f of readdirSync(inbox)) {
+      if (!f.endsWith('.json')) continue;
+      const full = join(inbox, f);
+      try {
+        const m = JSON.parse(readFileSync(full, 'utf8')) as Partial<HiveMessage>;
+        if (typeof m.from === 'string' && agents[m.from] && m.from !== RESEARCH_ID) {
+          this.routeMessage(this.normalize({ to: m.from, act: 'inform', subject: NOT_SENT_SUBJECT, body: REFUSAL_OFF, in_reply_to: typeof m.id === 'string' ? m.id : null }, PRIVACY_CHECK_SENDER));
+          n++;
+        }
+      } catch { /* unreadable: removed below */ }
+      try { rmSync(full, { force: true }); } catch { /* best effort */ }
+    }
+    if (n) this.commit(`hive: returned ${n} research ask(s)`);
+    return n;
   }
 
   /**
@@ -2333,6 +2522,7 @@ export class HiveManager {
     if (!root) return 0;
     const agentsDir = join(root, 'agents');
     if (!existsSync(agentsDir)) return 0;
+    try { this.sweepResearchInbox(); } catch { /* next tick */ }
     let routed = 0;
     for (const id of readdirSync(agentsDir)) {
       // agents/human is the owner's folder, written only by the app; a file an
@@ -2394,6 +2584,21 @@ export class HiveManager {
             routed++;
             continue;
           }
+          // A message to Research waits for the privacy check (shared/research.ts).
+          if (id !== RESEARCH_ID && addressedToResearch(partial.to)) {
+            const gate = this.researchGate(msg, partial, raw);
+            if (gate === 'hold') continue;
+            if (gate !== 'pass') {
+              this.refuseResearchMessage(id, msg, gate.reason);
+              // Kept apart from .sent, so nothing reads it as sent.
+              mkdirSync(join(outbox, '.refused'), { recursive: true });
+              this.archiveOutboxFile(full, join(outbox, '.refused'), f);
+              routed++;
+              continue;
+            }
+            msg.to = RESEARCH_ID;
+          }
+          if (id === RESEARCH_ID && this.researchOn()) this.labelResearchReply(msg);
           this.routeMessage(msg);
           // Repaired text replaces the original in place, then one rename
           // archives it, so a failed step can never deliver it twice.

@@ -204,6 +204,8 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
   const teamAgents = teamPack?.agents ?? [];
   const coreIds = new Set((corePack?.agents ?? []).map((a) => a.id));
   const [teamPicked, setTeamPicked] = useState<Record<string, boolean>>({});
+  // Research, the one member on the internet: off unless picked (issue #230, D11).
+  const [researchPicked, setResearchPicked] = useState(false);
   /** Folders the owner pointed somewhere other than the suggestion, keyed by agent id (or OFFICE_KEY). */
   const [folderOverrides, setFolderOverrides] = useState<Record<string, string>>({});
   const [folderSuggestions, setFolderSuggestions] = useState<(FolderSuggestions & { home: string }) | undefined>();
@@ -498,6 +500,9 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
         // quick-picks, which is what registeredRepos has always fed.
         businessFolder: finishPlan.business,
         businessTeam: finishPlan.team,
+        // Research starts with the team when picked; a new office never gets
+        // the update card (design review D10).
+        research: { on: researchPicked, notice: false },
         registeredRepos: finishPlan.folders,
         autoMode,
         godProvider,
@@ -1086,6 +1091,19 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                       labels={folderLabels}
                     />
                   ))}
+                  <TeamCard
+                    character="ryan"
+                    name={t('research.title')}
+                    summary={t('research.teamSummary')}
+                    chips={[{ tone: 'muted', label: t('research.teamTag') }]}
+                    picked={researchPicked}
+                    onTogglePicked={() => setResearchPicked((v) => !v)}
+                    displayPath={tildePath}
+                    overridden={false}
+                    onChangeFolder={() => undefined}
+                    onUseSuggested={() => undefined}
+                    labels={folderLabels}
+                  />
                 </div>
 
                 <div style={{ fontSize: 14, color: 'var(--cth-ink-500)' }}>

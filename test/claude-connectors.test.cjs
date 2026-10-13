@@ -241,7 +241,7 @@ test('a change to an agent\'s connectors restarts it when idle, or at once with 
   assert.match(main, /liveWebContents\(\)\?\.send\('connectors:restartNeeded', \{ agentId: rec\.agentId \}\)/);
   // The plan the agent started with is the one recorded, so a change made
   // while it was starting still asks for a restart; signing in counts too.
-  assert.match(main, /const connectorPlan = opts\.hive && claudeProvider \? connectorStart\(readConfig\(\), opts\.hive\.id\) : undefined;/);
+  assert.match(main, /const connectorPlan = opts\.hive && claudeProvider && !isResearch \? connectorStart\(readConfig\(\), opts\.hive\.id\) : undefined;/);
   assert.match(main, /connectors: connectorPlan\?\.plan/);
   assert.match(main, /connectorPlans\.set\(opts\.id, \{ agentId: opts\.hive\.id, sig: failures === 1 \? 'unapplied' : connectorPlan\.sig \}\);/, 'one retry after a failed injection, then quiet');
   assert.match(main, /const signedIn = usableConnectors\(cfg, agentId, books\)\.map\(\(c\) => `\$\{c\.key\}:\$\{c\.status\}`\)/);
