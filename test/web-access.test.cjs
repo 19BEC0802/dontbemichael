@@ -30,12 +30,13 @@ test('web pages and search are Research\'s alone', () => {
   assert.doesNotMatch(R.REFUSAL_WEB_TOOL + R.REFUSAL_WEB_TOOL_OFF, /[–—]/);
 });
 
-test('every team member of a business office gets an empty strict network list', () => {
-  // Value: protects=curl and scripts reach no host from a member's shell on a Mac, while other offices keep the network; fails_when=the list is absent, not strict, or set outside a business office; why_new=new feature, ship review D3; seam=none
+test('every team member of every office gets an empty strict network list', () => {
+  // Value: protects=curl and scripts reach no host from a member's shell on a Mac, in every office; fails_when=the list is absent, not strict, or tied to a business folder again; why_new=new feature, ship review D3, owner ship 2 D16; seam=none
   assert.deepEqual(W.sandboxNetwork(), { allowedDomains: [], strictAllowlist: true }, 'Michael included (owner, D9.1)');
   const main = read('src/main/index.ts');
-  assert.match(main, /network: isBusinessOffice\(\) \? sandboxNetwork\(\) : undefined/);
-  assert.match(main, /return isBusinessOffice\(\) \? \{ \.\.\.walled, sandboxOnly: true \} : walled;/, 'and his commands stay in the sandbox, where the list holds');
+  assert.match(main, /network: sandboxNetwork\(\)\n/);
+  assert.doesNotMatch(main, /isBusinessOffice/, 'no office keeps the internet by its folder (ship 2 D16)');
+  assert.match(main, /return \{ \.\.\.walled, sandboxOnly: true \};/, 'and his commands stay in the sandbox, where the list holds');
   assert.match(main, /function turnResearchOff\(\): number \{[\s\S]{0,400}const ptyId = ptyForAgent\(RESEARCH_ID\);\s*if \(ptyId\) \{ try \{ ptyManager\.kill\(ptyId\); \}/, 'turning Research off ends its session in main');
   // Research's commands get no keys or tokens (red team pass 2).
   assert.match(main, /if \(isResearch\) opts\.env = \{ \.\.\.\(opts\.env \?\? \{\}\), CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' \};/);
@@ -87,7 +88,7 @@ test('Research can hold no mailbox, connector or schedule', () => {
   assert.match(main, /\/\/ Research holds no office data \(issue #230\): no mailbox, ever\.\n  if \(agentId === RESEARCH_ID\) return \{ ok: false, restartNeeded: false \};/);
   assert.match(main, /agentId === RESEARCH_ID \|\| typeof key !== 'string'/, 'connectors');
   assert.match(main, /if \(agentId === RESEARCH_ID\) return \{ ok: false \};\n  const quickbooks/, 'QuickBooks');
-  assert.match(main, /if \(mission\.to === RESEARCH_ID\) return \{ ok: false, error: `\$\{RESEARCH_NAME\} has no schedules` \};/);
+  assert.match(main, /if \(mission\.to === RESEARCH_ID\) return \{ ok: false, error: `\$\{researchNameOf\(hive\.registry\(\)\.agents\)\} has no schedules` \};/);
   assert.match(main, /if \(actor === RESEARCH_ID\) return 'You have no schedules/);
 });
 
@@ -105,7 +106,7 @@ test('Research\'s notes reach the shared memory only as a cleaned copy', () => {
 test('Research runs only on Claude, where its walls work', () => {
   // Value: protects=an engine change can't start Research without its walls; fails_when=the spawn skips the engine check or Edit agent offers other engines for Research; why_new=security review pass 2, ship review D6.2; seam=none
   const main = read('src/main/index.ts');
-  assert.match(main, /if \(isResearch && !claudeProvider\) \{[\s\S]{0,300}turnResearchOff\(\);\s*return \{ ok: false, error: `\$\{RESEARCH_NAME\} runs only on Claude\. Turn him on again in Settings, Research & privacy\.` \};/);
+  assert.match(main, /if \(isResearch && !claudeProvider\) \{[\s\S]{0,300}turnResearchOff\(\);\s*return \{ ok: false, error: `\$\{researchNameOf\(hive\.registry\(\)\.agents\)\} runs only on Claude\. Turn them on again in Settings, Research & privacy\.` \};/);
   const modal = read('src/renderer/src/components/EditAgentModal.tsx');
   assert.match(modal, /const isResearch = agent\.id === RESEARCH_ID;/);
   assert.match(modal, /BUILD_ENGINES\.includes\(p\.id\) && \(!isResearch \|\| isClaudeProvider\(p\.id\)\)/);

@@ -83,15 +83,16 @@ test('the running hook refuses web pages and search to everyone but Research, an
   assert.equal(reason(offHook(R.RESEARCH_ID, 'PreToolUse', { tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })), R.REFUSAL_WEB_TOOL_OFF);
   assert.equal(reason(offHook('pam', 'PreToolUse', { tool_name: 'WebSearch', tool_input: { query: 'x' } })), R.REFUSAL_WEB_TOOL_OFF, 'Research off says so');
 
-  // An office with no business folder keeps the internet (ship review D3).
+  // An office with no business folder is held the same way (owner, ship 2 D16).
   const dev = await office(t);
   dev.cfg = { harnessHome: dev.home };
-  assert.ok(!denied(hookFor(dev)('pam', 'PreToolUse', { tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })));
+  assert.equal(reason(hookFor(dev)('pam', 'PreToolUse', { tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })), R.REFUSAL_WEB_TOOL, 'every office');
 
-  // Unreadable settings: refuse, never allow.
-  o.cfg = null;
-  const broken = new HookServer(o.hive, () => null, () => { throw new Error('config mid write'); });
-  assert.equal(reason(broken.handle({ agent_id: R.RESEARCH_ID, session_id: 's1', hook_event_name: 'PreToolUse', cwd: o.desk, tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })), W.WEB_SETTINGS_UNREADABLE);
+  // The rule reads no office settings any more (ship 2 D16); whether Research is on
+  // can still fail to read: then refuse, never allow.
+  o.hive.setResearchEnabled(() => { throw new Error('config mid write'); });
+  const broken = new HookServer(o.hive, () => null, () => o.cfg);
+  assert.equal(reason(broken.handle({ agent_id: R.RESEARCH_ID, session_id: 's1', hook_event_name: 'PreToolUse', cwd: o.desk, tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })), R.REFUSAL_WEB_TOOL_OFF, 'read as off: refused');
 });
 
 test('the running hook keeps Research out of the office\'s files and everyone else out of Research\'s folders', async (t) => {
@@ -272,7 +273,7 @@ test('Research\'s file tools open no temporary folder, and no office agent keeps
   assert.match(main, /extraWritableDirs: \[memory\.env\(\)\.MEMPALACE_PALACE_PATH, sessionTmp\]/);
 });
 
-test('in a business office no other agent runs a command outside its sandbox', async (t) => {
+test('in every office no other agent runs a command outside its sandbox', async (t) => {
   // Value: protects=Michael's automatic rerun outside the sandbox can't open Research's folders; fails_when=the hook lets dangerouslyDisableSandbox through while Research is on, or blocks it when Research is off; why_new=security review pass 3, owner D7.1; seam=none; no_claim=Claude Code honoring allowUnsandboxedCommands
   const o = await office(t);
   const hook = hookFor(o);
@@ -284,9 +285,9 @@ test('in a business office no other agent runs a command outside its sandbox', a
   const off = await office(t, { on: false });
   assert.equal(reason(hookFor(off)('god', 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'curl https://example.com', dangerouslyDisableSandbox: true } })), R.RESEARCH_SANDBOX_ONLY, 'Research off too: Michael\'s shell reaches no host (owner, D9.1)');
   off.cfg = { harnessHome: off.home };
-  assert.ok(!denied(hookFor(off)('god', 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls', dangerouslyDisableSandbox: true } })), 'an office with no business folder: as before');
+  assert.equal(reason(hookFor(off)('god', 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls', dangerouslyDisableSandbox: true } })), R.RESEARCH_SANDBOX_ONLY, 'an office with no business folder too (owner, ship 2 D16)');
   const main = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
-  assert.match(main, /return isBusinessOffice\(\) \? \{ \.\.\.walled, sandboxOnly: true \} : walled;/);
+  assert.match(main, /return \{ \.\.\.walled, sandboxOnly: true \};/);
 });
 
 test('while Research is on, agents save scratch work in their own folder, not the shared temp folders', posixOnly('temporary folder paths'), async (t) => {

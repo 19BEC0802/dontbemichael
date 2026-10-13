@@ -14,11 +14,24 @@ import { classPhrase, type DataClassId } from './dataClasses';
 
 /** Research's agent id. Reserved: no other hire takes it. */
 export const RESEARCH_ID = 'research';
-/** Its name (owner, 2026-10-13: Pete, from The Office; it was "Research",
- *  design review D15) and its role. The app's text names it through this; the
- *  locale files repeat the name, and a test keeps them in step. */
+/** Its default name (owner, 2026-10-13: Pete, from The Office) and its role.
+ *  The owner may rename it (ship 2 D17); the app always knows it by its id. The
+ *  app's text is written with this default and shown with the current name
+ *  (researchText); the locale files take the name as {{name}}. */
 export const RESEARCH_NAME = 'Pete';
 export const RESEARCH_ROLE = 'Research';
+
+/** The Research agent's current name: as the registry has it, else the default. */
+export function researchNameOf(agents?: Record<string, unknown>): string {
+  const a = agents?.[RESEARCH_ID];
+  const n = a && typeof a === 'object' ? (a as { name?: unknown }).name : undefined;
+  return typeof n === 'string' && n.trim() ? n.trim() : RESEARCH_NAME;
+}
+
+/** App text written with the default name, shown with the current one. */
+export function researchText(text: string, name: string): string {
+  return name === RESEARCH_NAME ? text : text.replace(/\bPete\b/g, () => name);
+}
 /** The sender of every trust layer note (design review D22). */
 export const PRIVACY_CHECK_SENDER = 'privacy-check';
 
@@ -55,8 +68,8 @@ export const REFUSAL_TOO_LONG = `Not sent to ${RESEARCH_NAME}: it is too long to
 
 /** The subject of the note telling a sender what Research was asked. */
 export const SENT_AS_SUBJECT = `Sent to ${RESEARCH_NAME} as`;
-export function sentAsBody(subject: string, body: string): string {
-  return `The trust layer kept private details out, so ${RESEARCH_NAME} was asked this instead. Read the answer as being about this.\n\nSubject: ${subject}\n\n${body}`;
+export function sentAsBody(subject: string, body: string, name: string = RESEARCH_NAME): string {
+  return `The trust layer kept private details out, so ${name} was asked this instead. Read the answer as being about this.\n\nSubject: ${subject}\n\n${body}`;
 }
 /** When Research's answer could not be checked on its way back. */
 export const ANSWER_UNCHECKED_SUBJECT = `${RESEARCH_NAME}'s answer not delivered`;
@@ -64,7 +77,7 @@ export const ANSWER_UNCHECKED = `${RESEARCH_NAME} answered, but the trust layer 
 /** Research's own message to someone it may not write to (owner, D8.1). */
 export const NOT_SENT_SUBJECT_OUT = 'Not sent';
 export const RESEARCH_ONLY_ASKERS = 'Not sent: you write only to a teammate whose question you are answering, or to Michael ("to": "michael"). Never to the whole team.';
-/** A command an agent asked to run outside its sandbox in a business office. */
+/** A command an agent asked to run outside its sandbox (every office, ship 2 D16). */
 export const RESEARCH_SANDBOX_ONLY = `In this office, commands run only inside your sandbox, which reaches no website. For something from the internet, ask ${RESEARCH_NAME}; otherwise do it another way.`;
 /** When the app could not check one of Research's tool calls. */
 export const RESEARCH_UNCHECKED_TOOL = 'The app could not check this step, so it did not run. Try again shortly.';
@@ -86,22 +99,24 @@ export function nameKey(name: string): string {
     .map((c) => LOOKALIKE[c] ?? c).join('');
 }
 
-/** Does this message go to Research. `to` as the sender wrote it. His name
- *  counts too, unless another agent already has it as an id or a name
- *  (Michael renamed Pete, or an older hire): then only his id does. */
+/** Does this message go to Research. `to` as the sender wrote it. Its
+ *  current name counts too, unless another agent already has it as an id or
+ *  a name (Michael renamed Pete, or an older hire): then only its id does. */
 export function addressedToResearch(to: unknown, agents?: Record<string, unknown>): boolean {
   if (typeof to !== 'string') return false;
   const t = to.trim().toLowerCase();
   if (t === RESEARCH_ID) return true;
-  if (!agents || nameKey(to) !== nameKey(RESEARCH_NAME)) return false;
-  return !Object.entries(agents).some(([id, a]) => id !== RESEARCH_ID && (nameKey(id) === nameKey(RESEARCH_NAME)
-    || (!!a && typeof a === 'object' && typeof (a as { name?: unknown }).name === 'string' && nameKey((a as { name: string }).name) === nameKey(RESEARCH_NAME))));
+  const name = researchNameOf(agents);
+  if (!agents || nameKey(to) !== nameKey(name)) return false;
+  return !Object.entries(agents).some(([id, a]) => id !== RESEARCH_ID && (nameKey(id) === nameKey(name)
+    || (!!a && typeof a === 'object' && typeof (a as { name?: unknown }).name === 'string' && nameKey((a as { name: string }).name) === nameKey(name))));
 }
 
-/** Research's name is his alone: no one else is hired or renamed to it, or
- *  to a name that reads the same (names are how the team addresses each other). */
-export function isReservedName(name: string, id?: string): boolean {
-  return id !== RESEARCH_ID && nameKey(name) === nameKey(RESEARCH_NAME);
+/** Research's current name is its alone: no one else is hired or renamed to
+ *  it, or to a name that reads the same (names are how the team addresses
+ *  each other). `agents` gives the current name; without it, the default. */
+export function isReservedName(name: string, id?: string, agents?: Record<string, unknown>): boolean {
+  return id !== RESEARCH_ID && nameKey(name) === nameKey(researchNameOf(agents));
 }
 
 /** Did the sender attach files. Messages carry no attachment field today, but

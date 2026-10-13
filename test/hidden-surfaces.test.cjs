@@ -227,7 +227,7 @@ test('voice is off everywhere', () => {
   assert.match(read('src/renderer/src/store/store.ts'), /setFreeflowEnabled: \(on\) => set\(\{ freeflowEnabled: SHOW_VOICE && on \}\)/);
   const settings = read('src/renderer/src/components/SettingsModal.tsx');
   assert.match(settings, /const VISIBLE_SECTIONS: Section\[\] = NAV_SECTIONS\.filter\(\(s\) => s !== 'Voice' \|\| SHOW_VOICE\);/);
-  assert.match(settings, /\{VISIBLE_SECTIONS\.filter\(\(sec\) => sec !== 'Research & privacy' \|\| !!\(config\.businessFolder \|\| config\.officeFolder\)\)\.map\(\(section\) => \{/);
+  assert.match(settings, /\{VISIBLE_SECTIONS\.map\(\(section\) => \{/);
   assert.match(settings, /activeSection === 'Voice' && SHOW_VOICE && \(/);
   assert.match(read('src/main/realtime.ts'), /if \(!SHOW_VOICE\) return \{ ok: false, error: 'Voice is off in this version\.', code: 'disabled' \};/);
   assert.match(read('src/main/index.ts'), /ipcMain\.handle\('freeflow:transcribe'[\s\S]{0,200}if \(!SHOW_VOICE\) return \{ ok: false/);

@@ -19,6 +19,18 @@ export const RESEARCH_PTY_ID = `pty-${RESEARCH_ID}`;
 /** Its role line on the floor and in the roster. */
 export const RESEARCH_DESCRIPTION = `${RESEARCH_ROLE}: looks things up on the internet for the team`;
 
+/** Research's current name (owner, ship 2 D17: the owner may rename it, Pete by
+ *  default): as the floor or the archive has it. */
+export function researchNameNow(): string {
+  const s = useStore.getState();
+  return (s.agents.find((a) => a.id === RESEARCH_ID) ?? s.archivedAgents.find((a) => a.id === RESEARCH_ID))?.name?.trim() || RESEARCH_NAME;
+}
+
+/** The same, for a component that redraws when it changes. */
+export function useResearchName(): string {
+  return useStore((s) => (s.agents.find((a) => a.id === RESEARCH_ID) ?? s.archivedAgents.find((a) => a.id === RESEARCH_ID))?.name?.trim() || RESEARCH_NAME);
+}
+
 /** Is Research on the floor now, with a terminal. */
 export function researchOnFloor(): boolean {
   return useStore.getState().agents.some((a) => a.id === RESEARCH_ID && !!a.ptyId);
@@ -26,6 +38,7 @@ export function researchOnFloor(): boolean {
 
 export async function startResearch(config: HarnessConfig): Promise<{ ok: true } | { ok: false; error?: string }> {
   if (researchOnFloor()) return { ok: true };
+  const name = researchNameNow();
   const prep = await window.cth.researchPrepare().catch(() => ({ ok: false as const }));
   if (!prep.ok) return { ok: false };
   const command = buildSpawnCommand(config, config.defaultModel, 'claude');
@@ -38,7 +51,7 @@ export async function startResearch(config: HarnessConfig): Promise<{ ok: true }
     args,
     cols: 100,
     rows: 30,
-    hive: { id: RESEARCH_ID, name: RESEARCH_NAME, provider: 'claude', cwd: prep.cwd, role: RESEARCH_DESCRIPTION }
+    hive: { id: RESEARCH_ID, name, provider: 'claude', cwd: prep.cwd, role: RESEARCH_DESCRIPTION }
   }).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e), cwd: undefined, seedPrompt: undefined }));
   if (!res.ok) {
     // Nothing started, so the owner's choice goes back to off.
@@ -50,7 +63,7 @@ export async function startResearch(config: HarnessConfig): Promise<{ ok: true }
   const cwd = res.cwd || prep.cwd;
   store.addAgent({
     id: RESEARCH_ID,
-    name: RESEARCH_NAME,
+    name,
     character: 'ryan',
     accent: teamAccent(store.agents.length),
     description: RESEARCH_DESCRIPTION,

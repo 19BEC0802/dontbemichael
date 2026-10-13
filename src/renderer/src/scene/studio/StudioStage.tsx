@@ -1079,7 +1079,7 @@ function useIdleQuote(
     // Someone idle and in (not clocking in, not gone home at closing time), in
     // a pod where nobody still at work is busy, so a bubble never sits on an
     // open card or a dark office.
-    // Pete borrows Ryan's character, so he takes no part in the in character
+    // The Research member borrows Ryan's character, so it takes no part in the in character
     // lines and banter that would call him Ryan (ship review).
     const quietPeople = () => chatCandidates(live.current.pods, live.current.gone, ACTIVE, ACTION_CLOCKING_IN).filter((p) => p.id !== RESEARCH_ID);
     const podOfId = (id: string) => live.current.pods.find((p) => p.members.some((m) => m.id === id));

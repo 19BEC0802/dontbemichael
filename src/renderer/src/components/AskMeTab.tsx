@@ -21,6 +21,7 @@ import { OfficeBreakCard, useOfficeBreak } from './OfficeBreakNotice';
 import { FileText } from './FileChip';
 import { refreshNeedsYou, setupCardShown, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
+import { useResearchName } from '@/shell/research';
 
 /**
  * ASK ME — first-class human feedback through the task system.
@@ -430,6 +431,7 @@ const quietLink: CSSProperties = {
  *  Needs you pill coral; either button clears it for good. */
 function ResearchNoticeCard() {
   const { t } = useTranslation();
+  const researchName = useResearchName();
   const seen = (): void => { void window.cth.researchNoticeSeen().then(() => refreshNeedsYou()).catch(() => undefined); };
   return (
     <section aria-label={t('research.noticeTitle')} style={card}>
@@ -437,7 +439,7 @@ function ResearchNoticeCard() {
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--cth-ink)' }}>{t('research.noticeTitle')}</span>
         <span style={reportTag}>{t('askMe.report')}</span>
       </div>
-      <p style={{ margin: '8px 0 12px', fontSize: 12.5, lineHeight: '18px', color: 'var(--cth-ink)' }}>{t('research.noticeBody')}</p>
+      <p style={{ margin: '8px 0 12px', fontSize: 12.5, lineHeight: '18px', color: 'var(--cth-ink)' }}>{t('research.noticeBody', { name: researchName })}</p>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
         <PixelButton variant="secondary" size="sm" onClick={seen}>{t('askMe.gotIt')}</PixelButton>
         <PixelButton variant="primary" size="sm" onClick={() => {

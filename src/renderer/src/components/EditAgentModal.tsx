@@ -24,6 +24,7 @@ import { firstTaskSection, roleLabel, plainFallback } from '@shared/workStyleTex
 import { effectiveWorkStyle } from '@shared/michaelWorkStyle';
 import { ScheduledJobsList } from './ScheduledJobs';
 import { sendTypedFirstTask } from '@/shell/typedFirstTask';
+import { useResearchName } from '@/shell/research';
 
 export interface EditAgentModalProps {
   agent: Agent;
@@ -40,6 +41,7 @@ export interface EditAgentModalProps {
  */
 export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
   const { t } = useTranslation();
+  const researchName = useResearchName();
   const updateAgent = useStore((s) => s.updateAgent);
   const godName = useResolvedGodName();
   const renameAgent = useStore((s) => s.renameAgent);
@@ -222,12 +224,9 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
           scheduled jobs under it draw on top of it (owner, 2026-10-10). */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
         <Fields id="name">
-          {/* Pete's name is in the app's own messages to the team, so it
-              stays as it is, shown as text (owner, 2026-10-13). */}
-          <Row label={t('editAgent.name')} info={isResearch ? t('editAgent.researchName') : undefined}>
-            {isResearch ? (
-              <input readOnly value={agent.name} aria-label={t('editAgent.name')} style={lockedValueStyle} />
-            ) : (
+          {/* The owner names the Research member (owner, ship 2 D17); whatever its
+              name, the app knows it as Research, the one on the internet. */}
+          <Row label={t('editAgent.name')} info={isResearch ? t('editAgent.researchName', { name: researchName }) : undefined}>
             <input
               value={name}
               onChange={(e) => { setName(e.target.value); setNameError(undefined); }}
@@ -237,7 +236,6 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
               style={nameError ? { ...inputStyle, boxShadow: 'inset 0 0 0 1.5px var(--cth-coral)' } : inputStyle}
               autoFocus
             />
-            )}
             {nameError && (
               <span role="alert" style={{ ...helperStyle, color: 'var(--cth-coral-text)' }}>{nameError}</span>
             )}
@@ -321,7 +319,7 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
         <Fields id="engine">
           {/* Research's walls are Claude Code's, so its engine is locked
               (ship review D6.2). */}
-          <Row label={t('editAgent.provider')} info={isResearch ? t('editAgent.researchEngine') : undefined}>
+          <Row label={t('editAgent.provider')} info={isResearch ? t('editAgent.researchEngine', { name: researchName }) : undefined}>
             {/* A list, not a grid of buttons. Only the engines this build
                 offers (BUILD_ENGINES, like setup), plus the agent's own if it
                 runs on another, so a list never hides what it is on. */}
@@ -405,7 +403,7 @@ const inputStyle: CSSProperties = {
 };
 
 /** A value that can't be changed here, shown as text but still a labelled,
- *  read only field for screen readers (Pete's name and engine). */
+ *  read only field for screen readers (the Research member's engine). */
 const lockedValueStyle: CSSProperties = {
   border: 'none', background: 'transparent', padding: 0, outline: 'none',
   fontSize: 13, color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)'

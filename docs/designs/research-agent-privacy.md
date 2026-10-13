@@ -771,6 +771,30 @@ Synthesized from this review's findings. They refine eng tasks T3, T7 and T8.
   +====================================================================+
 ```
 
+## Second ship: the Research agent is core (owner, 2026-10-13)
+
+Decisions taken during the second /ship of mit/named-links. They replace every statement above
+that limits the rule to a business office, or that fixes the name to Pete.
+
+- **ship 2 D12** A path from agent text is only ever shown in Finder, never opened; the Profile
+  tab's Open folder opens the agent's folder from the registry, never a package.
+- **ship 2 D13** The bundled fetch and summarize skill goes to the Research agent alone; a copy an
+  earlier version gave anyone else is removed at their next start.
+- **ship 2 D14** The Research agent is part of every pack's team, off until the owner turns it on
+  in the setup Team step or in Settings, Research & privacy.
+- **ship 2 D15** Built in this release, so no owner sees a locked name that a later one unlocks.
+- **ship 2 D16** The rule holds in every office, with or without a business folder or pack: only
+  the Research agent uses web tools and shell internet; everyone else's shell gets the empty
+  strict network list and stays in its sandbox; house rule 9 reaches every agent; Research &
+  privacy shows in every office; every updated office gets the one time card. An owner who gives
+  a team member a search tool through a connector may go around it; that is allowed, and the
+  Research agent stays the safe, recommended way.
+- **ship 2 D17** The app always knows the Research agent by its id `research`. Its name is Pete by
+  default and the owner may rename it in Edit agent; the registry keeps the name on record, and
+  every app message, refusal, house rule and Settings string shows the current name
+  (`researchText`, `{{name}}` in the locale files). Messages reach it by its id or its current name,
+  unless another member already has that name. No one else is hired or renamed to its name.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |

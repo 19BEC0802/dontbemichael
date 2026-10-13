@@ -15,6 +15,7 @@ import { connectorGranted, connectorOn, isQuickBooksKey } from '@shared/claudeCo
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
 import { InfoTip } from './InfoTip';
 import { SHOW_MAILBOXES } from '@shared/buildFeatures';
+import { useResearchName } from '@/shell/research';
 
 type SectionKey = 'email' | 'connectors' | 'schedules';
 
@@ -44,6 +45,7 @@ type SectionKey = 'email' | 'connectors' | 'schedules';
  */
 export function CapabilitiesTab({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
+  const researchName = useResearchName();
   const config = useHarnessConfig();
   const godName = useResolvedGodName();
   const pending = useStore((s) => s.pendingRestart[agent.id]);
@@ -209,7 +211,7 @@ export function CapabilitiesTab({ agent }: { agent: Agent }) {
     return (
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 14 }}>
         <div style={{ maxWidth: '72ch', ...hint }}>
-          {t('capabilities.research')}{' '}
+          {t('capabilities.research', { name: researchName })}{' '}
           <button type="button" style={link} onClick={() => window.dispatchEvent(new CustomEvent('cth:open-settings', { detail: { section: 'Research & privacy' } }))}>
             {t('capabilities.researchSettings')}
           </button>

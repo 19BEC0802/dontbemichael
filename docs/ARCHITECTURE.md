@@ -150,11 +150,11 @@ src/
                              files open in a tab or in their own app (docs/designs/open-file-tab.md)
     officeBreak.ts           the office break's view for the renderer (usage limit, credit or sign in), and
                              heldByBreak (Claude agents only)
-    research.ts              Pete, the Research team member: his id, name, house rule 9, refusal reasons and the
-                             reply label every agent sees
+    research.ts              the Research team member: its id, default name (Pete; the owner may rename it, and
+                             researchText shows the current one), house rule 9, refusal reasons and the reply label
     dataClasses.ts           the kinds of data the owner keeps private (Settings, Research & privacy) and the fixed
                              patterns the trust layer marks them with
-    webAccess.ts             who may use web pages and search (Pete alone, in a business office), and the empty
+    webAccess.ts             who may use web pages and search (the Research agent alone, in every office), and the empty
                              shell network list everyone else's sandbox gets, Michael included
   preload/                   contextBridge → typed window.cth API
   renderer/src/
@@ -191,7 +191,7 @@ src/
     ScheduledJobs,           an agent's scheduled jobs and their focus areas, shown with its Work style
     AddAgentModal,           the hire wizard (Who, Job, Role, Finalize); EditAgentModal edits the plain work style
     ResearchPrivacySettings, Settings > Research & privacy: Pete's on and off row and what the team may send him;
-                             shell/research.ts starts and stops him (business offices only)
+                             shell/research.ts starts and stops it, in every office, and gives its current name
     ErrorBoundary,           a crash in the window shows a recovery screen with Reload, not a blank window
     ProfileTab,              the first tab on every agent: job, folder (Open folder), full instructions
     MemoryNotes,             an agent's Memory tab as grouped notes; "Show the file" keeps the raw text

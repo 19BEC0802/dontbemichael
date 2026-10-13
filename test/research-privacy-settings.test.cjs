@@ -20,7 +20,7 @@ test('one Settings section, after Connections, with Research first', () => {
   const modal = read('src/renderer/src/components/SettingsModal.tsx');
   assert.match(modal, /'Connections', 'Research & privacy', 'Voice'/);
   assert.equal(en.settings.nav.research, 'Research & privacy');
-  assert.ok(ui.indexOf("t('research.title')") < ui.indexOf("t('research.sendTitle')"));
+  assert.ok(ui.indexOf("t('research.title')") < ui.indexOf("t('research.sendTitle'"));
   assert.match(modal, /classes=\{pending\.dataClasses \?\? config\.dataClasses\}/, 'classes are staged for the footer Save');
 });
 
@@ -28,8 +28,9 @@ test('the Research row speaks every state and acts at once', () => {
   // Value: protects=the owner sees whether Research started; fails_when=a state has no words or waits for Save; why_new=design review D6; seam=source
   assert.match(ui, /<span role="status"/);
   for (const k of ['off', 'on', 'starting', 'stopping', 'failed']) assert.ok(en.research[k], k);
-  assert.equal(en.research.off, "Off. Pete can't look things up for your team.");
-  assert.equal(en.research.on, 'On. Pete looks things up for the team.');
+  assert.equal(en.research.off, "Off. {{name}} can't look things up for your team.");
+  assert.equal(en.research.on, 'On. {{name}} looks things up for the team.');
+  assert.match(ui, /t\('research\.on', \{ name: researchName \}\)/, 'with the name the owner gave it (ship 2 D17)');
   assert.match(ui, /await startResearch\(config\)/);
 });
 
@@ -55,24 +56,24 @@ test('classes are named radio groups in a fixed order; passwords are locked', ()
       assert.ok(l.research.class[id].name && l.research.class[id].tip, `${lang} ${id}`);
     }
   }
-  assert.equal(en.research.usedWhenOn, 'Used when Pete is on.');
+  assert.equal(en.research.usedWhenOn, 'Used when {{name}} is on.');
 });
 
 test('Windows owners are told Research is not walled off there', () => {
   // Value: protects=an owner on Windows knows the guard does not fully hold; fails_when=the line is missing or softened; why_new=eng D4, design review D21; seam=source
   assert.match(ui, /const win = window\.cth\.platform === 'win32';/);
-  assert.equal(en.research.windows, 'On Windows, Pete can still reach your office files.');
+  assert.equal(en.research.windows, 'On Windows, {{name}} can still reach your office files.');
 });
 
 test('the update card is a quiet report, once, that opens the section', () => {
   // Value: protects=updated owners learn the team lost the internet without a false alarm; fails_when=the card turns coral, repeats, or misses the deep link; why_new=design review D9 and D20; seam=source
   const ask = read('src/renderer/src/components/AskMeTab.tsx');
   assert.match(ask, /\}\)\}\n      \{\/\* A report, after the questions like every Report card \(DESIGN\.md 7\.8\)\. \*\/\}\n      \{researchNotice && <ResearchNoticeCard \/>\}/);
-  assert.match(read('src/renderer/src/components/SettingsModal.tsx'), /sec !== 'Research & privacy' \|\| !!\(config\.businessFolder \|\| config\.officeFolder\)/, 'business offices only (D3)');
+  assert.match(read('src/renderer/src/components/SettingsModal.tsx'), /\{VISIBLE_SECTIONS\.map\(\(section\) => \{/, 'every office (owner, ship 2 D16)');
   assert.match(ask, /detail: \{ section: 'Research & privacy' \}/);
   assert.match(read('src/renderer/src/shell/useNeedsYou.ts'), /\+ \(merged\.researchNotice \? 1 : 0\)/);
   assert.equal(en.research.noticeTitle, 'Your team no longer uses the internet');
-  assert.match(read('src/main/index.ts'), /if \(!cfg\.research\) writeConfig\(\{ research: \{ on: false, notice: !!cfg\.onboardingComplete && isBusinessOffice\(\) \} \}\);/);
+  assert.match(read('src/main/index.ts'), /if \(!cfg\.research\) writeConfig\(\{ research: \{ on: false, notice: !!cfg\.onboardingComplete \} \}\);/, 'every updated office (ship 2 D16)');
 });
 
 test('setup offers Research as one unchecked Team step row', () => {
@@ -95,12 +96,13 @@ test('Research copy has no dashes', () => {
   }
 });
 
-test('Pete reads as the Research member everywhere the owner sees him', () => {
-  // Value: protects=the setup card shows his role, his locked name and engine stay labelled for screen readers, and the floor never calls him Ryan; fails_when=a span replaces the read only field, the card drops the role, or he joins the in character banter; why_new=design review; seam=source
+test('the Research member reads as Research everywhere the owner sees it, under the name they gave it', () => {
+  // Value: protects=the setup card shows its role, its locked engine stays labelled for screen readers, its name is the owner's to edit, and the floor never calls it Ryan; fails_when=the card drops the role, the name locks again, or it joins the in character banter; why_new=design review, owner ship 2 D17; seam=source
   const wiz = read('src/renderer/src/components/OnboardingWizard.tsx');
   assert.match(wiz, /name=\{`\$\{RESEARCH_NAME\} · \$\{t\('research\.title'\)\}`\}/);
   const modal = read('src/renderer/src/components/EditAgentModal.tsx');
-  assert.match(modal, /<input readOnly value=\{agent\.name\} aria-label=\{t\('editAgent\.name'\)\} style=\{lockedValueStyle\} \/>/);
+  assert.doesNotMatch(modal, /readOnly value=\{agent\.name\}/, 'the name is editable (ship 2 D17)');
+  assert.match(modal, /info=\{isResearch \? t\('editAgent\.researchName', \{ name: researchName \}\) : undefined\}/);
   assert.match(modal, /<input readOnly value=\{providerLabel\} aria-label=\{t\('editAgent\.provider'\)\} style=\{lockedValueStyle\} \/>/);
   assert.match(read('src/renderer/src/scene/studio/StudioStage.tsx'), /\.filter\(\(p\) => p\.id !== RESEARCH_ID\)/);
   // The hook program's big call handling is driven for real in test/hook-frame-paths.test.cjs.

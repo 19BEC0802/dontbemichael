@@ -23,7 +23,7 @@ import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
   PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
   RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS, RESEARCH_NAME, RESEARCH_ROLE, isReservedName,
-  SENT_AS_SUBJECT, sentAsBody
+  SENT_AS_SUBJECT, sentAsBody, nameKey, researchNameOf, researchText
 } from '../shared/research';
 
 import { hookShell, shellCommand, type HookShell } from './hookShell';
@@ -248,9 +248,13 @@ export const HOUSE_RULES = [
   '8. On the task board, "waiting" names who else a card waits on, never the card\'s own person. When a card\'s one off next step is its own person\'s at a set time, such as a send on Monday or a question to ask after the 20th, the card is "todo", with "nextAt" set to that time as an ISO date and time with its offset; the app shows it in the owner\'s local time. A routine that repeats on a schedule needs no card to track it: its runs live in Schedules. What a run produces for the owner still goes on Ask me as a report card. A done card stays done: only the owner reopens one, to correct a card marked done by mistake. Cards carry no running "notes": what you did is already kept in your own conversation and the office log, and what you keep for good goes in your memory.'
 ].join('\n');
 
-/** A business office's house rules (one with a business folder): rule 9,
- *  only Research uses the internet, applies there (ship review D3). */
+/** Every office's house rules: rule 9, only the Research agent uses the
+ *  internet, applies in every office (ship review D3; owner ship 2 D16 widened it
+ *  from business offices to all). Shown with its current name by houseRules. */
 export const BUSINESS_HOUSE_RULES = `${HOUSE_RULES}\n${RESEARCH_HOUSE_RULE}`;
+
+/** Bundled skills that reach the internet: Research's alone (owner, ship 2 D13). */
+export const RESEARCH_ONLY_SKILLS: readonly string[] = ['md-fetch-summarize'];
 
 /**
  * How every agent is told about company knowledge (owner, 2026-09-25): at
@@ -668,6 +672,11 @@ export class HiveManager {
    *  2026-09-25). Set by main before the hive bootstraps. */
   private businessOffice = false;
   setBusinessOffice(on: boolean): void { this.businessOffice = on; }
+  /** The Research agent's current name (owner, ship 2 D17: renamable, Pete by default). */
+  private researchName(): string { try { return researchNameOf(this.registry().agents); } catch { return RESEARCH_NAME; } }
+  /** Every office's house rules, rule 9 included, with the Research agent's
+   *  current name (owner, ship 2 D16: the internet rule is the same in every office). */
+  houseRules(): string { return researchText(BUSINESS_HOUSE_RULES, this.researchName()); }
 
   /** Main's handler for an agent's schedule request (a message to "scheduler"
    *  with a `schedule` object). It records a request for the owner and returns
@@ -1058,8 +1067,8 @@ export class HiveManager {
        *  deny everything not given. Absent means none. */
       connectors?: SpawnConnectorPlan;
       /** Shell network (shared/webAccess.ts): an empty strict list for
-       *  everyone in a business office, Michael included (D9.1); absent for
-       *  Research. */
+       *  everyone, Michael included (D9.1), in every office (ship 2 D16); absent
+       *  for Research. */
       network?: SandboxNetwork;
     } = {}
   ): Promise<SpawnInjection> {
@@ -1088,7 +1097,7 @@ export class HiveManager {
     // app-resources skills/ dir on every spawn (same policy as identity.md), so an
     // agent always rides with the shipped safe skill set. Tolerant: a missing or
     // partial source dir is a no-op (Kevin populates the resource dir in lp-manifest).
-    if (opts.skillsDir) this.copyBundledSkills(opts.skillsDir, join(dir, '.claude', 'skills'));
+    if (opts.skillsDir) this.copyBundledSkills(opts.skillsDir, join(dir, '.claude', 'skills'), meta.id === RESEARCH_ID);
 
     // The memory index (src/shared/memoryIndex.ts): only the app writes it; the
     // agent adds notes to memory/inbox.md, tidied in by memoryTidy.ts.
@@ -1112,11 +1121,14 @@ export class HiveManager {
     reg.agents[meta.id] = {
       ...prev,
       ...meta,
-      // Research's name is the app's, whatever a spawn passes (owner,
-      // 2026-10-13); an office that already has a member by that name keeps
-      // calling Research by its role, so two never share a name.
+      // Research is the owner's to name (ship 2 D17, renamed through renameAgent):
+      // the name on record, else the one a spawn passes, else Pete. A name
+      // another member already has is skipped, so two never share one; the
+      // role is the last resort.
       ...(meta.id === RESEARCH_ID ? {
-        name: Object.entries(reg.agents).some(([otherId, a]) => !!a?.name && isReservedName(a.name, otherId)) ? RESEARCH_ROLE : RESEARCH_NAME
+        name: [prev?.name, meta.name, RESEARCH_NAME, RESEARCH_ROLE]
+          .map((n) => (typeof n === 'string' ? n.trim() : ''))
+          .find((n) => !!n && !Object.entries(reg.agents).some(([otherId, a]) => otherId !== RESEARCH_ID && !!a?.name && nameKey(a.name) === nameKey(n))) ?? RESEARCH_ROLE
       } : {}),
       capabilities: meta.capabilities ?? prev?.capabilities ?? [],
       role,
@@ -1210,7 +1222,7 @@ export class HiveManager {
             if (desc.shim === 'agy') this.installAgyHooks();
             else if (desc.shim === 'codex') {
               env.CODEX_HOME = this.installCodexHooks(dir, meta.id);
-              if (opts.skillsDir) this.copyBundledSkills(opts.skillsDir, join(env.CODEX_HOME, 'skills'));
+              if (opts.skillsDir) this.copyBundledSkills(opts.skillsDir, join(env.CODEX_HOME, 'skills'), false);
               // Codex refuses to run hooks from a config dir without persisted
               // "hook trust" (normally an interactive gate). Our hooks.json is
               // hive-authored inside an isolated CODEX_HOME, so we bypass that gate
@@ -1495,7 +1507,7 @@ export class HiveManager {
       const taken = Object.entries(reg.agents).some(([otherId, other]) =>
         otherId !== id && !!other?.name && other.name.trim().toLowerCase() === nextName.toLowerCase());
       if (taken) return { ok: false, error: `Another team member is already called ${nextName}. Pick a different name.` };
-      if (isReservedName(nextName, id)) return { ok: false, error: `${RESEARCH_NAME} is the Research team member's name. Pick a different name.` };
+      if (isReservedName(nextName, id, reg.agents)) return { ok: false, error: `${researchNameOf(reg.agents)} is the Research team member's name. Pick a different name.` };
 
       const previousName = agent.name;
       agent.name = nextName;
@@ -1761,15 +1773,19 @@ export class HiveManager {
    * the app. Best-effort and fully tolerant — a missing/empty source dir is a no-op
    * (Kevin populates the resource dir in lp-manifest), and any IO error is swallowed
    * so skill provisioning can never block a spawn.
+   * The web skills go to Research alone, the one agent that uses the internet
+   * (owner, ship 2 D13); a copy an earlier version gave anyone else is removed.
    */
-  private copyBundledSkills(srcDir: string, destDir: string): void {
+  private copyBundledSkills(srcDir: string, destDir: string, isResearch: boolean): void {
     try {
+      if (!isResearch) for (const web of RESEARCH_ONLY_SKILLS) rmSync(join(destDir, web), { recursive: true, force: true });
       if (!existsSync(srcDir)) return;
       const copyTree = (from: string, to: string): void => {
         const entries = readdirSync(from, { withFileTypes: true });
         if (!entries.length) return;
         mkdirSync(to, { recursive: true });
         for (const ent of entries) {
+          if (!isResearch && from === srcDir && RESEARCH_ONLY_SKILLS.includes(ent.name)) continue;
           const s = join(from, ent.name);
           const d = join(to, ent.name);
           if (ent.isDirectory()) copyTree(s, d);
@@ -2028,9 +2044,9 @@ export class HiveManager {
     if (meta.isResearch) {
       const paths: PromptPaths = { inbox: inDir('inbox'), inboxDone: inDir('inbox', '.done'), outbox: inDir('outbox'), protocol: inRoot('PROTOCOL.md'), hiveRoot: root };
       return [
-        researchInstructions(business ?? {}, godNameForPrompt || 'Michael', paths),
+        researchText(researchInstructions(business ?? {}, godNameForPrompt || 'Michael', paths), meta.name || this.researchName()),
         '',
-        BUSINESS_HOUSE_RULES,
+        this.houseRules(),
         '',
         `Your memory: the app gives you your memory index at the start of each session; procedure files it names are in ${inDir('memory')}. When you finish a question, add at most three short notes to ${inDir('memory', 'inbox.md')}, only for things you would otherwise look up again: a good source for a kind of question, with the date you checked it. Save nothing a teammate told you about the business.`
       ].join('\n');
@@ -2051,7 +2067,7 @@ export class HiveManager {
           ? michaelInstructions(meta.name, b, paths)
           : teamMemberInstructions(meta.name, roleTitle, godNameForPrompt || 'Michael', b, paths),
         '',
-        BUSINESS_HOUSE_RULES,
+        this.houseRules(),
         '',
         folderLine,
         memoryRule(inDir('memory', 'inbox.md'), inDir('memory')),
@@ -2068,7 +2084,7 @@ export class HiveManager {
       `You are "${meta.name}" (${meta.id}), an autonomous agent in a collaborating hive of AI agents.`,
       `Your private workspace is ${dir}. The shared hive is ${root}. Full protocol: ${inRoot('PROTOCOL.md')}.`,
       '',
-      HOUSE_RULES,
+      this.houseRules(),
       '',
       'HIVE PROTOCOL — follow it every task:',
       `1. At the START of a task, read EVERY file in ${inDir('inbox')} (messages other agents sent you). After handling an inbox message, move its file into ${inDir('inbox', '.done')}.`,
@@ -2260,9 +2276,12 @@ export class HiveManager {
 
   /** One trust layer note to a sender only (owner, 2026-10-13), in the
    *  thread of the message it is about. */
-  private tellSender(to: string, aboutId: string | null, conversation: unknown, subject: string, body: string): void {
+  private tellSender(to: string, aboutId: string | null, conversation: unknown, subject: string, body: string, named = false): void {
+    // App text names the Research agent by its current name (owner, ship 2 D17); a
+    // body that quotes someone's words comes already named.
+    const n = this.researchName();
     this.routeMessage(this.normalize({
-      to, act: 'inform', subject, body,
+      to, act: 'inform', subject: researchText(subject, n), body: named ? body : researchText(body, n),
       in_reply_to: aboutId && isSafeMessageId(aboutId) ? aboutId : null,
       ...(safeConversation(conversation) ? { conversation } : {})
     }, PRIVACY_CHECK_SENDER));
@@ -2307,7 +2326,7 @@ export class HiveManager {
     if (v === 'hold') return 'hold';
     if (v.decision === 'deny') return deny(v.reason);
     this.deliverToResearch(senderId, msg, v.subject, v.body);
-    if (v.decision === 'clean') this.tellSender(senderId, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body));
+    if (v.decision === 'clean') this.tellSender(senderId, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body, this.researchName()), true);
     return 'sent';
   }
 
@@ -2324,9 +2343,10 @@ export class HiveManager {
       if (msg.from !== 'human' && msg.from !== 'system') return;
       const godId = this.registry().godId ?? 'god';
       const what = msg.from === 'human' ? 'A note from the owner' : 'A message from the app';
+      const n = this.researchName();
       this.deliver(this.normalize({
-        to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-        body: `${what} for ${RESEARCH_NAME} ("${String(msg.subject ?? '').slice(0, 80)}") was not sent. ${reason}`
+        to: godId, act: 'inform', subject: researchText(NOT_SENT_SUBJECT, n),
+        body: `${what} for ${n} ("${String(msg.subject ?? '').slice(0, 80)}") was not sent. ${researchText(reason, n)}`
       }, PRIVACY_CHECK_SENDER), godId);
     };
     if (!this.researchOn() || !this.trustLayer) {
@@ -2350,7 +2370,7 @@ export class HiveManager {
         // Research may have been turned off while the check ran.
         if (!this.researchOn()) return refuse(REFUSAL_OFF, 'research-off');
         this.deliverToResearch(msg.from, msg, v.subject, v.body);
-        if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body));
+        if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body, this.researchName()), true);
         this.commit('hive: trust layer delivered to research');
       } catch (e) { console.error('[research] delivering a checked message', e); }
     }, () => {
@@ -2408,8 +2428,8 @@ export class HiveManager {
     const left = rows.filter((r) => {
       if (!r || (r.from !== 'human' && r.from !== 'system') || this.researchLostTold.has(r.id)) return false;
       const ok = this.deliver(this.normalize({
-        to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
+        to: godId, act: 'inform', subject: researchText(NOT_SENT_SUBJECT, this.researchName()),
+        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${this.researchName()} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
       }, PRIVACY_CHECK_SENDER), godId);
       if (ok) this.researchLostTold.add(r.id);
       return !ok;
@@ -2495,7 +2515,7 @@ export class HiveManager {
     if (v === 'hold') return 'hold';
     if (v.decision === 'deny') return deny();
     msg.subject = v.subject;
-    msg.body = `${RESEARCH_REPLY_LABEL}\n\n${v.body}`;
+    msg.body = `${researchText(RESEARCH_REPLY_LABEL, this.researchName())}\n\n${v.body}`;
     // Back into the sender's own thread, only when it goes back to that
     // sender; Research knows only the clean copies' ids, so any other reply
     // id it writes is dropped (ship review pass 3).
@@ -2516,8 +2536,8 @@ export class HiveManager {
       this.deliver(this.normalize({
         to: godId,
         act: 'inform',
-        subject: `${RESEARCH_NAME}'s answer may carry web instructions`,
-        body: `${RESEARCH_NAME}'s answer to ${toName} ("${msg.subject.slice(0, 80)}") read like it was trying to steer its reader. The trust layer cleaned it and it was delivered labelled as information only. Look at it if the work matters.`
+        subject: `${this.researchName()}'s answer may carry web instructions`,
+        body: `${this.researchName()}'s answer to ${toName} ("${msg.subject.slice(0, 80)}") read like it was trying to steer its reader. The trust layer cleaned it and it was delivered labelled as information only. Look at it if the work matters.`
       }, 'system'), godId);
     }
     return 'sent';
@@ -2555,9 +2575,10 @@ export class HiveManager {
         } else if (m.from === 'human' || m.from === 'system') {
           // An owner or app note waiting for Research is told to Michael (D8.2).
           const godId = this.registry().godId ?? 'god';
+          const rn = this.researchName();
           this.deliver(this.normalize({
-            to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-            body: `${m.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(m.subject ?? '').slice(0, 80)}") was not sent. ${REFUSAL_OFF}`
+            to: godId, act: 'inform', subject: researchText(NOT_SENT_SUBJECT, rn),
+            body: `${m.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${rn} ("${String(m.subject ?? '').slice(0, 80)}") was not sent. ${researchText(REFUSAL_OFF, rn)}`
           }, PRIVACY_CHECK_SENDER), godId);
           n++;
         }
@@ -2584,7 +2605,7 @@ export class HiveManager {
     const file = join(privateRoot(home), 'house-rules-seen.json');
     let seenAll: Record<string, string[]> = {};
     try { seenAll = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string[]>; } catch { /* first start */ }
-    const { tell, keys } = houseRulesToTell(this.businessOffice ? BUSINESS_HOUSE_RULES : HOUSE_RULES, Array.isArray(seenAll[agentId]) ? seenAll[agentId] : undefined, resumed);
+    const { tell, keys } = houseRulesToTell(this.houseRules(), Array.isArray(seenAll[agentId]) ? seenAll[agentId] : undefined, resumed);
     if (tell.length) {
       try {
         const msg = this.send({ to: agentId, act: 'inform', subject: HOUSE_RULES_CHANGED_SUBJECT, body: houseRulesNoticeBody(tell) }, 'human');

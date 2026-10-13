@@ -23,7 +23,7 @@ import {
 import { runHiddenClaude, setHiddenClaudeAuthEnv } from './hiddenClaude';
 import { makeTrustLayer, TRUST_MODEL, TRUST_TIMEOUT_MS } from './trustLayer';
 import { dataClassSettings } from '../shared/dataClasses';
-import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_NAME, RESEARCH_WORK_STYLE } from '../shared/research';
+import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_WORK_STYLE, researchNameOf } from '../shared/research';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
@@ -673,13 +673,6 @@ async function researchNotesForPalace(id: string, agentDir: string): Promise<str
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'memory.md'), `${v.body}\n`, 'utf8');
   return dir;
-}
-
-/** A business office (one with a business folder): where the Research rule
- *  applies (ship review D3). Older and developer offices keep the internet. */
-function isBusinessOffice(): boolean {
-  const cfg = readConfig();
-  return !!(cfg.businessFolder || cfg.officeFolder);
 }
 
 /** Research's desk: its own working folder, in the app's home, outside the
@@ -3754,16 +3747,16 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // has applied it, the agent counts as unprotected and is stripped below.
   // Research (shared/research.ts): the reserved id while the owner has it on.
   // It runs in its desk, sees no office data and is the only one on the web.
-  const isResearch = !!opts.hive && opts.hive.id === RESEARCH_ID && !opts.hive.isGod && !!readConfig().research?.on && isBusinessOffice() && hive.enabled();
+  const isResearch = !!opts.hive && opts.hive.id === RESEARCH_ID && !opts.hive.isGod && !!readConfig().research?.on && hive.enabled();
   if (opts.hive?.id === RESEARCH_ID && !isResearch) {
-    return { ok: false, error: `${RESEARCH_NAME} is off. Turn him on in Settings, Research & privacy.` };
+    return { ok: false, error: `${researchNameOf(hive.registry().agents)} is off. Turn them on in Settings, Research & privacy.` };
   }
   // Research's walls are Claude Code's: on any other engine it does not
   // start, and its switch goes back off (ship review D6.2).
   if (isResearch && !claudeProvider) {
     console.error(`[research] engine ${provider} has none of Research's walls; Research did not start`);
     turnResearchOff();
-    return { ok: false, error: `${RESEARCH_NAME} runs only on Claude. Turn him on again in Settings, Research & privacy.` };
+    return { ok: false, error: `${researchNameOf(hive.registry().agents)} runs only on Claude. Turn them on again in Settings, Research & privacy.` };
   }
   // Research starts only inside its walls (ship review D2.8).
   let researchWalled = false;
@@ -3790,9 +3783,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     return dir;
   })();
   // Without its own scratch folder a Claude agent's session files would land
-  // in the shared /tmp that Research's shell reads, so in a business office it
-  // does not start (Codex review, second ship).
-  if (opts.hive && claudeProvider && !sessionTmp && isBusinessOffice()) {
+  // in the shared /tmp that Research's shell reads, so it does not start
+  // (Codex review, second ship; every office, owner ship 2 D16).
+  if (opts.hive && claudeProvider && !sessionTmp) {
     console.error(`[spawn] no session scratch folder for ${opts.hive.id}; not started`);
     return { ok: false, error: 'This team member\'s scratch folder could not be made in the app\'s home folder, so they did not start. Check that the app\'s home folder can be written, then try again.' };
   }
@@ -3808,10 +3801,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           : privateOnlyFolderPolicy(!!opts.hive!.isGod, opts.cwd);
         if (!base) return undefined;
         const walled = withAgentTmpWall(withResearchWall(base, researchFolders()), home, opts.hive!.id, !!opts.hive!.isGod);
-        // In a business office Michael's commands stay in their sandbox too,
-        // where his shell reaches no host and Research's folders are walled
-        // (owner, D7.1 and D9.1).
-        return isBusinessOffice() ? { ...walled, sandboxOnly: true } : walled;
+        // Michael's commands stay in their sandbox too, where his shell
+        // reaches no host and Research's folders are walled (owner, D7.1,
+        // D9.1; every office, ship 2 D16).
+        return { ...walled, sandboxOnly: true };
       };
       const inj = await hive.ensureAgent(
         { ...opts.hive, cwd: opts.cwd, provider, isResearch },
@@ -3871,12 +3864,11 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           folderPolicy: memberPolicy(),
           docTextCliPath: docTextCliPath(),
           connectors: connectorPlan?.plan,
-          // In a business office only Research uses the internet
-          // (shared/webAccess.ts): every other team member's shell reaches no
-          // host. Michael included (D9.1). Other offices keep it (D3).
-          // Judged on the office setting, not the folder, so a folder that
-          // can't be opened never leaves the team on the internet.
-          network: isBusinessOffice() ? sandboxNetwork() : undefined
+          // Only Research uses the internet (shared/webAccess.ts): every other
+          // team member's shell reaches no host, Michael included (D9.1), in
+          // every office (owner, ship 2 D16: the Research agent is the app's one way
+          // to the open internet, whatever the pack).
+          network: sandboxNetwork()
         }
       );
       opts.args = [...(opts.args ?? []), ...inj.args];
@@ -3911,7 +3903,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // accounts and the web: it does not start, and the switch goes back off.
     console.error('[research] walls not in place; Research did not start');
     turnResearchOff();
-    return { ok: false, error: `${RESEARCH_NAME} could not be set up safely, so he did not start. Try again.` };
+    return { ok: false, error: `${researchNameOf(hive.registry().agents)} could not be set up safely, so they did not start. Try again.` };
   }
   if (connectorPlan && !connectorsApplied) {
     console.warn(`[connectors] ${opts.hive?.id}: no hive settings, starting without connectors`);
@@ -4898,8 +4890,7 @@ ipcMain.handle('hive:renameAgent', (_evt, id: unknown, name: unknown) => {
   if (typeof id !== 'string' || typeof name !== 'string') {
     return { ok: false, error: 'Invalid rename request' };
   }
-  // The app's messages to the team name Research, so its name stays (owner, 2026-10-13).
-  if (id === RESEARCH_ID && name.trim() !== RESEARCH_NAME) return { ok: false, error: `${RESEARCH_NAME}'s name stays as it is.` };
+  // The owner may rename Research (ship 2 D17); the app knows it by its id.
   return hive.renameAgent(id, name);
 });
 ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
@@ -6299,7 +6290,7 @@ ipcMain.handle('missions:upsert', (_evt, mission: unknown): MissionOpResult => {
   if (!isMission(mission)) return { ok: false, error: 'invalid schedule' };
   // Research answers asks only; a schedule's text would skip the privacy
   // check (design review D19).
-  if (mission.to === RESEARCH_ID) return { ok: false, error: `${RESEARCH_NAME} has no schedules` };
+  if (mission.to === RESEARCH_ID) return { ok: false, error: `${researchNameOf(hive.registry().agents)} has no schedules` };
   // Several "when" lines are stored canonical, or the save is refused: a bad
   // line would run on a clock nobody set.
   // The focus area is stored clean (FA1); an empty one is no focus.
@@ -7433,13 +7424,13 @@ function bootstrapHiveServices(): void {
   hive.onScheduleRequest(receiveScheduleRequest);
   hive.setTrustLayer(trustLayer);
   memory.setNotesFilter(researchNotesForPalace);
-  hive.setResearchEnabled(() => !!readConfig().research?.on && isBusinessOffice());
-  // The update that took the internet from the team (issue #230): a business
-  // office that was already running gets the one time card; a new one decides
-  // in the onboarding Team step instead.
+  hive.setResearchEnabled(() => !!readConfig().research?.on);
+  // The update that took the internet from the team (issue #230): an office
+  // that was already running gets the one time card, whatever its pack (owner,
+  // ship 2 D16); a new one decides in the onboarding Team step instead.
   {
     const cfg = readConfig();
-    if (!cfg.research) writeConfig({ research: { on: false, notice: !!cfg.onboardingComplete && isBusinessOffice() } });
+    if (!cfg.research) writeConfig({ research: { on: false, notice: !!cfg.onboardingComplete } });
   }
   hive.ensureHive();
   try { sweepOrphanAgentMcp(); } catch (e) { console.error('[mail] orphan agent-mcp sweep failed', e); }

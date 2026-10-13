@@ -10,7 +10,8 @@
  *     an empty `allowedDomains` and `strictAllowlist` (verified live on
  *     2.1.296: an empty strict list refuses every host; it never covers
  *     WebFetch). Michael included (owner, D9.1): his commands stay in the
- *     sandbox in a business office. Windows has no sandbox yet (#187).
+ *     sandbox. In every office, whatever its pack (owner, ship 2 D16). Windows has
+ *     no sandbox yet (#187).
  *
  * Pure: no fs, no electron, so the hook, the spawn and the tests share it.
  */
@@ -36,8 +37,8 @@ export function webAccess(isResearch: boolean, researchOn: boolean, tool: string
 /** Claude Code's `sandbox.network`. */
 export interface SandboxNetwork { allowedDomains: string[]; strictAllowlist: true }
 
-/** The shell network settings for everyone in a business office, Michael
- *  included (owner, D9.1): an empty strict list, which refuses every host
+/** The shell network settings for everyone but Research, in every office
+ *  (owner, ship 2 D16), Michael included (D9.1): an empty strict list, which refuses every host
  *  (verified live). Research's spawn sets none. */
 export function sandboxNetwork(): SandboxNetwork {
   return { allowedDomains: [], strictAllowlist: true };

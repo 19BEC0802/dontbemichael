@@ -10,6 +10,7 @@ import { researchOnFloor, startResearch, stopResearch } from '@/shell/research';
 import { useStore } from '@/store/store';
 import { isClaudeProvider } from '@shared/agentProvider';
 import { RESEARCH_ID } from '../../../shared/research';
+import { useResearchName } from '@/shell/research';
 
 /**
  * Settings, Research & privacy (issue #230, docs/designs/research-agent-privacy.md,
@@ -37,6 +38,7 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
   onClassesChange: (next: Partial<Record<DataClassId, DataClassSetting>>) => void;
 }) {
   const { t } = useTranslation();
+  const researchName = useResearchName();
   const [phase, setPhase] = useState<Phase>(config.research?.on && researchOnFloor() ? 'on' : config.research?.on ? 'failed' : 'off');
   const [waiting, setWaiting] = useState<number | null>(null);
   // PixelButton takes no ref: focus moves through the row that holds it.
@@ -84,21 +86,21 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
   const counts = allowedCount(settings);
   const setClass = (id: DataClassId, v: DataClassSetting): void => onClassesChange({ ...(classes ?? {}), [id]: v });
 
-  const line = phase === 'on' ? { color: 'var(--cth-green)', text: t('research.on') }
-    : phase === 'failed' ? { color: 'var(--cth-coral)', text: t('research.failed') }
-    : phase === 'off' ? { color: 'var(--cth-ink-4)', text: t('research.off') }
+  const line = phase === 'on' ? { color: 'var(--cth-green)', text: t('research.on', { name: researchName }) }
+    : phase === 'failed' ? { color: 'var(--cth-coral)', text: t('research.failed', { name: researchName }) }
+    : phase === 'off' ? { color: 'var(--cth-ink-4)', text: t('research.off', { name: researchName }) }
     : null;
 
   return (
     <>
       <div>
-        <div style={head}>{t('research.title')}<InfoTip label={t('research.title')} text={t('research.tip')} /></div>
+        <div style={head}>{t('research.title')}<InfoTip label={t('research.title')} text={t('research.tip', { name: researchName })} /></div>
         <div ref={stateRow} style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 28 }}>
           <span role="status" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, lineHeight: '20px', color: 'var(--cth-ink-900)' }}>
             {line
               ? <><span aria-hidden="true" style={dot(line.color)} />{line.text}</>
               : <><span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--cth-line-2)', borderTopColor: 'var(--cth-indigo)', flexShrink: 0, animation: 'cth-spin 0.9s linear infinite' }} />
-                {phase === 'starting' ? t('research.starting') : t('research.stopping')}</>}
+                {phase === 'starting' ? t('research.starting', { name: researchName }) : t('research.stopping', { name: researchName })}</>}
           </span>
           {phase === 'off' && <PixelButton variant="secondary" size="sm" onClick={() => void turnOn()}>{t('research.turnOn')}</PixelButton>}
           {phase === 'failed' && <PixelButton variant="secondary" size="sm" onClick={() => void turnOn()}>{t('research.tryAgain')}</PixelButton>}
@@ -121,7 +123,7 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
         )}
         {win && (
           <div style={{ ...hint, marginTop: 8, paddingInlineStart: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {t('research.windows')}<InfoTip label={t('research.windows')} text={t('research.windowsTip')} />
+            {t('research.windows', { name: researchName })}<InfoTip label={t('research.windows', { name: researchName })} text={t('research.windowsTip', { name: researchName })} />
           </div>
         )}
       </div>
@@ -130,13 +132,13 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
 
       <div>
         <div style={sentenceHead}>
-          {t('research.sendTitle')}
-          <InfoTip label={t('research.sendTitle')} text={t('research.sendTip')} />
+          {t('research.sendTitle', { name: researchName })}
+          <InfoTip label={t('research.sendTitle', { name: researchName })} text={t('research.sendTip', { name: researchName })} />
           <span style={{ fontSize: 11.5, fontWeight: 500, textTransform: 'none', color: 'var(--cth-ink-3)', fontFamily: 'var(--cth-font-ui)' }}>
             {t('research.count', { allowed: counts.allowed, private: counts.private })}
           </span>
         </div>
-        {phase !== 'on' && <div style={{ ...hint, margin: '-4px 0 6px' }}>{t('research.usedWhenOn')}</div>}
+        {phase !== 'on' && <div style={{ ...hint, margin: '-4px 0 6px' }}>{t('research.usedWhenOn', { name: researchName })}</div>}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {DATA_CLASSES.map((c, i) => {
             const name = t(`research.class.${c.id}.name`);

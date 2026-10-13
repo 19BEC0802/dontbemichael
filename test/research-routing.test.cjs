@@ -39,7 +39,7 @@ async function office(t, { research = true, on = true, layer = fakeLayer() } = {
   const hive = new HiveManager(() => home);
   await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: home, isGod: true });
   await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
-  if (research) await hive.ensureAgent({ id: 'research', name: 'Research', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
+  if (research) await hive.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
   hive.setResearchEnabled(() => on);
   if (layer) hive.setTrustLayer(layer);
   return { hive, layer };
@@ -253,20 +253,26 @@ test('who Research is comes from the app: a registry flag alone does not make an
   assert.equal(hive.researchOn(), false);
 });
 
-test('business offices tell every agent the rule; Research gets its own walled instructions', async (t) => {
-  // Value: protects=agents in a business office ask Research instead of browsing, other offices are not told a false rule, and Research is not told the office's secrets; fails_when=rule 9 leaks into HOUSE_RULES or Research's prompt carries company knowledge; why_new=ship review D3; seam=none
+test('every office tells every agent the rule with the Research agent\'s current name; Research gets its own walled instructions', async (t) => {
+  // Value: protects=agents ask the Research agent instead of browsing in every office, by the name the owner gave it, and it is not told the office's secrets; fails_when=rule 9 is left out of an office or names a stale name, or Research's prompt carries company knowledge; why_new=ship review D3, owner ship 2 D16 and ship 2 D17; seam=none
   assert.doesNotMatch(HOUSE_RULES, /^9\. /m);
   assert.match(BUSINESS_HOUSE_RULES, /^9\. Only Pete, the Research team member, uses the internet/m);
   const { hive } = await office(t);
+  assert.match(hive.houseRules(), /^9\. Only Pete, the Research team member/m);
+  assert.equal(hive.renameAgent('research', 'Robin').ok, true, 'the owner names it');
+  assert.match(hive.houseRules(), /^9\. Only Robin, the Research team member, uses the internet/m);
+  assert.doesNotMatch(hive.houseRules(), /Pete/);
   const prompt = hive['injectedPrompt'](
-    { id: 'research', name: 'Research', cwd: '/w/desk', isResearch: true },
+    { id: 'research', name: 'Robin', cwd: '/w/desk', isResearch: true },
     path.join(hive.root(), 'agents', 'research'), hive.root(), true, true, '/kg', '/w/Biz', undefined, '/kg-root', undefined, { name: 'Harbor Pizza', city: 'Austin', typeName: 'Restaurant', briefing: 'secret plans' }
   );
-  assert.match(prompt, /You are Pete, the Research team member at Harbor Pizza in Austin, the one who uses the internet/);
+  assert.match(prompt, /You are Robin, the Research team member at Harbor Pizza in Austin, the one who uses the internet/);
   assert.match(prompt, /cleaned or more general version/);
   assert.match(prompt, /Write only to the one who asked, or to Michael when you need to raise a problem; never to the whole team/);
   assert.doesNotMatch(prompt, /COMPANY KNOWLEDGE|MemPalace|secret plans|YOUR FOLDERS|tasks\.json/);
-  assert.match(prompt, /^9\. Only Pete/m);
+  assert.match(prompt, /^9\. Only Robin/m);
+  // An office without a business folder gets rule 9 too (ship 2 D16).
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'src/main/hive.ts'), 'utf8'), /this\.houseRules\(\),\n\s+'',\n\s+'HIVE PROTOCOL/);
 });
 
 const { makeTrustLayer } = loadTs('src/main/trustLayer.ts');
@@ -685,21 +691,33 @@ test('a lost note is told to Michael once, even when its list can\'t be cleared'
   } finally { fs.chmodSync(path.join(home, 'private'), 0o755); }
 });
 
-test('Research is called Pete, whatever name a spawn passes, and the app\'s text names him', async (t) => {
-  // Value: protects=the floor, the registry and every message agree on Pete, also for an office that saved the old name; fails_when=a restore keeps "Research" or a rename takes; why_new=owner 2026-10-13 (rename to Pete); seam=none
+test('the Research agent is Pete by default, the owner may rename it, and the app\'s text follows its name', async (t) => {
+  // Value: protects=the floor, the registry and every message agree on one name, the owner's; fails_when=a spawn or restore resets a rename, a rename is refused, or text keeps saying Pete after a rename; why_new=owner ship 2 D17; seam=fake layer
   assert.equal(R.RESEARCH_NAME, 'Pete');
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-pete-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const hive = new HiveManager(() => home);
-  await hive.ensureAgent({ id: 'research', name: 'Research', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
+  await hive.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
   assert.equal(hive.registry().agents.research.name, 'Pete');
-  for (const text of [R.RESEARCH_HOUSE_RULE, R.NOT_SENT_SUBJECT, R.REFUSAL_OFF, R.RESEARCH_REPLY_LABEL, R.REFUSAL_WEB_TOOL]) assert.match(text, /Pete/);
+  assert.equal(hive.renameAgent('research', 'Robin').ok, true);
+  await hive.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
+  assert.equal(hive.registry().agents.research.name, 'Robin', 'a later start keeps the name on record');
+  assert.equal(R.researchText(R.REFUSAL_OFF, 'Robin'), 'Not sent: Robin is off, so nobody can look this up. Work without it.');
+  assert.equal(R.researchText('Peter asked Pete', 'Robin'), 'Peter asked Robin', 'whole word only');
   assert.match(R.RESEARCH_HOUSE_RULE, /"to": "research"/, 'agents still address its id');
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  assert.match(read('src/main/index.ts'), /if \(id === RESEARCH_ID && name\.trim\(\) !== RESEARCH_NAME\) return \{ ok: false/);
-  assert.match(read('src/renderer/src/hooks/useRestoreTeam.ts'), /name: a\.id === RESEARCH_ID \? RESEARCH_NAME : a\.name/);
-  assert.match(read('src/renderer/src/components/EditAgentModal.tsx'), /info=\{isResearch \? t\('editAgent\.researchName'\) : undefined\}>\s*\{isResearch \? \(/);
-  for (const loc of ['en', 'ar', 'zh-CN']) assert.match(JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`)).research.starting, /Pete/, loc);
+  assert.doesNotMatch(read('src/main/index.ts'), /name\.trim\(\) !== RESEARCH_NAME/, 'no rename refusal');
+  assert.doesNotMatch(read('src/renderer/src/hooks/useRestoreTeam.ts'), /RESEARCH_NAME/, 'a restore keeps the saved name');
+  assert.doesNotMatch(read('src/renderer/src/components/EditAgentModal.tsx'), /readOnly value=\{agent\.name\}/, 'the name field is editable');
+  assert.match(read('src/main/hooks.ts'), /conn\.end\(JSON\.stringify\(this\.named\(res \?\? \{\}\)\)\)/, 'refusals name the current name');
+  // A note the trust layer sends back names the current name.
+  const { hive: h2 } = await office(t, { on: false });
+  h2.renameAgent('research', 'Robin');
+  send(h2, 'pam', { to: 'robin', act: 'query', subject: 'Flour', body: 'Flour prices' });
+  h2.routeOnce(); await tick(); h2.routeOnce();
+  const [back] = notes(h2, 'pam', 'Not sent to Robin');
+  assert.ok(back, 'reached by its current name, and refused while off');
+  assert.match(back.body, /Robin is off/);
 });
 
 test('Research\'s notes reader skips a pipe and an oversized file instead of hanging', posixOnly('mkfifo'), (t) => {
@@ -716,34 +734,40 @@ test('Research\'s notes reader skips a pipe and an oversized file instead of han
   assert.equal(readResearchNotes(dir), 'Flour suppliers');
 });
 
-test('nobody else takes Pete\'s name, and "to": "pete" reaches him unless an older hire has that id', async (t) => {
-  // Value: protects=names stay unique and a message to Pete by name is not lost; fails_when=a rename or hire takes "Pete", an office with a Pete ends up with two, or "pete" bounces; why_new=api review; seam=none
+test('nobody else takes the Research agent\'s name, and its name reaches it unless an older hire has it', async (t) => {
+  // Value: protects=names stay unique and a message by name is not lost or misrouted; fails_when=a rename or hire takes its current name, an office with a Pete ends up with two, or the name bounces; why_new=api review, owner ship 2 D17; seam=none
   assert.equal(R.isReservedName(' pete '), true);
   assert.equal(R.isReservedName('Pete', 'research'), false);
+  assert.equal(R.isReservedName('Pete', undefined, { research: { name: 'Robin' } }), false, 'Pete is free once it is renamed');
+  assert.equal(R.isReservedName('robin', undefined, { research: { name: 'Robin' } }), true);
   assert.equal(R.addressedToResearch('Pete', { pam: {} }), true);
+  assert.equal(R.addressedToResearch('robin', { research: { name: 'Robin' } }), true);
+  assert.equal(R.addressedToResearch('pete', { research: { name: 'Robin' } }), false, 'only its current name');
   assert.equal(R.addressedToResearch('pete', { pete: {} }), false, 'an older hire called pete keeps his messages');
   assert.equal(R.addressedToResearch('pete'), false, 'by id only without the roster');
   const { hive } = await office(t);
   assert.equal(hive.renameAgent('pam', 'Pete').ok, false, 'Pete is on the floor: taken');
   const { hive: noPete } = await office(t, { research: false });
-  assert.match(noPete.renameAgent('pam', 'Pete').error, /Pete is the Research team member's name/, 'reserved even while he is not hired');
+  assert.match(noPete.renameAgent('pam', 'Pete').error, /Pete is the Research team member's name/, 'reserved even while it is not hired');
   const home2 = fs.mkdtempSync(path.join(os.tmpdir(), 'md-pete2-'));
   t.after(() => fs.rmSync(home2, { recursive: true, force: true }));
   const h2 = new HiveManager(() => home2);
   await h2.ensureAgent({ id: 'pete-1', name: 'Pete', provider: 'claude', cwd: home2 });
   await h2.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home2, 'research-desk'), isResearch: true });
-  assert.equal(h2.registry().agents.research.name, 'Research', 'an office that already has a Pete keeps Research by its role');
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/components/AddAgentModal.tsx'), 'utf8'), /const nameTaken = \(n: string\) => isReservedName\(n\) \|\|/);
+  assert.equal(h2.registry().agents.research.name, 'Research', 'an office that already has a Pete calls the Research agent by its role');
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/components/AddAgentModal.tsx'), 'utf8'), /const nameTaken = \(n: string\) => isReservedName\(n, undefined, \{ \[RESEARCH_ID\]: \{ name: researchName \} \}\) \|\|/);
 });
 
-test('every locale that names Pete says the same name the app uses', () => {
-  // Value: protects=the owner and the agents call him by one name; fails_when=RESEARCH_NAME changes but a locale keeps the old one; why_new=api review (locales repeat the name); seam=none
+test('every locale names the Research agent by its current name, never a fixed one', () => {
+  // Value: protects=the owner reads the name they chose in every language; fails_when=a locale hardcodes Pete again or drops the name; why_new=owner ship 2 D17; seam=none
   for (const loc of ['en', 'ar', 'zh-CN']) {
-    const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', `src/renderer/src/i18n/locales/${loc}.json`), 'utf8'));
+    const raw = fs.readFileSync(path.join(__dirname, '..', `src/renderer/src/i18n/locales/${loc}.json`), 'utf8');
+    assert.doesNotMatch(raw, /Pete/, loc);
+    const d = JSON.parse(raw);
     for (const k of ['tip', 'on', 'off', 'starting', 'stopping', 'failed', 'windows', 'windowsTip', 'sendTitle', 'sendTip', 'usedWhenOn', 'noticeBody']) {
-      assert.ok(d.research[k].includes(R.RESEARCH_NAME), `${loc} research.${k}`);
+      assert.ok(d.research[k].includes('{{name}}'), `${loc} research.${k}`);
     }
-    for (const k of ['researchEngine', 'researchName']) assert.ok(d.editAgent[k].includes(R.RESEARCH_NAME), `${loc} editAgent.${k}`);
+    assert.ok(d.editAgent.researchEngine.includes('{{name}}'), `${loc} editAgent.researchEngine`);
   }
 });
 

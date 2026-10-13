@@ -1,4 +1,5 @@
-import { isReservedName } from '@shared/research';
+import { isReservedName, RESEARCH_ID } from '@shared/research';
+import { useResearchName } from '@/shell/research';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from './PixelButton';
@@ -140,6 +141,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const updateAgent = useStore(s => s.updateAgent);
   const setSidebarTab = useStore(s => s.setSidebarTab);
   const agents = useStore(s => s.agents);
+  const researchName = useResearchName();
   // Deep links and file batches share one FIFO. The head alone seeds the form;
   // every item still requires an explicit hire or skip.
   const hireQueue = useStore(s => s.hireQueue);
@@ -571,7 +573,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
     advanceHireReview();
   };
 
-  const nameTaken = (n: string) => isReservedName(n) || agents.some((a) => a.name.trim().toLowerCase() === n.trim().toLowerCase());
+  const nameTaken = (n: string) => isReservedName(n, undefined, { [RESEARCH_ID]: { name: researchName } }) || agents.some((a) => a.name.trim().toLowerCase() === n.trim().toLowerCase());
   const whoError = !name.trim() ? tr('addAgent.errName') : nameTaken(name) ? tr('addAgent.wizard.nameTaken', { name: name.trim() }) : undefined;
 
   /** The role step's gate: a name, what they handle, and a job that is

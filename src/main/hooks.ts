@@ -71,7 +71,7 @@ export const ASK_TOOL_REFUSAL =
 
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
 import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, agentTmpDecision, agentTmpName, folderDecision, folderToolTarget, AGENT_TMP_DIR, isSharedTempSave, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
-import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL } from '../shared/research';
+import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_NAME, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL, researchNameOf, researchText } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
 import { CONNECTOR_UNDECIDED, connectorAccess, MCP_RESOURCE_TOOLS } from '../shared/claudeConnectors';
@@ -301,7 +301,7 @@ export class HookServer {
             : pre && isSharedTempSave(payload.tool_name ?? '', payload.tool_input, payload.cwd) ? mcpDeny(RESEARCH_UNCHECKED_TOOL)
             : {};
         }
-        conn.end(JSON.stringify(res ?? {}));
+        conn.end(JSON.stringify(this.named(res ?? {})));
       });
       conn.on('error', () => { /* shim hung up — ignore */ });
     });
@@ -358,10 +358,16 @@ export class HookServer {
     return this.contextById.get(agentId);
   }
 
-  /** A business office, where only Research uses the internet. Unreadable
-   *  settings count as one, so the rules hold (fail closed). */
-  private businessOffice(): boolean {
-    try { const c = this.getConfig(); return !!(c.businessFolder || c.officeFolder); } catch { return true; }
+  /** A refusal names the Research agent by its current name (owner, ship 2 D17):
+   *  the app's text is written with the default. Only the reason, which is
+   *  the app's own words, is changed. */
+  private named(res: unknown): unknown {
+    const o = res as { hookSpecificOutput?: { permissionDecisionReason?: unknown } } | null;
+    const r = o?.hookSpecificOutput?.permissionDecisionReason;
+    if (typeof r !== 'string') return res;
+    let n = RESEARCH_NAME;
+    try { n = researchNameOf(this.hive.registry().agents); } catch { /* the default */ }
+    return n === RESEARCH_NAME ? res : { ...o, hookSpecificOutput: { ...o!.hookSpecificOutput, permissionDecisionReason: researchText(r, n) } };
   }
 
   private handle(p: HookPayload): unknown {
@@ -598,16 +604,16 @@ export class HookServer {
       }
     }
 
-    // The internet (shared/webAccess.ts, issue #230): in a business office
-    // only Research uses web pages and web search. Everyone else, Michael
+    // The internet (shared/webAccess.ts, issue #230): in every office (owner,
+    // ship 2 D16) only Research uses web pages and web search. Everyone else, Michael
     // included, is refused with how to ask Research, or that it is off. Who
     // Research is comes from the app, never a file agents write (D2.7).
-    // In a business office no command runs outside its sandbox, where the
-    // shell reaches no host and Research's folders are walled (owner, D7.1
-    // and D9.1): this holds from the next command, before an agent's sandbox
-    // setting catches up at its restart.
+    // No command runs outside its sandbox, where the shell reaches no host
+    // and Research's folders are walled (owner, D7.1, D9.1 and ship 2 D16): this
+    // holds from the next command, before an agent's sandbox setting catches
+    // up at its restart.
     if (event === 'PreToolUse' && agentId && agentId !== RESEARCH_ID && p.tool_name === 'Bash'
-      && (p.tool_input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true && this.businessOffice()) {
+      && (p.tool_input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true) {
       this.emitRefused(agentId, event, p);
       return {
         hookSpecificOutput: {
@@ -621,9 +627,8 @@ export class HookServer {
       // Unreadable settings fail closed, like the connector gate (D8).
       let d: ReturnType<typeof webAccess>;
       try {
-        const cfg = this.getConfig();
         const on = this.hive.researchOn();
-        d = cfg.businessFolder || cfg.officeFolder ? webAccess(agentId === RESEARCH_ID && on, on, p.tool_name ?? '') : { ok: true };
+        d = webAccess(agentId === RESEARCH_ID && on, on, p.tool_name ?? '');
       } catch {
         d = { ok: false, reason: WEB_SETTINGS_UNREADABLE };
       }

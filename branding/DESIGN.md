@@ -1080,12 +1080,13 @@ style segmented control [Allowed, Private] (a radio group named by the class); P
 shows a 12 px lock and "Always private" instead. The classes save with the footer Save. When a team
 member runs on another engine, one `ink-3` line under the classes names them ("Kelly run on another
 engine, so these rules don't reach them yet.") with an info icon. The send heading is a sentence
-(`t-ui` 600, `ink-2`), not a caps label. The section shows only in a business office (one with a
-business folder): other offices keep the internet. Pete's Access tab shows one `ink-3` line (no
+(`t-ui` 600, `ink-2`), not a caps label. The section shows in every office (owner, ship 2 D16).
+Pete's Access tab shows one `ink-3` line (no
 mailboxes, connectors or schedules) and a link here. Every message to Pete passes his trust
 layer: a sender whose question was cleaned gets "Sent to Pete as" from Privacy check in its
-Messages, showing what Pete was asked. In Edit agent, Pete's name shows as plain text with an info
-icon (the app's messages name him) and his engine offers Claude only, shown as plain text once on
+Messages, showing what Pete was asked. Pete is the default name: in Edit agent the owner may rename
+the Research member (an info icon says it stays the Research member whatever its name), and every
+string here takes the current name. Its engine offers Claude only, shown as plain text once on
 Claude.
 
 ---
@@ -1648,6 +1649,7 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-10-12 | Office stops: out of credit and a sign in that stopped working join the plan limit break, as a counted owner to do with a coral chip; the plan limit stays the quiet amber break (§7.6a). |
 | 2026-10-13 | Research & privacy (issue #230): a Settings section with the Research row and the data classes (§7.26), Research in the onboarding Team step (§7.25), the one time Research report card (§7.8); the Sites group is gone from the Access tab (§7.12). |
 | 2026-10-13 | The Research team member is called Pete (owner): the Settings copy, the Team step row and the report card name him (§7.8, §7.25, §7.26); his name and engine show as plain text in Edit agent. |
+| 2026-10-13 | The Research member is renamable, Pete by default, and the copy takes its current name; Research & privacy shows in every office (owner, ship 2 D16, ship 2 D17). |
 | 2026-10-04 | Banter flies as paper planes only; an envelope on the floor is always a real message (§8.8, §8.12). |
 | 2026-10-04 | Ask me file rows: a question's named files open from the card, or show in Finder (§7.8); `file` and `sheet` icons (§10). |
 | 2026-10-01 | Pre-landing review fixes: dialogs close when closing time starts and its bar sits above them; the compact grid stays clear of the right column; selecting someone dims the rest of the stage to 45% (§7.14); Traces behind a flag (§7.11); setup screens on v2 fields and rows (§7.25); the composer keeps its width and takes pastes (§7.19); Settings and closing time copy in plain words. |

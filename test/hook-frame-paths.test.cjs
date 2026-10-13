@@ -187,10 +187,10 @@ test('Pete\'s notes folder must be his own folder, not a link to a big tree else
   assert.doesNotMatch(src, /readdirSync/, 'never listed whole');
 });
 
-test('a Claude agent with no scratch folder of its own does not start in a business office', () => {
+test('a Claude agent with no scratch folder of its own does not start, in any office', () => {
   // Value: protects=session files never fall back to the shared /tmp Pete's shell reads; fails_when=the spawn carries on without CLAUDE_CODE_TMPDIR; why_new=Codex adversarial review, second ship; seam=source pin, the spawn needs Electron
   const idx = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
-  assert.match(idx, /if \(opts\.hive && claudeProvider && !sessionTmp && isBusinessOffice\(\)\) \{[\s\S]{0,200}?return \{ ok: false, error: 'This team member\\'s scratch folder could not be made/);
+  assert.match(idx, /if \(opts\.hive && claudeProvider && !sessionTmp\) \{[\s\S]{0,200}?return \{ ok: false, error: 'This team member\\'s scratch folder could not be made/);
 });
 
 test('every agent gets a scratch folder of its own, a long or odd id included', () => {
