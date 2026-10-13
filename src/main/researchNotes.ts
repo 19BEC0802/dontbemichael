@@ -10,8 +10,9 @@ import { dirname, join, sep } from 'node:path';
 /** The most one note file may hold; a bigger one is skipped, not read whole
  *  into the app's memory. */
 export const MAX_NOTE_BYTES = 256 * 1024;
-/** All of Research's notes together, per copy. */
+/** All of Research's notes together, per copy, in bytes, and in files. */
 export const MAX_NOTES_TOTAL = 1024 * 1024;
+export const MAX_NOTE_FILES = 200;
 
 export function readResearchNotes(agentDir: string): string {
   let root = '';
@@ -42,10 +43,11 @@ export function readResearchNotes(agentDir: string): string {
       if (now.ino !== st.ino || now.dev !== st.dev) return null;
       // Read to the cap from this open file: one that grows after the check
       // is not read past it (ship review pass 2).
-      const buf = Buffer.alloc(MAX_NOTE_BYTES + 1);
+      // A buffer one byte past its size: a file that grew since is skipped.
+      const buf = Buffer.allocUnsafe(st.size + 1);
       let n = 0;
       for (let r = 1; r > 0 && n < buf.length; n += r) r = readSync(fd, buf, n, buf.length - n, null);
-      return n > MAX_NOTE_BYTES ? null : buf.subarray(0, n).toString('utf8');
+      return n > st.size ? null : buf.subarray(0, n).toString('utf8');
     } catch { return null; } finally {
       if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }
     }
@@ -54,8 +56,9 @@ export function readResearchNotes(agentDir: string): string {
   let total = 0;
   const add = (t: string | null): boolean => {
     if (!t) return true;
-    if (total + t.length > MAX_NOTES_TOTAL) return false;
-    total += t.length;
+    const bytes = Buffer.byteLength(t);
+    if (total + bytes > MAX_NOTES_TOTAL || parts.length >= MAX_NOTE_FILES) return false;
+    total += bytes;
     parts.push(t);
     return true;
   };

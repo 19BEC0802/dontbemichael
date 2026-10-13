@@ -31,7 +31,7 @@ import {
   modelForRole, OPS_STANDUP_MISSION, OPS_STANDUP_BUILT_IN_BODIES, OPS_STANDUP_FOCUS, OPS_STANDUP_BUILT_IN_FOCUSES, HEARTBEAT_MISSION, COMPACT_MAINTENANCE_MISSION, type HarnessConfig, type ScheduledMission
 } from './config';
 import { terminalLaunches } from './terminalAtFolder';
-import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, readAskFile, type AskFileAgent } from './fs';
+import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, readAskFile, isPackageDir, type AskFileAgent } from './fs';
 import { answerMessages, cardConversation, mergeHumanQA, MICHAEL_ID, raiserOf } from '../shared/askMeRouting';
 import { FIRST_TASK_EDITED_MAX, firstTaskCard, firstTaskCardFromText } from '../shared/firstTask';
 import { answerKey, catchUpRequests, ownerWorkOrder } from '../shared/ownerRequests';
@@ -4652,7 +4652,7 @@ ipcMain.handle('fs:openAgentFolder', async (_evt, id: unknown) => {
   if (!cwd) return { ok: false, error: 'not found' };
   let dir = false;
   try { dir = lstatSync(cwd).isDirectory(); } catch { return { ok: false, error: 'not found' }; }
-  if (!dir) { shell.showItemInFolder(cwd); return { ok: true }; }
+  if (!dir || isPackageDir(cwd)) { shell.showItemInFolder(cwd); return { ok: true }; }
   const err = await shell.openPath(cwd);
   return err ? { ok: false, error: err } : { ok: true };
 });

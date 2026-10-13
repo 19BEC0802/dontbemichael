@@ -358,7 +358,10 @@ function insideFn(ci: boolean) {
 export function folderToolTarget(tool: string, input: unknown, cwd: string | undefined): string | null {
   if (!input || typeof input !== 'object') return null;
   const o = input as Record<string, unknown>;
-  const str = (k: string) => (typeof o[k] === 'string' && (o[k] as string).length > 0 ? (o[k] as string) : null);
+  // Trimmed first, as Claude Code reads a path (its expandPath trims, then
+  // expands ~): " /Users/x" is the folder /Users/x, never one inside the
+  // agent's own (red team, ship review pass 3).
+  const str = (k: string) => (typeof o[k] === 'string' && (o[k] as string).trim().length > 0 ? (o[k] as string).trim() : null);
   let p = str('file_path') ?? str('notebook_path') ?? str('path');
   if (tool === 'Glob') {
     // Judged by the part before the first wildcard, relative or not and with

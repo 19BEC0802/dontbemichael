@@ -40,8 +40,8 @@ async function office(t) {
   server.start();
   t.after(() => server.stop());
   await new Promise((r) => setTimeout(r, 50));
-  const shim = (payload) => new Promise((resolve) => {
-    const p = spawn(process.execPath, [hive.shimPath()], { env: { PATH: process.env.PATH, AGENT_ID: 'pam', HIVE_SOCK: hive.sockPath() } });
+  const shim = (payload, env = {}) => new Promise((resolve) => {
+    const p = spawn(process.execPath, [hive.shimPath()], { env: { PATH: process.env.PATH, AGENT_ID: 'pam', HIVE_SOCK: hive.sockPath(), ...env } });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     p.on('close', () => resolve(out ? JSON.parse(out).hookSpecificOutput ?? {} : {}));
@@ -63,6 +63,9 @@ test('a big save keeps its path, padded or not, and the app still refuses anothe
   // A search too big to send whole went through unchecked before: the app dropped the frame.
   const grep = await shim({ tool_name: 'Grep', tool_input: { pattern: 'y'.repeat(300_000), path: path.join(home, 'agent-tmp', 'jim') } });
   assert.equal(grep.permissionDecision, 'deny');
+  // '~' is the home folder, not a folder named ~ in the agent's own.
+  const tilde = await shim({ tool_name: 'Write', tool_input: { file_path: '~/agent-tmp/jim/x.md', content: big } }, { HOME: home });
+  assert.equal(tilde.permissionDecision, 'deny', 'a big save to ~/... is judged where it really goes');
   // A path that can't fit even alone is refused by the hook program itself.
   const huge = await shim({ tool_name: 'Read', tool_input: { file_path: 'a/'.repeat(150_000) + 'x.md' } });
   assert.equal(huge.permissionDecisionReason, HOOK_PATH_UNCHECKED);
@@ -83,7 +86,7 @@ test('the app refuses a trimmed file call that arrives without its path', async 
   assert.notEqual(grep.hookSpecificOutput?.permissionDecision, 'deny', 'a search of the folder it runs in needs no path');
 });
 
-test('each agent\'s session scratch folder is its own; Michael reads them all', () => {
+test('each agent\'s session scratch folder is its own; Michael reads them all', { skip: process.platform === 'win32' ? 'posix paths' : false }, () => {
   // Value: protects=one teammate can't read another's command output; fails_when=agent-tmp is left out of the walls; why_new=red team pass 2; seam=none
   const home = '/Users/x/.dbm';
   const d = (id, isGod, tool, target) => F.agentTmpDecision(home, id, isGod, tool, target, true).deny;
@@ -113,7 +116,8 @@ test('the shared temp check reads a save\'s path as the file it names', { skip: 
 
 test('a name that reads as Pete is his, and "pete" reaches him only when nobody else has the name', () => {
   // Value: protects=office content never goes to the internet facing member by a name mix up; fails_when=Michael or a teammate named Pete loses mail to Research, or a lookalike name passes; why_new=specialist and red team pass 2; seam=none
-  for (const n of ['Pete', ' pete ', 'Pеte', 'Pe​te', 'Ｐｅｔｅ', 'Рete']) assert.equal(R.isReservedName(n), true, JSON.stringify(n));
+  for (const n of ['Pete', ' pete ', 'P\u0435te', 'Pe\u200Bte', '\uFF30\uFF45\uFF54\uFF45', '\u0420ete', 'Pe\u0163e', '\u1D18ete', '\u13E2ete', 'Pete.', 'P e t e']) assert.equal(R.isReservedName(n), true, JSON.stringify(n));
+  for (const n of ['Peter', 'Petra', 'Pam', '\u0628\u064A\u062A', '\u76AE\u7279']) assert.equal(R.isReservedName(n), false, JSON.stringify(n));
   assert.equal(R.isReservedName('Peter'), false);
   assert.equal(R.isReservedName('Pete', 'research'), false);
   assert.equal(R.addressedToResearch('pete', { god: { name: 'Michael' }, research: { name: 'Pete' } }), true);
@@ -134,5 +138,20 @@ test('Pete\'s notes stop at the total a copy may carry', (t) => {
   assert.ok(out.length <= MAX_NOTES_TOTAL + n * 2, `${out.length}`);
   assert.ok(out.length > 0);
   const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/researchNotes.ts'), 'utf8');
-  assert.match(src, /const buf = Buffer\.alloc\(MAX_NOTE_BYTES \+ 1\);/, 'read to the cap, from the open file');
+  assert.match(src, /const buf = Buffer\.allocUnsafe\(st\.size \+ 1\);/, 'read to its size, from the open file');
+});
+
+test('a path with spaces around it is judged as Claude Code reads it, trimmed', { skip: process.platform === 'win32' ? 'posix paths' : false }, async (t) => {
+  // Value: protects=Pete can't search the whole disk, nor a teammate another's scratch, by padding a path with a space; fails_when=folderToolTarget or the hook program read " /abs" as relative to the agent's folder; why_new=red team pass 3 (reproduced on the app side); seam=none
+  assert.equal(F.folderToolTarget('Grep', { path: ' /Users/x/Office' }, '/w/desk'), '/Users/x/Office');
+  assert.equal(F.folderToolTarget('Glob', { pattern: '\t/Users/x/**' }, '/w/desk'), '/Users/x');
+  assert.equal(F.folderToolTarget('Read', { file_path: '/Users/x/a.md ' }, '/w'), '/Users/x/a.md');
+  const home = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'md-frame-ws-')));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
+  const server = new HookServer(hive, () => null, () => ({ harnessHome: home }));
+  const call = (agent_id, cwd, tool_input) => server.handle({ agent_id, hook_event_name: 'PreToolUse', cwd, tool_name: 'Grep', tool_input }).hookSpecificOutput?.permissionDecision;
+  for (const p of [' ' + home, '\t' + os.homedir(), os.homedir() + ' ']) assert.equal(call('research', path.join(home, 'research-desk'), { pattern: 'token', path: p }), 'deny', `Pete: ${JSON.stringify(p)}`);
+  for (const p of [' ' + path.join(home, 'agent-tmp', 'jim'), path.join(home, 'agent-tmp') + ' ']) assert.equal(call('pam', home, { pattern: 'x', path: p }), 'deny', `Pam: ${JSON.stringify(p)}`);
 });

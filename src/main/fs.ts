@@ -1,6 +1,6 @@
 import { readdir, lstat, open, realpath, stat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { constants, existsSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { imageMimeForPath } from '../shared/imageTypes';
@@ -505,4 +505,10 @@ export async function readAskFile(pathText: string, roots: readonly string[] | r
   return { ok: true, path: r.path, root, real: v.real, kind: tabKind, text: r.content, size: r.size };
 }
 
-
+/** A folder macOS treats as an app or a package, by its ending or by an app's
+ *  insides: opening one launches it, so it is shown instead (owner, D12). */
+const PACKAGE_DIR_RE = /\.(app|appex|bundle|framework|plugin|prefpane|kext|xpc|saver|qlgenerator|mdimporter|pkg|mpkg|workflow|action|service|scptd|pages|numbers|key|rtfd|photoslibrary|logicx|band|playground|xcodeproj|xcworkspace|xcarchive|dsym)$/i;
+export function isPackageDir(dir: string): boolean {
+  if (PACKAGE_DIR_RE.test(dir.replace(/[\\/]+$/, ''))) return true;
+  return ['Contents/Info.plist', 'Contents/MacOS'].some((f) => existsSync(join(dir, f)));
+}

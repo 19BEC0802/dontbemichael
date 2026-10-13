@@ -72,15 +72,17 @@ export const REFUSAL_WEB_TOOL = `Only ${RESEARCH_NAME} uses the internet. Send $
 export const REFUSAL_WEB_TOOL_OFF = `Only ${RESEARCH_NAME} uses the internet, and ${RESEARCH_NAME} is off, so nobody in the office can look this up. Work without it and say what you could not check.`;
 
 /** A name as the team reads it: width and compatibility forms folded,
- *  invisible characters dropped and letters that look Latin read as Latin, so
- *  "Pete" with a Cyrillic "е" or a zero width space is still "pete". */
+ *  accents, spaces, punctuation and invisible characters dropped, and letters
+ *  that look Latin read as Latin, so "Pete" with a Cyrillic "е", a zero width
+ *  space or a dot is still "pete". Used only to compare against his name. */
 const LOOKALIKE: Record<string, string> = {
   'а': 'a', 'с': 'c', 'ԁ': 'd', 'е': 'e', 'ё': 'e', 'һ': 'h', 'і': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h',
   'о': 'o', 'р': 'p', 'ѕ': 's', 'т': 't', 'у': 'y', 'х': 'x', 'ε': 'e', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o',
-  'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x'
+  'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'ᴘ': 'p', 'ᴇ': 'e', 'ᴛ': 't', 'Ꮲ': 'p', 'Ꭼ': 'e', 'Ꭲ': 't', 'ꮲ': 'p', 'ꭼ': 'e', 'ꭲ': 't'
 };
 export function nameKey(name: string): string {
-  return Array.from(name.normalize('NFKC').replace(/[\p{Cf}\p{Mn}]/gu, '').trim().toLowerCase())
+  // Decomposed so accents come off ("Peţe"); spaces and punctuation dropped ("P e t e", "Pete.").
+  return Array.from(name.normalize('NFKD').replace(/[\p{Cf}\p{Mn}\p{P}\p{Z}\s]/gu, '').toLowerCase())
     .map((c) => LOOKALIKE[c] ?? c).join('');
 }
 

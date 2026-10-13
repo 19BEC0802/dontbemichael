@@ -5295,7 +5295,14 @@ process.stdin.on('end', () => {
   // A path is judged as the file it names: './' or '..' padding and a relative
   // path resolve first (ship review pass 2).
   const pathMod = require('path');
-  const pathOf = (v) => pathMod.isAbsolute(v) ? pathMod.normalize(v) : pathMod.resolve(String(payload.cwd || '/'), v);
+  // '~' is the home folder, as Claude Code's file tools and the app read it.
+  const home = process.env.HOME || process.env.USERPROFILE || require('os').homedir();
+  const pathOf = (raw) => {
+    // Trimmed first, as Claude Code reads a path.
+    const v = String(raw).trim();
+    const p = v === '~' ? home : (v.startsWith('~/') || v.startsWith('~\\\\')) ? pathMod.join(home, v.slice(2)) : v;
+    return pathMod.isAbsolute(p) ? pathMod.normalize(p) : pathMod.resolve(String(payload.cwd || '/'), p);
+  };
   const rawTarget = String(input.file_path || input.notebook_path || '');
   const target = rawTarget ? pathOf(rawTarget) : '';
   const tempSave = payload.hook_event_name === 'PreToolUse' && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].indexOf(tool) >= 0
@@ -5323,7 +5330,7 @@ process.stdin.on('end', () => {
     payload.tool_input_trimmed = true;
     line = JSON.stringify(payload);
     if (Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
-      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: ${JSON.stringify(HOOK_PATH_UNCHECKED)} } }));
+      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: mcp ? ${JSON.stringify(CONNECTOR_UNDECIDED)} : ${JSON.stringify(HOOK_PATH_UNCHECKED)} } }));
       process.exit(0);
       return;
     }

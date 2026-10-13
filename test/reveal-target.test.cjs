@@ -23,3 +23,19 @@ test('a path an agent printed is shown in its folder and never opened', () => {
   assert.doesNotMatch(handler, /openPath/);
   assert.doesNotMatch(read('src/main/fs.ts'), /export (async )?function (opensAsFolder|revealTarget)/, 'no folder guessing left to get wrong');
 });
+
+test('the Profile tab\'s Open folder shows, never opens, a folder that is an app by name or insides', (t) => {
+  // Value: protects=the owner's own Open folder button can't launch an app planted as a team folder; fails_when=fs:openAgentFolder opens any directory; why_new=specialist pass 3; seam=none
+  const os = require('node:os');
+  const { isPackageDir } = require('./load-ts.cjs')('src/main/fs.ts');
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'md-pkg-'));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const plain = path.join(base, 'Sales');
+  fs.mkdirSync(plain);
+  assert.equal(isPackageDir(plain), false);
+  assert.equal(isPackageDir(path.join(base, 'Tool.app')), true);
+  assert.equal(isPackageDir(path.join(base, 'Q3.2026')), false, 'dots in a name are fine');
+  fs.mkdirSync(path.join(base, 'Finance', 'Contents', 'MacOS'), { recursive: true });
+  assert.equal(isPackageDir(path.join(base, 'Finance')), true, 'an app by its insides, whatever its name');
+  assert.match(read('src/main/index.ts'), /if \(!dir \|\| isPackageDir\(cwd\)\) \{ shell\.showItemInFolder\(cwd\); return \{ ok: true \}; \}/);
+});
