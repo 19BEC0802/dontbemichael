@@ -122,3 +122,18 @@ test('an invisible character inside a token does not split it past redaction', (
   const line = toolLine('Bash', { description: `push with ${token}` });
   assert.doesNotMatch(line, /AAAAAAAAAA|BBBBBBBBBB/);
 });
+
+test('a refused tool call sends no detail', async (t) => {
+  // Value: protects=a denied tool call never leaves a phantom step description in the closing-time row; fails_when=PreToolUse sends detail even when refused; why_new=TODOS.md "A refused tool call still shows its detail"; seam=none
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-tool-detail-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
+  const sent = [];
+  const control = { shouldHalt: () => false, toolDecision: () => ({ deny: true, reason: 'Paused by the owner.' }) };
+  const server = new HookServer(hive, () => ({ send: (c, p) => sent.push({ c, p }) }), () => ({ harnessHome: home }), control);
+  const res = await server.handle({ agent_id: 'pam', session_id: 's1', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'x', description: 'Run the tests' }, cwd: home });
+  assert.equal(res.hookSpecificOutput?.permissionDecision, 'deny');
+  assert.equal(sent.filter((s) => s.c === 'hive:hookEvent').pop()?.p.detail, undefined);
+});
+
