@@ -1,6 +1,6 @@
 # Where a team member may send data on the web (issue #230)
 
-Status: draft for eng review. Owner chose "accept, plan the full fix" on 2026-10-12.
+Status: draft for eng review. Owner chose "accept, plan the full fix" on 2026-10-12. Its per member Sites list is superseded by `docs/designs/research-agent-privacy.md` (only Pete, the Research team member, uses the internet); its enforcement findings still hold.
 
 ## The gap
 

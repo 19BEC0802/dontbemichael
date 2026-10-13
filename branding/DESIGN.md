@@ -679,8 +679,8 @@ stands on its own.
   Michael nothing. Reports never turn the Needs you pill coral or hold the column open:
   with only reports waiting the quiet pill reads "Reports: N" and opens the board.
 - **Research card** (issue #230, once, updated offices only): the same Report card, "Your team no
-  longer uses the internet", "This keeps your private data in. One team member, Research, can look
-  things up for them, after a privacy check. It's off until you turn it on.", Got it and Open
+  longer uses the internet", "This keeps your private data in. One team member, Pete, can look
+  things up for them, after a privacy check. He's off until you turn him on.", Got it and Open
   Research settings (primary, opens Settings on Research & privacy); either clears it for good.
 
 ### 7.9 Schedule request card (ScheduleRequestCards)
@@ -1009,7 +1009,7 @@ Full window, no app chrome.
   "Works in Harbor & Pine/Finance" line with a "change" link. Unchecked rows at 55%.
   Footer: "N picked, M to connect" and Back (secondary), Next (primary). The footer sticks
   to the window's bottom edge, so Next stays in reach on a long step. Last in the list, one
-  unchecked row for Research (issue #230): Ryan's character, "Research", "Looks things up on the
+  unchecked row for Research (issue #230): Ryan's character, "Pete", "Looks things up on the
   internet for the team, and sees no office data.", a "uses the internet" chip in the "always on"
   style; picked, it starts with the team.
 - **Ready step** (Get Michael ready, docs/designs/get-michael-ready.md): heading with an
@@ -1064,27 +1064,29 @@ name (14px, 600), status in words (connected, an underlined "Sign in at claude.a
 failed read is one line with the time of the last good read and Try again.
 
 **Research & privacy** (Settings, after Connections; `docs/designs/research-agent-privacy.md`,
-owner 2026-10-13). Only Research, one team member, uses the internet; this section turns it on and
-sets what the team may send it. Research first: a `sectionHead` "Research" with an info icon, then
+owner 2026-10-13). Only Pete, the Research team member, uses the internet; this section turns him on
+and sets what the team may send him. Pete first: a `sectionHead` "Research" with an info icon, then
 one row whose state line is `role="status"`: grey dot "Off. Your team can't look things up online."
-with Turn on; a 12 px `indigo` spinner and "Hiring Research…" or "Turning off Research…" with no
-button; green dot "On. Research looks things up for the team." with Turn off; coral dot "Research
+with Turn on; a 12 px `indigo` spinner and "Hiring Pete…" or "Turning off Pete…" with no
+button; green dot "On. Pete looks things up for the team." with Turn off; coral dot "Pete
 couldn't start." with Try again. Turn on and Turn off act at once, never at Save. Turn off with asks
 waiting shows one line under the row, "N asks are waiting. They go back to the sender.", with Cancel
 (focused; Esc cancels without closing Settings) and Turn off (primary). On Windows one `ink-3` line
-under the row: "On Windows, Research can still reach your office files." with an info icon. Then a
-hairline and "What your team may send to Research" with an info icon and the computed count ("4
-allowed, 8 private"); while Research is off, "Used when Research is on." in `ink-3`. Twelve 40 px rows
+under the row: "On Windows, Pete can still reach your office files." with an info icon. Then a
+hairline and "What your team may send to Pete" with an info icon and the computed count ("4
+allowed, 8 private"); while Pete is off, "Used when Pete is on." in `ink-3`. Twelve 40 px rows
 in a fixed order, never re-sorted: the class name, an info icon with its examples, and the Sending
 style segmented control [Allowed, Private] (a radio group named by the class); Passwords and keys
 shows a 12 px lock and "Always private" instead. The classes save with the footer Save. When a team
 member runs on another engine, one `ink-3` line under the classes names them ("Kelly run on another
 engine, so these rules don't reach them yet.") with an info icon. The send heading is a sentence
 (`t-ui` 600, `ink-2`), not a caps label. The section shows only in a business office (one with a
-business folder): other offices keep the internet. Research's Access tab shows one `ink-3` line (no
-mailboxes, connectors or schedules) and a link here. Every message to Research passes its trust
-layer: a sender whose question was cleaned gets "Sent to Research as" from Privacy check in its
-Messages, showing what Research was asked.
+business folder): other offices keep the internet. Pete's Access tab shows one `ink-3` line (no
+mailboxes, connectors or schedules) and a link here. Every message to Pete passes his trust
+layer: a sender whose question was cleaned gets "Sent to Pete as" from Privacy check in its
+Messages, showing what Pete was asked. In Edit agent, Pete's name shows as plain text with an info
+icon (the app's messages name him) and his engine offers Claude only, shown as plain text once on
+Claude.
 
 ---
 
@@ -1645,6 +1647,7 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-10-12 | Task detail: QUESTIONS newest first, each with how long ago it was asked (§7.21). |
 | 2026-10-12 | Office stops: out of credit and a sign in that stopped working join the plan limit break, as a counted owner to do with a coral chip; the plan limit stays the quiet amber break (§7.6a). |
 | 2026-10-13 | Research & privacy (issue #230): a Settings section with the Research row and the data classes (§7.26), Research in the onboarding Team step (§7.25), the one time Research report card (§7.8); the Sites group is gone from the Access tab (§7.12). |
+| 2026-10-13 | The Research team member is called Pete (owner): the Settings copy, the Team step row and the report card name him (§7.8, §7.25, §7.26); his name and engine show as plain text in Edit agent. |
 | 2026-10-04 | Banter flies as paper planes only; an envelope on the floor is always a real message (§8.8, §8.12). |
 | 2026-10-04 | Ask me file rows: a question's named files open from the card, or show in Finder (§7.8); `file` and `sheet` icons (§10). |
 | 2026-10-01 | Pre-landing review fixes: dialogs close when closing time starts and its bar sits above them; the compact grid stays clear of the right column; selecting someone dims the rest of the stage to 45% (§7.14); Traces behind a flag (§7.11); setup screens on v2 fields and rows (§7.25); the composer keeps its width and takes pastes (§7.19); Settings and closing time copy in plain words. |

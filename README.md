@@ -329,6 +329,12 @@ follow.
 - **It stays on your computer.** Your team's work, memory and files live in folders on your
   computer. The team members themselves run through your own Claude Code and Claude plan, or
   your Anthropic API key.
+- **Only Pete goes online.** In an office with a business folder, one team member, Pete, does the
+  web research. Nobody else, Michael included, opens web pages, searches the web or reaches the
+  internet from a command (on a Mac). Every message to Pete first passes a trust layer that keeps
+  out the kinds of data you mark private in Settings, Research & privacy, and his answers are
+  cleaned of instructions before your team reads them. Pete sees none of your files, and he is off
+  until you turn him on. On Windows his commands aren't fenced in yet.
 - **No usage data.** The app sends nothing about how you use it. See [`TELEMETRY.md`](./TELEMETRY.md).
 
 ## For developers

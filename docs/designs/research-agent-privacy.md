@@ -1,6 +1,6 @@
 # Research agent and the data privacy guard (issue #230)
 
-Status: eng and design reviewed, built uncommitted on mit/named-links (2026-10-13); the two live Mac checks remain before ship. Owner direction 2026-10-13. Supersedes the
+Status: eng and design reviewed, built and committed on mit/named-links, shipped through /ship review passes 1 to 3 and two Codex adversarial passes (2026-10-13); the live Mac sandbox checks passed. Owner direction 2026-10-13. Supersedes the
 per member Sites list in `docs/designs/agent-web-access.md` (that doc keeps its
 enforcement findings, which this design reuses).
 
@@ -28,12 +28,12 @@ sites cannot tell those apart: both go to google.com. So we split the roles:
 | Who | Web pages and search | Shell network | Private tools |
 |---|---|---|---|
 | Every team member | none | none on a Mac (strict empty list) | as granted today |
-| Michael | none (app check) | not limited: he runs outside the sandbox | as today |
+| Michael | none (app check) | none in a business office (D9.1 superseded "not limited": his commands stay in the sandbox) | as today |
 | Research agent (when on) | any site | any site | none: no connectors, no mailboxes, no business folder, own folder only |
 
 - Research is off by default. The owner turns it on in Settings (Research & privacy)
   or picks it in the onboarding Team step; it then appears on the floor as a team
-  member named Research, with its own folder and job, and is archived when turned off.
+  member named Pete (the Research team member; it was named Research until the owner's rename), with its own folder and job, and is archived when turned off.
 - A member that needs research messages Research through the hive like any
   teammate. Michael sees the work as usual. If Research is off, the member is told
   research is not available and works without it.
@@ -77,7 +77,7 @@ as gatekeeper, in both directions, ahead of the guard described in the next sect
   failing means deny; text over 60,000 characters is denied as too long to check. Research
   receives only a clean copy the app builds from the layer's output (its own id, time and
   thread), stamped with an HMAC of its whole content. The sender alone gets "Sent to
-  Research as: ..." when it was cleaned, or "Not sent to Research" naming the private kind.
+  Pete as: ..." when it was cleaned, or "Not sent to Pete" naming the private kind.
   At most 2 checks run at once.
 - **Owner answers** (D2.2): an Ask me answer meant for Research reaches it as a message
   through the layer, never as a direct memory write.
@@ -90,7 +90,7 @@ as gatekeeper, in both directions, ahead of the guard described in the next sect
   (agent transcripts, app settings and documents included) and writes only its own folders
   (hook allowlist, plus permission rules on the riskiest home paths). Who Research is comes
   from the app: the reserved id and the owner's switch, never a registry flag. Research
-  starts only inside its walls, otherwise it shows "Research couldn't start" and the switch
+  starts only inside its walls, otherwise it shows "Pete couldn't start" and the switch
   goes back off.
 - **Scope** (D3): the rule applies to business offices (a business folder); older and
   developer offices keep the internet and see no Research section.
@@ -240,7 +240,7 @@ Every message addressed to the Research agent is checked before delivery.
 - Research: no connectors (`--strict-mcp-config`, none granted), no mailboxes, folder
   privacy as any member (own folder only, no business folder).
 
-## What happens to the Sites code (uncommitted on mit/named-links)
+## What happens to the Sites code (done on mit/named-links)
 
 - Kept: `WEB_TOOLS` gate in `hooks.ts`, `sandbox.network` plumbing in `hive.ts`,
   the restart on a change.
@@ -558,7 +558,7 @@ Calibrated against `branding/DESIGN.md`: §2.3 every state has words, §2.4 only
 | D12 | Class control | Segmented [Allowed, Private] per row |
 | D13 | Accessibility | The §12 spec below, written into the plan |
 | D14 | Focus on the Turn off check | Cancel |
-| D15 | Research's name | "Research" |
+| D15 | Research's name | "Research" (superseded 2026-10-13: Pete, see "Its name") |
 | D16 | Notes across asks | Keeps its own notes, like any member |
 | D17 | Job text | The five lines below |
 | D18 | Attachments to Research | Not allowed; sent back to the sender |
@@ -665,7 +665,7 @@ row, §7.8 the update Report card, removal of the §7.12 Sites row, a change log
 
 ## Research member (Pass 7, D15 to D19)
 
-- Name "Research", role "Research", renameable in Edit agent like any member.
+- Name "Research", role "Research", renameable in Edit agent like any member. (Superseded 2026-10-13: named Pete, name fixed in Edit agent; see "Its name".)
 - Job text (Work style), names nobody:
   1. You look things up on the internet when a teammate asks, and reply to whoever asked.
   2. Answer in a few lines, with a named link to each source.
