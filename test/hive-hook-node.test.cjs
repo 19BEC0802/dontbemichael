@@ -119,6 +119,52 @@ test('ensureHive writes an executable bundled-node launcher', async (t) => {
   if (POSIX) assert.ok(fs.statSync(launcher).mode & 0o111, 'must be executable');
 });
 
+test('a second bootstrap leaves an unchanged launcher alone', async (t) => {
+  // ensureHive runs on every task write and every spawn. On Windows cmd.exe
+  // keeps hive-node.cmd open while a hook runs through it, so a rewrite of the
+  // same bytes fails with EBUSY and logged an error on every board change. A
+  // read-only file refuses a write the same way on every platform, so it stands
+  // in for that lock here: an unchanged launcher must not be written at all.
+  const home = tmpHome();
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  hive.ensureHive();
+  const launcher = launcherIn(home);
+  const body = fs.readFileSync(launcher, 'utf8');
+  const before = fs.statSync(launcher).mtimeMs;
+
+  const errors = [];
+  const realError = console.error;
+  console.error = (...args) => { errors.push(args.map(String).join(' ')); };
+  fs.chmodSync(launcher, 0o444);
+  try {
+    hive.ensureHive();
+  } finally {
+    console.error = realError;
+    fs.chmodSync(launcher, 0o644);
+  }
+
+  assert.deepEqual(errors.filter((line) => line.includes('writeNodeLauncher')), [], 'no write was attempted');
+  assert.equal(fs.readFileSync(launcher, 'utf8'), body);
+  assert.equal(fs.statSync(launcher).mtimeMs, before, 'the file was not touched');
+});
+
+test('a launcher left by another binary is re-baked on the next bootstrap', async (t) => {
+  const home = tmpHome();
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  hive.ensureHive();
+  const launcher = launcherIn(home);
+  const body = fs.readFileSync(launcher, 'utf8');
+
+  // An app update or move: the launcher on disk names the old executable.
+  fs.writeFileSync(launcher, body.replace(process.execPath, path.join(home, 'old-app')), 'utf8');
+  hive.ensureHive();
+
+  assert.equal(fs.readFileSync(launcher, 'utf8'), body, 'execPath is re-baked when it differs');
+  if (POSIX) assert.ok(fs.statSync(launcher).mode & 0o111, 'must still be executable');
+});
+
 test('the claude hook + statusLine commands run through the launcher', async (t) => {
   const home = tmpHome();
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));

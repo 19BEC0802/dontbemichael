@@ -772,17 +772,27 @@ export class HiveManager {
   }
 
   /** Write the launcher described above. Best-effort: on failure callers fall
-   *  back to bare `node`, i.e. exactly the pre-fix behavior. */
+   *  back to bare `node`, i.e. exactly the pre-fix behavior.
+   *
+   *  Written only when its text changed. ensureHive runs on every task write
+   *  and every spawn, not just at startup, and on Windows cmd.exe keeps
+   *  `hive-node.cmd` open for as long as a hook runs through it, so rewriting
+   *  the same bytes then fails with EBUSY and logs an error on every board
+   *  change (seen live, 2026-10-12). The text only changes when the app moves
+   *  or updates, and that write still lands on the next bootstrap with no hook
+   *  in flight. */
   private writeNodeLauncher(): void {
     const p = this.nodeLauncherPath();
     if (!p) return;
+    const windows = process.platform === 'win32';
+    const launcher = windows
+      ? `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`
+      : `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`;
     try {
-      if (process.platform === 'win32') {
-        writeFileSync(p, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`, 'utf8');
-      } else {
-        writeFileSync(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`, 'utf8');
-        chmodSync(p, 0o755);
-      }
+      let current: string | null;
+      try { current = readFileSync(p, 'utf8'); } catch { current = null; }
+      if (current !== launcher) writeFileSync(p, launcher, 'utf8');
+      if (!windows) chmodSync(p, 0o755);
     } catch (e) {
       console.error('[hive] writeNodeLauncher failed:', e);
     }
