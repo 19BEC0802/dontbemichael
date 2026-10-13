@@ -132,9 +132,10 @@ const LONG_DIGITS = /\b\d{9,}\b/;
  */
 export function patternHits(text: string): PatternHit[] {
   const hits: PatternHit[] = [];
-  // Fullwidth forms and zero width characters must not hide a shape (ship
-  // review: an sk- key with a zero width space inside passed as plain text).
-  const t = typeof text === 'string' ? text.normalize('NFKC').replace(/\p{Cf}/gu, '') : '';
+  // Fullwidth forms and invisible characters must not hide a shape (ship
+  // review: an sk- key with a zero width space, a joiner or a Hangul filler
+  // inside passed as plain text).
+  const t = typeof text === 'string' ? text.normalize('NFKC').replace(/\p{Default_Ignorable_Code_Point}/gu, '') : '';
   if (SECRETS.some((re) => re.test(t))) hits.push({ classId: 'secrets' });
   if (EMAIL.test(t)) hits.push({ classId: 'contact' });
   for (const m of t.matchAll(CARD)) {

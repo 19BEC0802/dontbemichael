@@ -35,6 +35,7 @@ import type { WebContents } from 'electron';
 import type { HiveManager, HiveMessage } from './hive';
 import type { ControlRegistry } from './control';
 import { CLOSING_COMPLETE_RE, CLOSING_TIME_REMIND_MS } from '../shared/closingTime';
+import { RESEARCH_ID } from '../shared/research';
 
 export type ClosingTimePhase =
   | 'started' | 'progress' | 'complete' | 'timeout' | 'cancelled';
@@ -153,7 +154,9 @@ export class ClosingTimeController {
     this.workers = new Set(
       [...live].filter((id) => {
         const a = reg.agents[id];
-        return id !== this.godId && !!a && !a.isGod;
+        // Research holds no cards and reaches nobody's turn unchecked, so
+        // closing time neither waits on it nor steers it (ship review pass 3).
+        return id !== this.godId && id !== RESEARCH_ID && !!a && !a.isGod;
       })
     );
     this.acked = new Set();

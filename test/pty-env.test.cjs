@@ -126,6 +126,13 @@ test('an agent whose commands are scrubbed inherits no keys or tokens, but keeps
   const parent = { GITHUB_TOKEN: 'g', NPM_TOKEN: 'n', SSH_AUTH_SOCK: '/s', DB_PASSWORD: 'p', STRIPE_API_KEY: 'k', ANTHROPIC_API_KEY: 'a', CLAUDE_CODE_OAUTH_TOKEN: 'o', AWS_SECRET_ACCESS_KEY: 'w', HOME: '/h', LANG: 'en_US.UTF-8' };
   const research = buildPtyEnv(parent, '/bin', { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' }, 'darwin');
   for (const k of ['GITHUB_TOKEN', 'NPM_TOKEN', 'SSH_AUTH_SOCK', 'DB_PASSWORD', 'STRIPE_API_KEY']) assert.equal(research[k], undefined, k);
-  for (const k of ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'HOME', 'LANG']) assert.equal(research[k], parent[k], k);
+  // Near misses (testing review pass 3): a bare _KEY or _PAT, and a password in an address.
+  const more = buildPtyEnv({ OPENAI_KEY: 'k', GITHUB_PAT: 'p', GH_PAT: 'p', DATABASE_URL: 'postgres://u:pw@h/db', HOMEBREW_PREFIX: '/opt/homebrew', PATH: '/x', MANPATH: '/m' }, '/bin', { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' }, 'darwin');
+  for (const k of ['OPENAI_KEY', 'GITHUB_PAT', 'GH_PAT', 'DATABASE_URL']) assert.equal(more[k], undefined, k);
+  for (const k of ['HOMEBREW_PREFIX', 'MANPATH']) assert.ok(more[k], `${k} is not a secret`);
+  for (const k of ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'HOME', 'LANG']) assert.equal(research[k], parent[k], k);
+  // A cloud's keys only when Claude Code runs on that cloud (security review pass 3).
+  assert.equal(research.AWS_SECRET_ACCESS_KEY, undefined, 'not on Bedrock');
+  assert.equal(buildPtyEnv({ ...parent, CLAUDE_CODE_USE_BEDROCK: '1' }, '/bin', { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' }, 'darwin').AWS_SECRET_ACCESS_KEY, 'w', 'on Bedrock');
   assert.equal(buildPtyEnv(parent, '/bin', {}, 'darwin').GITHUB_TOKEN, 'g', 'other agents are unchanged');
 });

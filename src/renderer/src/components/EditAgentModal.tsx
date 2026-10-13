@@ -53,7 +53,10 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
     inferAgentProvider(agent.command, agent.provider)
   );
   // On Claude, Research's engine is fixed; on anything else only Claude is offered.
-  const researchLocked = isResearch && isClaudeProvider(provider) && AGENT_PROVIDER_PRESETS.filter((p) => BUILD_ENGINES.includes(p.id) && isClaudeProvider(p.id)).length <= 1;
+  // Judged on the saved engine, so picking Claude for a Research on an old
+  // engine never locks the list under the owner's hand before Save.
+  const researchLocked = isResearch && isClaudeProvider(inferAgentProvider(agent.command, agent.provider))
+    && AGENT_PROVIDER_PRESETS.filter((p) => BUILD_ENGINES.includes(p.id) && isClaudeProvider(p.id)).length <= 1;
   const [model, setModel] = useState<string | undefined>(agent.model);
   // Folded by default: the engine rarely changes after hiring.
   const [engineOpen, setEngineOpen] = useState(false);
@@ -316,17 +319,23 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
             {/* A list, not a grid of buttons. Only the engines this build
                 offers (BUILD_ENGINES, like setup), plus the agent's own if it
                 runs on another, so a list never hides what it is on. */}
+            {researchLocked ? (
+              // Nothing to choose: the engine as plain text, with its reason
+              // behind the info icon.
+              <span style={{ fontSize: 13, color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)' }}>{providerLabel}</span>
+            ) : (
             <select
               value={provider}
               onChange={(e) => pickProvider(e.target.value as AgentProvider)}
-              disabled={researchLocked}
+              aria-label={t('editAgent.provider')}
               className="cth-input"
-              style={{ ...inputStyle, ...(researchLocked ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
+              style={inputStyle}
             >
               {AGENT_PROVIDER_PRESETS
                 .filter((p) => (BUILD_ENGINES.includes(p.id) && (!isResearch || isClaudeProvider(p.id))) || p.id === provider)
                 .map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
+            )}
           </Row>
 
           {preset.supportsModel && (

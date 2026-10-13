@@ -15,6 +15,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const loadTs = require('./load-ts.cjs');
+const R = loadTs('src/shared/research.ts');
+const W = loadTs('src/shared/webAccess.ts');
 
 const electron = require.resolve('electron');
 require.cache[electron] = {
@@ -186,10 +188,15 @@ test('the hook shim refuses MCP calls when it cannot reach the app, and leaves o
     const bash = run('Bash', env);
     assert.equal(bash.status, 0);
     assert.equal(bash.stdout, '', 'built-in tools go on as before');
+    // Research's every call fails closed: the hook is its file tools' only wall (ship review pass 3).
+    for (const tool of ['Read', 'Grep', 'Write', 'Bash']) {
+      const r = JSON.parse(run(tool, { ...env, AGENT_ID: 'research' }).stdout);
+      assert.equal(r.hookSpecificOutput.permissionDecisionReason, R.RESEARCH_UNCHECKED_TOOL, `Research ${tool} ${JSON.stringify(env)}`);
+    }
     // Web pages and search fail closed too, for everyone but Research (issue #230, ship review pass 2).
     for (const tool of ['WebFetch', 'WebSearch']) {
       assert.equal(JSON.parse(run(tool, env).stdout).hookSpecificOutput.permissionDecision, 'deny', `${tool} ${JSON.stringify(env)}`);
-      assert.equal(run(tool, { ...env, AGENT_ID: 'research' }).stdout, '', `Research ${tool}`);
+      assert.equal(JSON.parse(run(tool, { ...env, AGENT_ID: 'research' }).stdout).hookSpecificOutput.permissionDecision, 'deny', `Research ${tool}: its every call fails closed`);
     }
   }
 });
@@ -329,6 +336,15 @@ test('over the hook socket, a gate that throws refuses an MCP call and lets a bu
   }
   const bash = await ask({ ...base, tool_name: 'Bash', tool_input: { command: 'ls' } });
   assert.ok(!denied(bash), 'built-in tools go on as before');
+  // Web pages and search fail closed too, for everyone but Research (issue #230, testing review pass 3).
+  server.handle = () => { throw new Error('gate threw'); };
+  for (const tool_name of ['WebFetch', 'WebSearch']) {
+    assert.equal((await ask({ ...base, tool_name })).hookSpecificOutput.permissionDecisionReason, W.WEB_SETTINGS_UNREADABLE, tool_name);
+  }
+  assert.ok(!denied(await ask({ ...base, tool_name: 'Bash', tool_input: { command: 'ls' } })));
+  for (const tool_name of ['WebFetch', 'Read', 'Bash']) {
+    assert.equal((await ask({ ...base, agent_id: 'research', tool_name })).hookSpecificOutput.permissionDecisionReason, R.RESEARCH_UNCHECKED_TOOL, `Research ${tool_name}`);
+  }
 });
 
 // Value: protects=the no-agent check runs before the md-mail skip, and a needs-sign-in connector the owner turned on and gave works without a re-read; fails_when=connectorAccess checks the app server before agentId (md-mail calls with no agent id then pass, since the md-mail gate needs an agent id), or the gate starts reading the stale saved status; why_new=no test calls md-mail without an agent id or a needs-sign-in connector that is on and granted; seam=none
@@ -442,7 +458,7 @@ test('a Task subagent is checked as its team member, and its finish is not the a
 test('an agent whose hive settings could not be written starts with no connectors', () => {
   const main = read('src/main/index.ts');
   assert.match(main, /if \(connectorPlan && !connectorsApplied\) \{[\s\S]{0,300}'--strict-mcp-config'[\s\S]{0,120}ENABLE_CLAUDEAI_MCP_SERVERS: 'false'/);
-  assert.match(main, /opts\.args = \[\.\.\.\(opts\.args \?\? \[\]\), \.\.\.inj\.args\];(?:\s*\/\/[^\n]*)*\s*if \(isResearch\) opts\.args = \[\.\.\.opts\.args, '--setting-sources', 'project,local'\];\s*connectorsApplied = true;/, 'only a completed injection counts as applied');
+  assert.match(main, /opts\.args = \[\.\.\.\(opts\.args \?\? \[\]\), \.\.\.inj\.args\];(?:\s*\/\/[^\n]*)*\s*if \(isResearch\) opts\.args = \[\.\.\.opts\.args, '--setting-sources', ''\];\s*connectorsApplied = true;/, 'only a completed injection counts as applied');
 });
 
 // Value: protects=connector deny rules sit beside the folder privacy rules in one permissions.deny list; fails_when=hookSettings writes deny: connectorDeny (or only the folder rules) and one set silently disappears; why_new=folder and connector rules were only tested apart; seam=none

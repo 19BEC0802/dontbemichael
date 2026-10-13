@@ -173,6 +173,9 @@ test('the settings written at spawn take the internet from a member\'s shell and
     { folderPolicy: F.researchFolderPolicy([o.base, o.home, o.business], [researchDir, o.desk], o.base), extraWritableDirs: [] }
   ));
   assert.equal(research.sandbox.network, undefined);
+  // Research loads no settings file but this one, so the bypass consent is here too.
+  assert.equal(research.skipDangerousModePermissionPrompt, true);
+  assert.equal(research.skipAutoPermissionPrompt, true);
   assert.deepEqual([...research.sandbox.filesystem.allowWrite].sort(), [researchDir, o.desk].sort());
   assert.ok(!research.sandbox.filesystem.allowWrite.includes(o.hive.root()), 'never the hive');
   assert.deepEqual([...research.permissions.additionalDirectories].sort(), [researchDir, o.desk].sort());
@@ -233,7 +236,11 @@ test('Research can\'t search from a folder above a wall, nor follow a link out o
   const o = await office(t);
   const hook = hookFor(o);
   const call = (tool, input) => hook(R.RESEARCH_ID, 'PreToolUse', { tool_name: tool, tool_input: input });
-  assert.ok(denied(call('Grep', { pattern: 'owes', path: '/' })), 'Grep on /');
+  assert.ok(denied(call('Grep', { pattern: 'owes', path: path.parse(o.base).root })), 'Grep on the drive root');
+  // The rule itself, apart from the temp walls this office also sits in.
+  const P = (p) => path.resolve(p);
+  assert.equal(F.researchFolderDecision([P('/w/biz')], [P('/w/desk')], 'Grep', P('/w'), false).deny, true, 'above a wall');
+  assert.equal(F.researchFolderDecision([P('/w/biz')], [P('/w/desk')], 'Glob', P('/w/elsewhere'), false).deny, false, 'beside a wall');
   assert.ok(denied(call('Grep', { pattern: 'owes', path: o.base })), 'Grep on a folder holding the business folder');
   assert.ok(denied(call('Glob', { pattern: `${o.base}/**` })), 'Glob from above');
   assert.ok(!denied(call('Grep', { pattern: 'flour', path: o.desk })), 'its own desk is fine');
@@ -251,7 +258,8 @@ test('Research\'s file tools open no temporary folder, and no office agent keeps
   const o = await office(t);
   const hook = hookFor(o);
   const read = (file) => hook(R.RESEARCH_ID, 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: file } });
-  assert.ok(denied(read(`/private/tmp/claude-${process.getuid()}/-Users-pam-Sales/s1/tasks/x.output`)), 'another session\'s output');
+  const tmpRoot = process.platform === 'darwin' ? '/private/tmp' : '/tmp';
+  assert.ok(denied(read(`${tmpRoot}/claude-${process.getuid()}/-Users-pam-Sales/s1/tasks/x.output`)), 'another session\'s output');
   assert.ok(denied(read(path.join(os.tmpdir(), 'other-app.txt'))), 'the per user temp folder');
   assert.ok(!denied(read(path.join(o.desk, F.RESEARCH_TMP_DIR, 'scratch.txt'))), 'its own session files, in its desk');
   // The shell keeps /tmp (Claude Code's own working files) and is walled from the rest.
@@ -262,4 +270,34 @@ test('Research\'s file tools open no temporary folder, and no office agent keeps
   assert.match(main, /const dir = isResearch \? join\(opts\.cwd, RESEARCH_TMP_DIR\) : harness \? join\(expandTilde\(harness\), AGENT_TMP_DIR, opts\.hive\.id\) : '';/);
   assert.match(main, /if \(sessionTmp\) opts\.env = \{ \.\.\.opts\.env, CLAUDE_CODE_TMPDIR: sessionTmp \};/);
   assert.match(main, /extraWritableDirs: \[memory\.env\(\)\.MEMPALACE_PALACE_PATH, sessionTmp\]/);
+});
+
+test('while Research is on, no other agent runs a command outside its sandbox', async (t) => {
+  // Value: protects=Michael's automatic rerun outside the sandbox can't open Research's folders; fails_when=the hook lets dangerouslyDisableSandbox through while Research is on, or blocks it when Research is off; why_new=security review pass 3, owner D7.1; seam=none; no_claim=Claude Code honoring allowUnsandboxedCommands
+  const o = await office(t);
+  const hook = hookFor(o);
+  const bash = (id, outside) => hook(id, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: `cat ${o.desk}/notes.md`, ...(outside ? { dangerouslyDisableSandbox: true } : {}) } });
+  for (const id of ['god', 'pam']) {
+    assert.equal(reason(bash(id, true)), R.RESEARCH_SANDBOX_ONLY, id);
+    assert.ok(!denied(bash(id, false)), `${id} in its sandbox is the sandbox's call`);
+  }
+  const off = await office(t, { on: false });
+  assert.ok(!denied(hookFor(off)('god', 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls', dangerouslyDisableSandbox: true } })), 'Research off: Michael as before');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  assert.match(main, /return readConfig\(\)\.research\?\.on && isBusinessOffice\(\) \? \{ \.\.\.walled, sandboxOnly: true \} : walled;/);
+});
+
+test('while Research is on, agents save scratch work in their own folder, not the shared temp folders', posixOnly('temporary folder paths'), async (t) => {
+  // Value: protects=a draft with office data never lands where Research's shell can read it, and the agent is told where to save instead so it carries on; fails_when=the hook lets a write into /tmp through while Research is on, or blocks an agent's own folders; why_new=security review pass 3, owner D7.2; seam=none; no_claim=shell writes to /tmp (a documented limit)
+  const o = await office(t);
+  const hook = hookFor(o);
+  const write = (id, file) => hook(id, 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: file, content: 'customer list' } });
+  const r = write('pam', '/tmp/draft.md');
+  assert.ok(denied(r));
+  assert.ok(reason(r).includes(path.join(o.home, F.AGENT_TMP_DIR, 'pam')), 'names its own scratch folder');
+  assert.ok(!denied(write('pam', path.join(o.home, F.AGENT_TMP_DIR, 'pam', 'draft.md'))), 'its own scratch folder');
+  assert.ok(!denied(write('pam', path.join(o.pamDir, 'draft.md'))), 'its own folder, though this office sits in a temp folder');
+  assert.ok(!denied(hook('pam', 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: '/tmp/x' } })), 'reading is not this rule');
+  const off = await office(t, { on: false });
+  assert.ok(!denied(hookFor(off)('pam', 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: '/tmp/draft.md', content: 'x' } })), 'Research off: as before');
 });

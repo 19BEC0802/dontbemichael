@@ -135,6 +135,34 @@ web gate fails closed when the app can't answer; a member's shell network follow
 office setting, not whether the business folder opened; patterns read text after Unicode
 normalization (no zero width or fullwidth disguise).
 
+### Review pass 3 (owner, 2026-10-13)
+
+- **D7.1 Michael's shell (A):** while Research is on, no agent's command runs outside its
+  sandbox, Michael's included: his sandbox setting at start, and the hook refuses any
+  rerun outside the sandbox from the next command.
+- **D7.2 shared temp (A, owner: as long as work carries on):** while Research is on, agents'
+  file tools can't save into the shared temporary folders; the refusal names the agent's
+  own scratch folder (`<home>/agent-tmp/<id>`), so it saves there and carries on with no
+  wait. Known limit: a shell command can still write to `/tmp`, which Research's shell
+  can read (Claude Code's shell needs `/tmp`).
+
+Applied under the existing rules: every one of Research's tool calls fails closed when the
+app can't answer (the hook is its file tools' only wall; an oversized call is cut to its
+short fields first); Research loads no settings or CLAUDE.md file at all (`--setting-sources`
+empty; verified live that a planted desk CLAUDE.md and settings file loaded with project
+and local), and the app's settings carry the bypass consent; Research's hive folder is out
+of the hive's git history (and untracked once); the router never follows a link in an
+outbox; the inbox stamp check compares the exact bytes written; an answer is rewritten into
+the sender's thread only when it goes back to that sender, and follow ups in one thread
+reach Research in one app made thread, kept across restarts in the app's private folder;
+closing time leaves Research out; turning Research off for safety returns its waiting asks;
+a Work style check that got no answer is tried again after a minute; agents' scratch
+folders are pruned of files over a week old; the stamp key, threads and raw originals move
+with the office; the secret scrub keeps a cloud's keys only when Claude Code runs on that
+cloud and catches bare `_KEY`, `_PAT`, DSN, connection strings and passwords in addresses;
+patterns ignore every default ignorable character. Known limit: Research notes committed to
+a hive before this release stay in that hive's history.
+
 ## The guard (superseded by the trust layer above)
 
 Every message addressed to the Research agent is checked before delivery.

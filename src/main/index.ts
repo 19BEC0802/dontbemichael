@@ -68,6 +68,7 @@ import { checkDistinct, readJobProfile } from './hireCheck';
 import { checkFocusArea, convertWorkStyle, readConvertRequest, readFocusCheckRequest, readSuggestRequest, suggestWorkStyle } from './workStyleConvert';
 import { SafeClearer, type SafeClearDeps } from './safeClearer';
 import { PersistStore } from './db';
+import { makeResearchGoal } from './researchGoal';
 import { projectDir, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
@@ -422,25 +423,8 @@ function standingGoalFor(agentId: string): string | null {
   const text = parts.length ? parts.join('\n\n') : null;
   return agentId === RESEARCH_ID ? researchGoal(text) : text;
 }
-/** Research's job text, as the trust layer passed it (ship review D6.4): the
- *  owner's Work style and its scheduled jobs are checked like any message,
- *  and until a version is checked (or when it is refused) Research works from
- *  its built in job text. Only the latest text is remembered. */
-const researchGoalChecks = new Map<string, string | null | 'pending'>();
-function researchGoal(raw: string | null): string {
-  if (!raw || raw.trim() === RESEARCH_WORK_STYLE) return RESEARCH_WORK_STYLE;
-  const seen = researchGoalChecks.get(raw);
-  if (seen === undefined) {
-    researchGoalChecks.clear();
-    researchGoalChecks.set(raw, 'pending');
-    trustLayer.inbound({ subject: 'Your Work style', body: raw }).then((v) => {
-      if (v.decision === 'deny') console.warn('[research] its Work style was not passed by the trust layer; it keeps its built in job text');
-      researchGoalChecks.set(raw, v.decision === 'deny' ? null : v.body);
-    }, () => { researchGoalChecks.set(raw, null); });
-    return RESEARCH_WORK_STYLE;
-  }
-  return typeof seen === 'string' && seen !== 'pending' && seen.trim() ? seen : RESEARCH_WORK_STYLE;
-}
+// Research's Work style and jobs, checked by its trust layer first (D6.4).
+const researchGoal = makeResearchGoal(() => trustLayer, RESEARCH_WORK_STYLE, (line) => console.warn(line));
 // Worker inbox-wake watchdog (#151): finds idle workers with undrained inbox mail
 // and types the same guarded nudge the renderer would have (so a throttled
 // background window can't leave a worker parked on an unread inbox forever).
@@ -3776,8 +3760,8 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // start, and its switch goes back off (ship review D6.2).
   if (isResearch && !claudeProvider) {
     console.error(`[research] engine ${provider} has none of Research's walls; Research did not start`);
-    writeConfig({ research: { ...(readConfig().research ?? { on: false }), on: false } });
-    return { ok: false, error: 'Research runs only on Claude. Set its engine back to Claude in Edit agent, then turn it on again.' };
+    turnResearchOff();
+    return { ok: false, error: 'Research runs only on Claude. Turn it on again in Settings.' };
   }
   // Research starts only inside its walls (ship review D2.8).
   let researchWalled = false;
@@ -3798,7 +3782,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const harness = readConfig().harnessHome;
     const dir = isResearch ? join(opts.cwd, RESEARCH_TMP_DIR) : harness ? join(expandTilde(harness), AGENT_TMP_DIR, opts.hive.id) : '';
     if (!dir) return undefined;
-    try { mkdirSync(dir, { recursive: true }); return dir; } catch { return undefined; }
+    try { mkdirSync(dir, { recursive: true }); } catch { return undefined; }
+    // Outside the system's own temp cleanup, so files over a week old go here.
+    pruneOldFiles(dir, 7 * 24 * 60 * 60_000);
+    return dir;
   })();
   let connectorsApplied = false;
   if (opts.hive && hive.enabled()) {
@@ -3810,7 +3797,11 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
         const base = businessFolder
           ? folderPolicy({ isGod: !!opts.hive!.isGod, cwd: opts.cwd }, businessFolderLayout(businessFolder), process.platform !== 'linux')
           : privateOnlyFolderPolicy(!!opts.hive!.isGod, opts.cwd);
-        return base ? withResearchWall(base, researchFolders()) : undefined;
+        if (!base) return undefined;
+        const walled = withResearchWall(base, researchFolders());
+        // While Research is on, Michael's commands stay in their sandbox too:
+        // a rerun outside it would open Research's folders (owner, D7.1).
+        return readConfig().research?.on && isBusinessOffice() ? { ...walled, sandboxOnly: true } : walled;
       };
       const inj = await hive.ensureAgent(
         { ...opts.hive, cwd: opts.cwd, provider, isResearch },
@@ -3879,11 +3870,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
         }
       );
       opts.args = [...(opts.args ?? []), ...inj.args];
-      // Research loads none of the owner's own Claude settings (their hooks,
-      // which run outside the sandbox, skills and CLAUDE.md): everything that
-      // reaches it passes the trust layer (owner, 2026-10-13). The app's own
-      // settings come with --settings, which always loads.
-      if (isResearch) opts.args = [...opts.args, '--setting-sources', 'project,local'];
+      // Research loads no settings or CLAUDE.md but the app's: not the owner's
+      // (their hooks run outside the sandbox), and not its desk's, which it
+      // writes itself (verified live: a planted desk CLAUDE.md and settings
+      // file load with project and local). Everything that reaches it passes
+      // the trust layer (owner, 2026-10-13); the app's own settings come with
+      // --settings and its instructions with --append-system-prompt.
+      if (isResearch) opts.args = [...opts.args, '--setting-sources', ''];
       connectorsApplied = true;
       researchWalled = isResearch;
       seedPrompt = inj.seedPrompt;
@@ -3907,7 +3900,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // A Research without its walls would be a plain Claude with the owner's
     // accounts and the web: it does not start, and the switch goes back off.
     console.error('[research] walls not in place; Research did not start');
-    writeConfig({ research: { ...(readConfig().research ?? { on: false }), on: false } });
+    turnResearchOff();
     return { ok: false, error: 'Research could not be set up safely, so it did not start. Try again.' };
   }
   if (connectorPlan && !connectorsApplied) {
@@ -5139,13 +5132,34 @@ ipcMain.handle('research:prepare', () => {
 });
 /** Turning Research off: its waiting asks go back to their senders. The
  *  renderer closes its terminal and archives it. */
-ipcMain.handle('research:off', () => {
-  const cfg = readConfig();
-  writeConfig({ research: { ...(cfg.research ?? {}), on: false } });
-  let returned = 0;
-  try { returned = hive.returnResearchInbox(); } catch (e) { console.error('[research] return inbox failed', e); }
-  return { ok: true, returned };
-});
+/** Remove files under `dir` older than `maxAgeMs`, and folders they leave
+ *  empty. Best effort: a file in use is left for next time. */
+function pruneOldFiles(dir: string, maxAgeMs: number): void {
+  const cutoff = Date.now() - maxAgeMs;
+  const walk = (d: string, depth: number): void => {
+    if (depth > 8) return;
+    let names: string[];
+    try { names = readdirSync(d); } catch { return; }
+    for (const n of names) {
+      const p = join(d, n);
+      try {
+        const st = lstatSync(p);
+        if (st.isDirectory()) {
+          walk(p, depth + 1);
+          if (readdirSync(p).length === 0 && st.mtimeMs < cutoff) rmSync(p, { recursive: true, force: true });
+        } else if (st.mtimeMs < cutoff) rmSync(p, { force: true });
+      } catch { /* next start */ }
+    }
+  };
+  walk(dir, 0);
+}
+/** Research off: the switch, and every ask waiting for it goes back to its
+ *  sender (design review D7), from Settings or when it can't start safely. */
+function turnResearchOff(): number {
+  writeConfig({ research: { ...(readConfig().research ?? { on: false }), on: false } });
+  try { return hive.returnResearchInbox(); } catch (e) { console.error('[research] return inbox failed', e); return 0; }
+}
+ipcMain.handle('research:off', () => ({ ok: true, returned: turnResearchOff() }));
 /** The one time update card was read (Got it or Open Research settings). */
 ipcMain.handle('research:noticeSeen', () => {
   const cfg = readConfig();

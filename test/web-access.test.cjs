@@ -103,26 +103,63 @@ test('Research\'s notes reach the shared memory only as a cleaned copy', () => {
 test('Research runs only on Claude, where its walls work', () => {
   // Value: protects=an engine change can't start Research without its walls; fails_when=the spawn skips the engine check or Edit agent offers other engines for Research; why_new=security review pass 2, ship review D6.2; seam=none
   const main = read('src/main/index.ts');
-  assert.match(main, /if \(isResearch && !claudeProvider\) \{[\s\S]{0,400}on: false \} \}\);\s*return \{ ok: false, error: 'Research runs only on Claude\./);
+  assert.match(main, /if \(isResearch && !claudeProvider\) \{[\s\S]{0,300}turnResearchOff\(\);\s*return \{ ok: false, error: 'Research runs only on Claude\. Turn it on again in Settings\.' \};/);
   const modal = read('src/renderer/src/components/EditAgentModal.tsx');
   assert.match(modal, /const isResearch = agent\.id === RESEARCH_ID;/);
   assert.match(modal, /BUILD_ENGINES\.includes\(p\.id\) && \(!isResearch \|\| isClaudeProvider\(p\.id\)\)/);
-  assert.match(modal, /disabled=\{researchLocked\}/);
+  assert.match(modal, /\{researchLocked \? \(/, 'a locked engine shows as plain text');
+  assert.match(modal, /isResearch && isClaudeProvider\(inferAgentProvider\(agent\.command, agent\.provider\)\)/, 'locked on the saved engine');
   for (const loc of ['en', 'ar', 'zh-CN']) assert.ok(JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`)).editAgent.researchEngine, loc);
 });
 
-test('Research\'s Work style and jobs reach it only as the trust layer passed them', () => {
-  // Value: protects=owner edited job text can't carry names to Research unchecked; fails_when=standingGoalFor returns Research's raw text, or an unchecked version is used while the check runs; why_new=security review pass 2, ship review D6.4; seam=none
+test('Research\'s Work style and jobs reach it only as the trust layer passed them', async () => {
+  // Value: protects=owner edited job text can't carry names to Research unchecked; fails_when=the first call returns the raw text, a refused text is used, or index.ts stops routing Research's goal through it; why_new=security review pass 2, ship review D6.4 (pass 3: tested directly, not by source pins); seam=fake layer
+  const { makeResearchGoal } = loadTs('src/main/researchGoal.ts');
+  let next = { decision: 'clean', subject: 's', body: 'Look up suppliers for a small cafe', removed: ['names'] };
+  const seen = [];
+  const goal = makeResearchGoal(() => ({ inbound: async (m) => { seen.push(m.body); return next; } }), 'BUILT IN');
+  assert.equal(goal(null), 'BUILT IN');
+  assert.equal(goal('BUILT IN'), 'BUILT IN', 'its own built in text needs no check');
+  assert.equal(goal('Look up suppliers for Jane Smith\'s cafe'), 'BUILT IN', 'never the raw text while the check runs');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(goal('Look up suppliers for Jane Smith\'s cafe'), 'Look up suppliers for a small cafe');
+  assert.equal(seen.length, 1, 'checked once');
+  next = { decision: 'deny', reason: 'x' };
+  assert.equal(goal('Call Jane on 555 0100'), 'BUILT IN');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(goal('Call Jane on 555 0100'), 'BUILT IN', 'a refused text is never used');
+  // No answer is not a refusal: it is checked again after a minute.
+  const realNow = Date.now;
+  try {
+    let now = realNow();
+    Date.now = () => now;
+    next = { decision: 'deny', reason: R.REFUSAL_UNSURE };
+    assert.equal(goal('Pizza trends'), 'BUILT IN');
+    await new Promise((r) => setImmediate(r));
+    next = { decision: 'pass', subject: 's', body: 'Pizza trends' };
+    assert.equal(goal('Pizza trends'), 'BUILT IN', 'not retried at once');
+    now += 61_000;
+    goal('Pizza trends');
+    await new Promise((r) => setImmediate(r));
+    assert.equal(goal('Pizza trends'), 'Pizza trends', 'retried after a minute');
+  } finally { Date.now = realNow; }
   const main = read('src/main/index.ts');
   assert.match(main, /return agentId === RESEARCH_ID \? researchGoal\(text\) : text;/);
-  assert.match(main, /researchGoalChecks\.set\(raw, 'pending'\);\s*trustLayer\.inbound\(\{ subject: 'Your Work style', body: raw \}\)/);
-  assert.match(main, /researchGoalChecks\.set\(raw, v\.decision === 'deny' \? null : v\.body\);/);
-  assert.match(main, /return typeof seen === 'string' && seen !== 'pending' && seen\.trim\(\) \? seen : RESEARCH_WORK_STYLE;/);
+  assert.match(main, /const researchGoal = makeResearchGoal\(\(\) => trustLayer, RESEARCH_WORK_STYLE,/);
 });
 
-test('Research loads none of the owner\'s own Claude settings, and resumes only its own conversation', () => {
+test('Research loads no settings or CLAUDE.md but the app\'s, and resumes only its own conversation', () => {
   // Value: protects=the owner's hooks, skills and CLAUDE.md never reach Research, and a registry edit can't resume it into another agent's conversation; fails_when=the flag is dropped or Research seeds a transcript from another project; why_new=red team pass 2 (verified live 2026-10-13: without the flag Research saw the owner's skills); seam=none
   const main = read('src/main/index.ts');
-  assert.match(main, /if \(isResearch\) opts\.args = \[\.\.\.opts\.args, '--setting-sources', 'project,local'\];/);
+  assert.match(main, /if \(isResearch\) opts\.args = \[\.\.\.opts\.args, '--setting-sources', ''\];/);
   assert.match(main, /const resumable = isResearch\s*\? \/\^\[\\w-\]\{1,128\}\$\/\.test\(sid\) && existsSync\(join\(projectDir\(opts\.cwd\), `\$\{sid\}\.jsonl`\)\)\s*: seedSessionTranscript\(opts\.cwd, sid\);/);
+});
+
+test('Research leaves closing time alone, turning it off returns its asks, and agent temp files are pruned', () => {
+  // Value: protects=closing time never steers Research around its trust layer, both safety stops return waiting asks, and moved temp files don't pile up; fails_when=closingTime waits on Research, a spawn guard writes the switch alone, or the prune is dropped; why_new=api review pass 3; seam=none
+  assert.match(read('src/main/closingTime.ts'), /return id !== this\.godId && id !== RESEARCH_ID && !!a && !a\.isGod;/);
+  const main = read('src/main/index.ts');
+  assert.equal((main.match(/turnResearchOff\(\);/g) || []).length, 2, 'both spawn guards');
+  assert.match(main, /function turnResearchOff\(\): number \{\s*writeConfig\(\{ research: [^\n]*on: false \} \}\);\s*try \{ return hive\.returnResearchInbox\(\);/);
+  assert.match(main, /pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);/);
 });

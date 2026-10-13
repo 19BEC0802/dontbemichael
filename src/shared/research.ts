@@ -59,6 +59,10 @@ export function sentAsBody(subject: string, body: string): string {
 /** When Research's answer could not be checked on its way back. */
 export const ANSWER_UNCHECKED_SUBJECT = 'Research answer not delivered';
 export const ANSWER_UNCHECKED = 'Research answered, but the trust layer could not check the answer, so it was not delivered. Ask Research again if you still need it.';
+/** A command an agent asked to run outside its sandbox while Research is on. */
+export const RESEARCH_SANDBOX_ONLY = 'While Research is on, commands run only inside your sandbox. Do it another way, or ask the owner.';
+/** When the app could not check one of Research's tool calls. */
+export const RESEARCH_UNCHECKED_TOOL = 'The app could not check this step, so it did not run. Try again shortly.';
 export const REFUSAL_WEB_TOOL = 'Only Research uses the internet. Send Research a message ("to": "research", "act": "query") with a plain question, leaving out names, contact details, money and anything from the owner\'s files or email.';
 export const REFUSAL_WEB_TOOL_OFF = 'Only Research uses the internet, and Research is off, so nobody in the office can look this up. Work without it and say what you could not check.';
 

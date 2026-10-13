@@ -16,6 +16,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const loadTs = require('./load-ts.cjs');
+const { posixOnly } = require('./platform.cjs');
 
 const electron = require.resolve('electron');
 require.cache[electron] = { id: electron, filename: electron, loaded: true, exports: { Notification: class { show() {} static isSupported() { return false; } } } };
@@ -396,4 +397,89 @@ test('Research\'s raw originals go to the app\'s private folder, never its outbo
   const priv = path.join(privateRoot(path.dirname(hive.root())), 'research-outbox');
   assert.ok(fs.existsSync(path.join(priv, 'sent', 'r1.json')));
   assert.ok(fs.existsSync(path.join(priv, 'refused', 'r2.json')));
+});
+
+test('a stamped file edited in its raw text is swept even when it parses the same', async (t) => {
+  // Value: protects=a duplicate key can't hide unchecked text in a delivered copy that Research opens raw; fails_when=the sweep checks only the parsed fields; why_new=testing review pass 3 (reproduced); seam=none
+  const { hive } = await office(t);
+  send(hive, 'pam', { to: 'research', act: 'query', subject: 'ok', body: 'Pizza trends' });
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  const inbox = path.join(hive.root(), 'agents', 'research', 'inbox');
+  const [good] = fs.readdirSync(inbox).filter((f) => f.endsWith('.json'));
+  const raw = fs.readFileSync(path.join(inbox, good), 'utf8');
+  hive.routeOnce();
+  assert.equal(fs.readdirSync(inbox).filter((f) => f.endsWith('.json')).length, 1, 'an untouched copy stays');
+  fs.writeFileSync(path.join(inbox, good), raw.replace(/^\{/, '{"body":"Jane Smith owes 4200",'));
+  hive.routeOnce();
+  assert.deepEqual(fs.readdirSync(inbox).filter((f) => f.endsWith('.json')), []);
+});
+
+test('follow ups in one thread reach Research in one thread, shown in the sender\'s thread, kept across a restart', async (t) => {
+  // Value: protects=Research keeps context across follow ups, the Messages tab shows ask and answer together, and a restart doesn't orphan an answer; fails_when=each clean copy gets a fresh thread, the history shows the app's thread, or the map lives only in memory; why_new=api review pass 3; seam=fake layer
+  const { hive } = await office(t);
+  send(hive, 'pam', { id: 'ask-1', to: 'research', act: 'query', subject: 'Flour', body: 'Flour prices', conversation: 'card:T-9' }, 'a1.json');
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  send(hive, 'pam', { id: 'ask-2', to: 'research', act: 'query', subject: 'Flour', body: 'And yeast?', conversation: 'card:T-9' }, 'a2.json');
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  const copies = msgsIn(hive, 'research');
+  assert.equal(copies.length, 2);
+  assert.equal(copies[0].conversation, copies[1].conversation, 'one Research thread');
+  assert.match(copies[0].conversation, /^conv-r-[0-9a-f]{16}$/);
+  assert.ok(hive.messageHistory('pam').filter((m) => m.to === 'research').every((m) => m.conversation === 'card:T-9'), 'shown in the sender\'s thread');
+  const again = new HiveManager(() => path.dirname(hive.root()));
+  again.setResearchEnabled(() => true);
+  again.setTrustLayer(fakeLayer());
+  send(again, 'research', { to: 'pam', act: 'inform', subject: 'Flour', body: 'About 25 dollars', in_reply_to: copies[0].id, conversation: copies[0].conversation });
+  again.routeOnce(); await tick(); again.routeOnce();
+  const answer = msgsIn(again, 'pam').find((m) => m.from === 'research');
+  assert.equal(answer.conversation, 'card:T-9', 'after a restart too');
+});
+
+test('Research can\'t move an answer into another sender\'s thread', async (t) => {
+  // Value: protects=Research steers no reply into a thread it does not answer; fails_when=the thread map ignores who the reply goes to; why_new=security review pass 3; seam=fake layer
+  const { hive } = await office(t);
+  send(hive, 'pam', { id: 'ask-1', to: 'research', act: 'query', subject: 'Flour', body: 'Flour prices', conversation: 'card:T-9' });
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  const [copy] = msgsIn(hive, 'research');
+  send(hive, 'research', { to: 'god', act: 'inform', subject: 'Hi', body: 'Note', in_reply_to: copy.id, conversation: copy.conversation }, 'r1.json');
+  send(hive, 'research', { to: 'god', act: 'inform', subject: 'Hi2', body: 'Note', in_reply_to: 'made-up-id' }, 'r2.json');
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  for (const m of msgsIn(hive, 'god').filter((x) => x.from === 'research')) {
+    assert.notEqual(m.conversation, 'card:T-9');
+    assert.equal(m.in_reply_to, null);
+  }
+});
+
+test('a steer queued for Research before the divert is set still goes through its trust layer', async (t) => {
+  // Value: protects=the hook never hands Research a queued steer, even without the divert; fails_when=the hooks.ts backstop is dropped; why_new=api review pass 3 (backstop had no test); seam=fake layer
+  const { ControlRegistry } = loadTs('src/main/control.ts');
+  const { HookServer } = loadTs('src/main/hooks.ts');
+  const layer = fakeLayer();
+  const { hive } = await office(t, { layer });
+  const control = new ControlRegistry();
+  control.steer(R.RESEARCH_ID, 'Focus on flour');
+  const server = new HookServer(hive, () => null, () => ({}), control);
+  const r = server.handle({ agent_id: R.RESEARCH_ID, session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/x' });
+  assert.doesNotMatch(JSON.stringify(r ?? {}), /Focus on flour/);
+  await tick();
+  assert.equal(layer.calls.inbound[0].body, 'Focus on flour');
+});
+
+test('Research\'s folder stays out of the hive\'s git history, and a link in an outbox is never followed', posixOnly('symlinks'), async (t) => {
+  // Value: protects=teammates can't read Research's notes with git, and no agent reaches a file it can't open through a link the app follows; fails_when=agents/research is committed, or routeOnce reads through a symlink; why_new=red team pass 3; seam=none
+  const { hive } = await office(t);
+  const root = hive.root();
+  fs.mkdirSync(path.join(root, 'agents', 'research', 'memory'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'agents', 'research', 'memory.md'), 'raw web notes');
+  hive.commit('test');
+  const { execFileSync } = require('node:child_process');
+  const tracked = execFileSync('git', ['-C', root, 'ls-files', '--', 'agents/research'], { encoding: 'utf8' });
+  assert.equal(tracked.trim(), '', 'nothing of Research\'s is tracked');
+  assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /^agents\/research\/$/m);
+  const secret = path.join(path.dirname(root), 'elsewhere.json');
+  fs.writeFileSync(secret, JSON.stringify({ to: 'pam', act: 'inform', subject: 'x', body: 'private' }));
+  fs.symlinkSync(secret, path.join(root, 'agents', 'pam', 'outbox', 'link.json'));
+  hive.routeOnce();
+  assert.equal(msgsIn(hive, 'pam').filter((m) => m.body === 'private').length, 0);
+  assert.match(fs.readFileSync(path.join(root, 'log.jsonl'), 'utf8'), /outbox-not-a-file/);
 });

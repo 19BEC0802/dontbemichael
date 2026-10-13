@@ -70,8 +70,8 @@ export const ASK_TOOL_REFUSAL =
   "Don't ask the owner here: nobody answers your terminal. File it as one new file in the hive's triage folder (your questions as one \"ask\", what you were doing in \"description\"). Michael checks it and puts it on the owner's ASK ME board.";
 
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
-import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, researchFolderDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
-import { RESEARCH_DESK_DIR, RESEARCH_ID } from '../shared/research';
+import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, AGENT_TMP_DIR, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
+import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
 import { CONNECTOR_UNDECIDED, connectorAccess, MCP_RESOURCE_TOOLS } from '../shared/claudeConnectors';
@@ -289,6 +289,8 @@ export class HookServer {
           const pre = payload.hook_event_name === 'PreToolUse';
           res = pre && isMcpCall(payload.tool_name) ? mcpDeny(CONNECTOR_UNDECIDED)
             : pre && WEB_TOOLS.has(payload.tool_name ?? '') && payload.agent_id !== RESEARCH_ID ? mcpDeny(WEB_SETTINGS_UNREADABLE)
+            // Research's file tools have the hook as their only wall.
+            : pre && payload.agent_id === RESEARCH_ID ? mcpDeny(RESEARCH_UNCHECKED_TOOL)
             : {};
         }
         conn.end(JSON.stringify(res ?? {}));
@@ -586,6 +588,20 @@ export class HookServer {
     // only Research uses web pages and web search. Everyone else, Michael
     // included, is refused with how to ask Research, or that it is off. Who
     // Research is comes from the app, never a file agents write (D2.7).
+    // While Research is on, no command runs outside its sandbox, where
+    // Research's folders are walled (owner, D7.1): this holds from the next
+    // command, before an agent's sandbox setting catches up at its restart.
+    if (event === 'PreToolUse' && agentId && agentId !== RESEARCH_ID && p.tool_name === 'Bash'
+      && (p.tool_input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true && this.hive.researchOn()) {
+      this.emit(agentId, event, p);
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: RESEARCH_SANDBOX_ONLY
+        }
+      };
+    }
     if (event === 'PreToolUse' && agentId && WEB_TOOLS.has(p.tool_name ?? '')) {
       // Unreadable settings fail closed, like the connector gate (D8).
       let d: ReturnType<typeof webAccess>;
@@ -971,6 +987,16 @@ export class HookServer {
     for (const t of both) {
       const r = researchWallDecision(researchOwn, tool, t, ci);
       if (r.deny) return r;
+    }
+    // While Research is on, nobody saves into the shared temp folders its
+    // shell can read; each agent has its own scratch folder (owner, D7.2).
+    if (home && this.hive.researchOn()) {
+      const temps = tempFolders(process.platform, tmpdir());
+      const ownTmp = join(home, AGENT_TMP_DIR, agentId);
+      for (const t of both) {
+        const r = sharedTempWriteDecision(temps, ownTmp, me?.cwd, tool, t, ci);
+        if (r.deny) return r;
+      }
     }
     if (!me?.cwd || me.isAssistant) return { deny: false };
     const folders = cfg.businessFolder ? (cfg.businessTeam ?? []).map((m) => m.folder) : [];

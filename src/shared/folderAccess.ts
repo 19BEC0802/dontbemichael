@@ -184,6 +184,18 @@ export function shellTempWalls(platform: string, tmpdir: string): string[] {
   return tempFolders(platform, tmpdir).filter((f) => f !== '/tmp' && f !== '/private/tmp');
 }
 
+/** A file tool saving into the shared temporary folders while Research is on
+ *  (owner, D7.2): Research's shell can read /tmp, so another agent saves its
+ *  scratch work in its own folder instead and carries on there. */
+export function sharedTempWriteDecision(temps: string[], ownTmp: string, ownCwd: string | undefined, tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
+  if (!FOLDER_WRITE_TOOLS.has(tool)) return { deny: false };
+  const inside = insideFn(caseInsensitive);
+  // Its own folders stay open, even in an office that sits in a temp folder.
+  if ([ownTmp, ownCwd].some((f) => f && inside(f, target))) return { deny: false };
+  if (!temps.some((f) => f && inside(f, target))) return { deny: false };
+  return { deny: true, reason: `While Research is on, the shared temporary folders are closed for saving. Save it in your own scratch folder, ${ownTmp}, and carry on from there.` };
+}
+
 /** Where an office agent's Claude session keeps its scratch files: under the
  *  app's home, outside the hive, one folder per agent. */
 export const AGENT_TMP_DIR = 'agent-tmp';

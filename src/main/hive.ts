@@ -22,6 +22,7 @@ import { WEB_SETTINGS_UNREADABLE, WEB_TOOLS, type SandboxNetwork } from '../shar
 import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
   PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
+  RESEARCH_UNCHECKED_TOOL,
   SENT_AS_SUBJECT, sentAsBody
 } from '../shared/research';
 
@@ -964,7 +965,10 @@ export class HiveManager {
     // log.jsonl gets the structured, non-sensitive fields; the dump stays local.
     // agents/human/ holds the owner's own messages to Michael and the dock's
     // state (michael-replies.md): private to the owner, never committed.
-    const want = ['fleet.json', 'hooks.sock', 'cost-ledger.jsonl', 'crashes/', '.DS_Store', 'agents/human/'];
+    // Research's folder stays out of the hive's history, which every agent
+    // can read with git: its notes are web text the trust layer has not
+    // cleaned (owner, 2026-10-13: its folders are its alone).
+    const want = ['fleet.json', 'hooks.sock', 'cost-ledger.jsonl', 'crashes/', '.DS_Store', 'agents/human/', `agents/${RESEARCH_ID}/`];
     let lines: string[] = [];
     if (existsSync(gitignore)) { try { lines = readFileSync(gitignore, 'utf8').split('\n'); } catch { lines = []; } }
     const missing = want.filter((w) => !lines.includes(w));
@@ -1606,6 +1610,10 @@ export class HiveManager {
       // listens. The terminal reports the current theme the moment the CLI enables
       // 2031, so startup still matches without pinning anything.
       ...(theme ? { theme: 'auto' } : {}),
+      // The bypass consent the app keeps in the owner's settings, here too:
+      // Research loads no settings file but this one (ship review pass 3).
+      skipDangerousModePermissionPrompt: true,
+      skipAutoPermissionPrompt: true,
       // W3 — default skills/MCP bundle. Written into the PER-SESSION settings file
       // only (never ~/.claude), so the user's own MCP servers are never clobbered;
       // Claude merges this additively. Omitted entirely when empty so a settings
@@ -2140,8 +2148,36 @@ export class HiveManager {
   /** The sender's message behind each clean copy, by the copy's id and its
    *  thread, so Research's answer lands back in the sender's thread while
    *  Research never sees the sender's thread id (ship review). */
-  private researchThreads = new Map<string, { origId: string; conversation: string }>();
+  private researchThreadMap: Map<string, { origId: string; conversation: string; from: string }> | null = null;
   static readonly RESEARCH_THREADS_KEEP = 500;
+  /** Kept in the app's private folder, so an answer after a restart still
+   *  finds its thread and the Messages tab shows ask and answer together. */
+  private get researchThreads(): Map<string, { origId: string; conversation: string; from: string }> {
+    if (this.researchThreadMap) return this.researchThreadMap;
+    this.researchThreadMap = new Map();
+    const home = this.getHome();
+    try {
+      const rows = home ? JSON.parse(readFileSync(join(privateRoot(home), 'research-threads.json'), 'utf8')) : [];
+      if (Array.isArray(rows)) for (const r of rows) {
+        if (Array.isArray(r) && typeof r[0] === 'string' && r[1] && typeof r[1].origId === 'string' && typeof r[1].conversation === 'string' && typeof r[1].from === 'string') {
+          this.researchThreadMap.set(r[0], { origId: r[1].origId, conversation: r[1].conversation, from: r[1].from });
+        }
+      }
+    } catch { /* none yet */ }
+    return this.researchThreadMap;
+  }
+  private saveResearchThreads(): void {
+    const home = this.getHome();
+    if (!home) return;
+    try {
+      mkdirSync(privateRoot(home), { recursive: true });
+      this.atomicWriteJson(join(privateRoot(home), 'research-threads.json'), [...this.researchThreads]);
+    } catch (e) { console.error('[research] could not save its threads', e); }
+  }
+  /** The thread a message in Research's inbox belongs to, as its sender sees it. */
+  private shownConversation(owner: string, conversation: string): string {
+    return owner === RESEARCH_ID ? (this.researchThreads.get(conversation)?.conversation ?? conversation) : conversation;
+  }
   /** App and owner messages for Research whose check is under way. */
   private researchQueued = 0;
   private stampKey: Buffer | null = null;
@@ -2155,10 +2191,9 @@ export class HiveManager {
     } catch { return false; }
   }
 
-  /** The stamp on a message the app delivered to Research: an HMAC of its
-   *  whole content, so a stamped file can't be edited later. The key lives in
-   *  the app's private folder, which no agent opens. */
-  private researchStamp(m: Partial<HiveMessage>): string {
+  /** The key behind Research's stamps and thread ids, kept in the app's
+   *  private folder, which no agent opens. */
+  private researchKey(): Buffer {
     if (!this.stampKey) {
       const home = this.getHome();
       const file = home ? join(privateRoot(home), 'research-stamp.key') : null;
@@ -2173,9 +2208,15 @@ export class HiveManager {
         }
       }
     }
+    return this.stampKey!;
+  }
+
+  /** The stamp on a message the app delivered to Research: an HMAC of its
+   *  whole content, so a stamped file can't be edited later. */
+  private researchStamp(m: Partial<HiveMessage>): string {
     const { stamp: _stamp, ...fields } = m as Partial<HiveMessage> & { stamp?: unknown };
     const content = JSON.stringify(fields, Object.keys(fields).sort());
-    return createHmac('sha256', this.stampKey).update(content).digest('hex');
+    return createHmac('sha256', this.researchKey()).update(content).digest('hex');
   }
 
   /** Remove every file in Research's inbox the app did not deliver, so a
@@ -2191,8 +2232,12 @@ export class HiveManager {
       let ok = false;
       let m: Partial<HiveMessage> & { stamp?: unknown } = {};
       try {
-        m = JSON.parse(readFileSync(full, 'utf8')) as Partial<HiveMessage> & { stamp?: unknown };
-        ok = typeof m.id === 'string' && f === `${m.id}.json` && m.stamp === this.researchStamp(m);
+        const raw = readFileSync(full, 'utf8');
+        m = JSON.parse(raw) as Partial<HiveMessage> & { stamp?: unknown };
+        // The file must be exactly what deliver() wrote: a raw edit that
+        // parses the same (a duplicate key ahead of the real one) is swept too.
+        ok = typeof m.id === 'string' && f === `${m.id}.json` && m.stamp === this.researchStamp(m)
+          && raw === JSON.stringify(m, null, 2);
       } catch {
         if (this.stillBeingWritten(full)) continue;
       }
@@ -2296,9 +2341,12 @@ export class HiveManager {
     // reaches it as a query (a request would go to Michael as a teammate's
     // job hand off). The thread is the app's own: the sender's thread id is
     // agent written text the trust layer never read.
+    // The thread is one the app derives from the sender's, so follow ups in
+    // one thread reach Research in one thread too, without its id.
     const act: MessageAct = orig.act === 'inform' ? 'inform' : 'query';
-    const clean = this.normalize({ to: RESEARCH_ID, act, subject, body }, fromId);
-    const back = { origId: orig.id, conversation: orig.conversation };
+    const thread = `conv-r-${createHmac('sha256', this.researchKey()).update(`thread\n${fromId}\n${orig.conversation}`).digest('hex').slice(0, 16)}`;
+    const clean = this.normalize({ to: RESEARCH_ID, act, subject, body, conversation: thread }, fromId);
+    const back = { origId: orig.id, conversation: orig.conversation, from: fromId };
     this.researchThreads.set(clean.id, back);
     this.researchThreads.set(clean.conversation, back);
     while (this.researchThreads.size > HiveManager.RESEARCH_THREADS_KEEP * 2) {
@@ -2306,6 +2354,7 @@ export class HiveManager {
       if (first === undefined) break;
       this.researchThreads.delete(first);
     }
+    this.saveResearchThreads();
     this.researchCleared.add(clean.id);
     try { this.routeMessage(clean); } finally { this.researchCleared.delete(clean.id); }
   }
@@ -2331,11 +2380,17 @@ export class HiveManager {
     if (v.decision === 'deny') return deny();
     msg.subject = v.subject;
     msg.body = `${RESEARCH_REPLY_LABEL}\n\n${v.body}`;
-    // Back into the sender's own thread.
-    const back = (msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined) ?? this.researchThreads.get(msg.conversation);
-    if (back) {
-      if (msg.in_reply_to && this.researchThreads.has(msg.in_reply_to)) msg.in_reply_to = back.origId;
+    // Back into the sender's own thread, only when it goes back to that
+    // sender; Research knows only the clean copies' ids, so any other reply
+    // id it writes is dropped (ship review pass 3).
+    const byId = msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined;
+    const back = byId ?? this.researchThreads.get(msg.conversation);
+    if (back && back.from === msg.to) {
+      msg.in_reply_to = byId ? back.origId : null;
       msg.conversation = back.conversation;
+    } else {
+      msg.in_reply_to = null;
+      if (back) msg.conversation = `conv-${shortRand()}`;
     }
     const flagged = ('flagged' in v && v.flagged) || looksLikeInjection(`${v.subject}\n${v.body}`);
     this.routeMessage(msg);
@@ -2715,6 +2770,13 @@ export class HiveManager {
         if (!f.endsWith('.json')) continue;
         const full = join(outbox, f);
         try {
+          // A link is never read: the app would follow it to a file the agent
+          // can't open itself (ship review pass 3). The link is set aside.
+          if (!lstatSync(full).isFile()) {
+            this.appendLog({ kind: 'drop', reason: 'outbox-not-a-file', from: id, file: f });
+            this.archiveOutboxFile(full, join(outbox, '.sent'), `bad-${f}`);
+            continue;
+          }
           const raw = readFileSync(full, 'utf8');
           let partial: Partial<HiveMessage>;
           // A repaired file is archived as repaired, so everything that reads
@@ -3852,7 +3914,7 @@ export class HiveManager {
           if (!received && !sent) continue;
           seen.add(m.id);
           out.push({
-            id: m.id, conversation: m.conversation, from: m.from, to: m.to, act: m.act,
+            id: m.id, conversation: this.shownConversation(owner, m.conversation), from: m.from, to: m.to, act: m.act,
             subject: redactSecrets(m.subject), body: redactSecrets(m.body),
             requires_reply: !!m.requires_reply, direction: 'inbox', owner, archived,
             created_at: m.created_at, dir: received ? 'in' : 'out'
@@ -4790,8 +4852,11 @@ export class HiveManager {
     } catch { /* best-effort */ }
     // The owner's messages and dock state, committed before agents/human/ was
     // ignored, leave the index (the files stay on disk).
-    const owner = this.git(['ls-files', '--', 'agents/human'], root);
-    if (owner.ok && owner.out.trim()) this.git(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', 'agents/human'], root);
+    // Research's folder likewise (ship review pass 3).
+    for (const dir of ['agents/human', `agents/${RESEARCH_ID}`]) {
+      const tracked = this.git(['ls-files', '--', dir], root);
+      if (tracked.ok && tracked.out.trim()) this.git(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', dir], root);
+    }
     // Probe before mutating: `rm --cached` on a clean repo would still rewrite
     // the index on every launch, and this runs inside the commit retry path.
     const tracked = this.git(['ls-files', '--', 'agents/*/.codex'], root);
@@ -5123,11 +5188,14 @@ process.stdin.on('end', () => {
   const tool = String(payload.tool_name || '');
   const mcp = payload.hook_event_name === 'PreToolUse' && (tool.indexOf('mcp__') === 0 || ${JSON.stringify([...MCP_RESOURCE_TOOLS])}.indexOf(tool) >= 0);
   const web = payload.hook_event_name === 'PreToolUse' && ${JSON.stringify([...WEB_TOOLS])}.indexOf(tool) >= 0 && me !== ${JSON.stringify(RESEARCH_ID)};
+  // Research's file tools have the hook as their only wall: every one of its
+  // calls fails closed when the app can't answer (ship review pass 3).
+  const research = payload.hook_event_name === 'PreToolUse' && me === ${JSON.stringify(RESEARCH_ID)};
   // An MCP call too big for one hook frame (a long document to write) is sent
   // with only its short input fields: the connector, mail and QuickBooks gates
   // decide on the tool name, server and mailbox, never the body (owner, 2026-10-02).
   let line = JSON.stringify(payload);
-  if (mcp && Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
+  if ((mcp || research) && Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
     const small = {};
     const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
     for (const k of Object.keys(input)) {
@@ -5139,12 +5207,12 @@ process.stdin.on('end', () => {
     line = JSON.stringify(payload);
   }
   const fail = () => {
-    if (mcp || web) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: mcp ? ${JSON.stringify(CONNECTOR_UNDECIDED)} : ${JSON.stringify(WEB_SETTINGS_UNREADABLE)} } }));
+    if (mcp || web || research) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: mcp ? ${JSON.stringify(CONNECTOR_UNDECIDED)} : web ? ${JSON.stringify(WEB_SETTINGS_UNREADABLE)} : ${JSON.stringify(RESEARCH_UNCHECKED_TOOL)} } }));
     process.exit(0);
   };
   if (!sock) { fail(); return; }
   let resp = '';
-  const done = () => { if (!resp && (mcp || web)) { fail(); return; } if (resp) process.stdout.write(resp); process.exit(0); };
+  const done = () => { if (!resp && (mcp || web || research)) { fail(); return; } if (resp) process.stdout.write(resp); process.exit(0); };
   const c = net.createConnection(sock, () => c.write(line + '\\n'));
   c.setEncoding('utf8');
   c.on('data', (d) => { resp += d; });
