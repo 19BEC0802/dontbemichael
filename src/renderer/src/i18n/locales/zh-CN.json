@@ -2225,5 +2225,9 @@
   "markdown": {
     "opensInBrowser": "在浏览器中打开",
     "opensInEmail": "打开邮件应用"
+  },
+  "crash": {
+    "line": "此页面出了点问题。",
+    "reload": "重新加载"
   }
 }

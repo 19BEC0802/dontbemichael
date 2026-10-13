@@ -2225,5 +2225,9 @@
   "markdown": {
     "opensInBrowser": "opens in your browser",
     "opensInEmail": "opens your email app"
+  },
+  "crash": {
+    "line": "Something went wrong on this screen.",
+    "reload": "Reload"
   }
 }

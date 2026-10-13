@@ -2225,5 +2225,9 @@
   "markdown": {
     "opensInBrowser": "يفتح في متصفحك",
     "opensInEmail": "يفتح تطبيق البريد"
+  },
+  "crash": {
+    "line": "حدث خطأ في هذه الشاشة.",
+    "reload": "أعد التحميل"
   }
 }
