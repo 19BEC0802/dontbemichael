@@ -2205,5 +2205,25 @@
     "info": "Your Claude plan reached its usage limit, so the team cannot work. Scheduled jobs still go out on time and wait in the inbox until the break ends. The team starts again on its own. A bigger Claude plan means fewer breaks.",
     "chip": "On a break until {{time}}",
     "chipUnknown": "On a break"
+  },
+  "officeStop": {
+    "title": "The office stopped",
+    "credit": "Your Anthropic account is out of credit.",
+    "creditAgain": "Still out of credit. Credit can take a few minutes to show.",
+    "signIn": "Your Claude account needs you to sign in again.",
+    "key": "The Anthropic API key stopped working.",
+    "checking": "Checking that work can start",
+    "addCredit": "Add credit",
+    "tryAgain": "Try again",
+    "signInAction": "Sign in",
+    "changeKey": "Change key",
+    "chip": "Office stopped",
+    "creditInfo": "Claude stopped the whole team because the Anthropic account has no credit left. Add credit on the Anthropic website, then press Try again. The office also checks again on its own every 15 minutes. Scheduled jobs wait in the inbox until then.",
+    "signInInfo": "Claude stopped the whole team because the Claude sign in expired. Sign in again and the team carries on where it stopped. Scheduled jobs wait in the inbox until then.",
+    "keyInfo": "Claude stopped the whole team because the Anthropic API key stopped working. Paste a new key and the team restarts and carries on. Scheduled jobs wait in the inbox until then."
+  },
+  "markdown": {
+    "opensInBrowser": "opens in your browser",
+    "opensInEmail": "opens your email app"
   }
 }

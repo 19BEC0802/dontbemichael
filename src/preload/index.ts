@@ -1717,6 +1717,16 @@ const api = {
   cliUpdateCurrent: (): Promise<CliUpdateStatus | null> => ipcRenderer.invoke('cliUpdate:current'),
   /** The office break (issue 124): null while the office works. */
   officeBreakView: (): Promise<OfficeBreakView | null> => ipcRenderer.invoke('office:breakView'),
+  /** Try again on a stop card (office-stopped-account.md): check now. */
+  officeRetry: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('office:retry'),
+  /** Add credit: main opens the Anthropic billing page (a fixed address). */
+  officeAddCredit: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('office:addCredit'),
+  /** A new key replaced one that stopped working: these Claude terminals restart, resumed. */
+  onOfficeRestartClaude: (cb: (ptyIds: string[]) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, ids: unknown): void => cb(Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : []);
+    ipcRenderer.on('office:restartClaude', listener);
+    return () => ipcRenderer.removeListener('office:restartClaude', listener);
+  },
   onOfficeBreak: (cb: (view: OfficeBreakView | null) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, payload: OfficeBreakView | null) => cb(payload);
     ipcRenderer.on('office:break', listener);

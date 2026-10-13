@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { ownerLedger } from '../shared/taskLedger';
+import { ownValue } from '../shared/ownValue';
 import { execFile, spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
@@ -51,7 +52,7 @@ import { linkWorktreeDeps, unlinkWorktreeDeps } from './worktreeDeps';
 import { HiveManager, type AgentMeta, type HiveMessage, type HiveTask } from './hive';
 import { HookServer, type PlanSignal } from './hooks';
 import { OfficeBreak, type OfficeBreakState } from './officeBreak';
-import { heldByBreak } from '../shared/officeBreak';
+import { heldByBreak, type OfficeStopReason } from '../shared/officeBreak';
 import { loadBundledPacks, packsResourceDir } from './packs';
 import { businessFolderRoot, ensureFolder, safeFolderName } from './agentFolders';
 import { CircuitBreaker, type BreakerInput } from './breaker';
@@ -1803,9 +1804,49 @@ function armOfficeBreak(): void {
   if (officeBreakTimer) clearTimeout(officeBreakTimer);
   officeBreakTimer = null;
   const s = officeBreak.current();
-  if (!s) return;
-  officeBreakTimer = setTimeout(runOfficeBreakTick, Math.max(1_000, s.due - Date.now()));
+  // A wait for the owner only (a key that stopped working) has no timer.
+  if (!s || (s.phase === 'waiting' && s.manual)) return;
+  officeBreakTimer = setTimeout(runOfficeBreakTick, Math.min(2_147_483_647, Math.max(1_000, s.due - Date.now())));
   officeBreakTimer.unref?.();
+}
+
+/** What the office says about a stop, per reason (eng R1,
+ *  docs/designs/office-stopped-account.md). Agents get today's instruction
+ *  whatever the reason: carry on, and do not repeat finished work. The owner's
+ *  desktop notes are English, like every note main sends; the card is
+ *  translated. */
+interface StopWords { start: string; subject: string; check: string; carryOn: string; over: string }
+function stopWords(reason: OfficeStopReason, until: number | null): StopWords {
+  const carry = 'Continue the task you were working on when it stopped; do not repeat work that is already done.';
+  if (reason === 'credit') return {
+    start: 'The office stopped. Your Anthropic account is out of credit.',
+    subject: 'Credit may be back',
+    check: 'The office stopped because the Anthropic account was out of credit, and work may start again now. Carry on with what was waiting.',
+    carryOn: `The Anthropic account has credit again. ${carry}`,
+    over: 'The office is back at work.'
+  };
+  if (reason === 'signin') return readConfig().claudeAuth === 'apiKey' ? {
+    start: 'The office stopped. The Anthropic API key stopped working.',
+    subject: 'New API key',
+    check: 'The office stopped because the Anthropic API key stopped working. A new key is in place, so work may start again now. Carry on with what was waiting.',
+    carryOn: `The Anthropic API key works again. ${carry}`,
+    over: 'The office is back at work.'
+  } : {
+    start: 'The office stopped. Your Claude account needs you to sign in again.',
+    subject: 'Signed in again',
+    check: 'The office stopped because the Claude sign in had expired, and work may start again now. Carry on with what was waiting.',
+    carryOn: `Claude is signed in again. ${carry}`,
+    over: 'The office is back at work.'
+  };
+  return {
+    start: until
+      ? `The office is on a break. Your Claude plan reached its limit. Work starts again around ${breakClock(until)}.`
+      : 'The office is on a break. Your Claude plan reached its limit. Work starts again when it resets.',
+    subject: 'Usage limit reset',
+    check: 'The Claude plan\'s usage limit should have reset, so the office\'s break may be over. Carry on with what was waiting.',
+    carryOn: 'The Claude plan\'s usage limit has reset. Continue the task you were working on when it was reached; do not repeat work that is already done.',
+    over: 'The break is over. The team is back at work.'
+  };
 }
 
 /** Team member names for Michael, his own id left out. */
@@ -1826,14 +1867,13 @@ function onPlanSignal(signal: PlanSignal): void {
     if (ended) endOfficeBreak(ended);
     return;
   }
-  const step = officeBreak.limitReached(signal.agentId);
+  // A key that stopped working cannot fix itself: that stop waits for the
+  // owner's new key, with no automatic recheck (eng R2).
+  const retry = !(signal.reason === 'signin' && readConfig().claudeAuth === 'apiKey');
+  const step = officeBreak.limitReached(signal.agentId, signal.reason, retry);
   const view = officeBreak.view();
-  try { hive.appendLog({ kind: 'office-break', step, agentId: signal.agentId, until: view?.until ?? null }); } catch { /* best-effort */ }
-  if (step === 'started') {
-    ownerToast(michaelName(), view?.until
-      ? `The office is on a break. Your Claude plan reached its limit. Work starts again around ${breakClock(view.until)}.`
-      : 'The office is on a break. Your Claude plan reached its limit. Work starts again when it resets.');
-  }
+  try { hive.appendLog({ kind: 'office-break', step, agentId: signal.agentId, reason: view?.reason ?? signal.reason, until: view?.until ?? null }); } catch { /* best-effort */ }
+  if (step === 'started' && view) ownerToast(michaelName(), stopWords(view.reason, view.until).start);
   armOfficeBreak();
   publishOfficeBreak();
 }
@@ -1848,20 +1888,34 @@ function runOfficeBreakTick(): void {
   const r = officeBreak.tick();
   if (!r) { armOfficeBreak(); return; }
   if (r.step === 'over') { endOfficeBreak(r.ended); return; }
-  // The reset time has passed: delivery is open again, and Michael's turn on
-  // this message shows whether the plan answers.
-  const cut = cutOffNames(officeBreak.current()?.cutOff ?? []);
+  sendOfficeCheck();
+}
+
+/** Delivery is open again (the reset time passed, the 15 minute recheck, or
+ *  the owner acted): Michael's turn on this message shows whether Claude
+ *  answers. Nothing restarts and nobody signs in again (owner, B1). */
+function sendOfficeCheck(): void {
+  const s = officeBreak.current();
+  const cut = cutOffNames(s?.cutOff ?? []);
+  const words = stopWords(s?.reason ?? 'limit', s?.until ?? null);
   try {
     if (hive.enabled()) {
       hive.send({
-        to: 'god', act: 'inform', subject: 'Usage limit reset',
-        body: `The Claude plan's usage limit should have reset, so the office's break may be over. Carry on with what was waiting.${cut ? ` ${cut} stopped mid task when the limit was reached; they are told to carry on once a turn goes through.` : ''}`
+        to: 'god', act: 'inform', subject: words.subject,
+        body: `${words.check}${cut ? ` ${cut} stopped mid task; they are told to carry on once a turn goes through.` : ''}`
       }, 'system');
     }
-    hive.appendLog({ kind: 'office-break', step: 'check' });
+    hive.appendLog({ kind: 'office-break', step: 'check', reason: s?.reason ?? 'limit' });
   } catch (e) { console.error('[office break] check', e); }
   armOfficeBreak();
   publishOfficeBreak();
+}
+
+/** The owner acted on a stop: Try again, a finished sign in, a saved key. */
+function ownerRetryOffice(): boolean {
+  if (!officeBreak.ownerRetry()) return false;
+  sendOfficeCheck();
+  return true;
 }
 
 /** The plan answers again: tell the team members who were cut off to carry on
@@ -1874,21 +1928,26 @@ function endOfficeBreak(ended: OfficeBreakState): void {
     const reg = hive.registry();
     const godId = reg.godId ?? 'god';
     const cutOff = [...ended.cutOff].sort((a, b) => (a === godId ? -1 : b === godId ? 1 : 0));
+    const words = stopWords(ended.reason, null);
     if (hive.enabled()) {
       for (const id of cutOff) {
-        hive.send({
-          to: id, act: 'inform', subject: 'Usage limit reset',
-          body: 'The Claude plan\'s usage limit has reset. Continue the task you were working on when it was reached; do not repeat work that is already done.'
-        }, 'system');
+        hive.send({ to: id, act: 'inform', subject: words.subject, body: words.carryOn }, 'system');
       }
     }
-    hive.appendLog({ kind: 'office-break', step: 'over', cutOff: cutOff.length });
+    hive.appendLog({ kind: 'office-break', step: 'over', reason: ended.reason, cutOff: cutOff.length });
   } catch (e) { console.error('[office break] end', e); }
-  ownerToast(michaelName(), 'The break is over. The team is back at work.');
+  ownerToast(michaelName(), stopWords(ended.reason, null).over);
   publishOfficeBreak();
 }
 
 ipcMain.handle('office:breakView', () => officeBreak.view());
+// Try again on the stop card: check now instead of at the next recheck.
+ipcMain.handle('office:retry', () => ({ ok: ownerRetryOffice() }));
+/** Where the owner adds Anthropic credit (checked 2026-10-12: the old
+ *  console.anthropic.com address redirects here). Fixed in main: the page
+ *  never sends an address to open. */
+const ANTHROPIC_BILLING_URL = 'https://platform.claude.com/settings/billing';
+ipcMain.handle('office:addCredit', () => { void shell.openExternal(ANTHROPIC_BILLING_URL); return { ok: true }; });
 
 /** One circuit-breaker beat: pull a fresh usage sample per active agent, append
  *  it to the durable cost ledger (the SOLE durable cost store), tick the breaker,
@@ -3873,7 +3932,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const PREFIX_BACKEND: Record<string, string> = {
       anthropic: 'anthropic', openai: 'openai', google: 'google', gemini: 'google', groq: 'groq', openrouter: 'openrouter'
     };
-    const scoped = PREFIX_BACKEND[prefix];
+    const scoped = ownValue(PREFIX_BACKEND, prefix);
     const backends = scoped ? [scoped] : Object.keys(BACKEND_KEY_ENV);
     for (const backend of backends) {
       const key = integrations.getSecret(providerKeyRef(backend));
@@ -5524,8 +5583,24 @@ ipcMain.handle('engineSetup:useApiKey', async (_e, raw: unknown): Promise<{ ok: 
   if (!saved.ok) return { ok: false, error: 'store' };
   writeConfig({ claudeAuth: 'apiKey' });
   try { liveWebContents()?.send('engineSetup:changed', { id: 'api-key', exitCode: null }); } catch { /* window gone */ }
+  // A key that stopped working was replaced (office-stopped-account.md, B1).
+  // Running Claude terminals got the old key in their environment when they
+  // started (claudeAuthEnv), so they restart, resumed; the office checks again.
+  if (officeBreak.view()?.reason === 'signin') {
+    try { liveWebContents()?.send('office:restartClaude', runningClaudePtys()); } catch { /* window gone */ }
+    ownerRetryOffice();
+  }
   return { ok: true };
 });
+
+/** The terminals of agents on Claude that are running now. */
+function runningClaudePtys(): string[] {
+  const out: string[] = [];
+  for (const [ptyId, agentId] of ptyToAgent) {
+    if (onClaudePlan(agentId)) out.push(ptyId);
+  }
+  return out;
+}
 
 // ─── IPC: setup catalog (which external tools are actually here) ────────────
 /**

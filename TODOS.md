@@ -32,7 +32,7 @@
 
 **Why:** The secret store refuses to write without OS encryption — "a secret is never written unless `safeStorage.isEncryptionAvailable()`" (`src/main/integrations.ts:12`, enforced at `:111`). That is the correct security behavior, but no screen explains it. On Linux without a keyring, or a Mac with a damaged keychain, the owner clicks Connect and nothing happens.
 
-**Context:** Surfaced by the outside-voice pass during the 2026-09-15 engineering review. The onboarding failure table in the design doc covers cancelled sign-ins, wrong accounts, denied scopes and expired tokens, but not this one. Cheapest fix: check availability before opening the sign-in window in the Connector Center, say what is wrong and what to do, and gate any credential write on the same check. One test for the unavailable case. Mailboxes are done (PR #136): `canStoreSecrets` is checked before the login test, and `cannotStoreReason` in `src/main/mail.ts` says what to do on each platform. Still open: connected apps in the Connector Center and saved AI keys, which can reuse both.
+**Context:** Surfaced by the outside-voice pass during the 2026-09-15 engineering review. The onboarding failure table in the design doc covers cancelled sign-ins, wrong accounts, denied scopes and expired tokens, but not this one. Cheapest fix: check availability before opening the sign-in window in the Connector Center, say what is wrong and what to do, and gate any credential write on the same check. One test for the unavailable case. Mailboxes are done (PR #136): `canStoreSecrets` is checked before the login test, and `cannotStoreReason` in `src/main/mail.ts` says what to do on each platform. Connected apps in the Connector Center are done (agentvivekkumar/dontbemichael#211, by DavidFHCh): the save checks first, saves nothing, and shows the same advice. Still open: saved AI keys (`integrations.setSecret` for a provider key in `src/main/index.ts`, the backend key and the Anthropic key saves), which can reuse both.
 
 **Effort:** S
 **Priority:** P2
@@ -112,26 +112,7 @@
 **Effort:** M
 **Priority:** P2
 
-### Page a search without searching again
-
-**What:** Each search page re-runs the full IMAP SEARCH (ALL with no filters) and sorts every UID. Cache the UID list per mailbox and query for a short time, or default an unfiltered search to a recent window.
-
-**Effort:** S
-**Priority:** P2
-
 ## Mail approvals and Michael replies (deferred from ship of feat/mail-approvals-michael-replies, 2026-10-07)
-
-### Keep the approvals file in memory
-
-**What:** Load mail-proposals.json once, keep it in memory, write through with an atomic rename, and read again only when its time stamp changes.
-
-**Why:** Every approval call reads and parses the whole file several times, and it now also holds up to 500 send records per Send only member.
-
-**Context:** Deferred by the owner (ship D5). `src/main/mailApprovals.ts` `load`/`save`; fire `changed()` only when proposals or standing approvals change.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
 
 ### Rebuild Michael's owner requests from open items only
 
@@ -544,6 +525,20 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 **Effort:** M
 **Priority:** P2
 **Depends on:** None
+
+### Research agent and data privacy guard (issue #230)
+
+**What:** No agent reaches the internet except an optional Research agent (off by default, turned on in Settings). Members ask Research through the hive; a guard checks every message to Research against the owner's data classes (patterns plus a quick no-tools AI check, fails closed) and returns refused ones to the sender only. A Data privacy page in Settings lists the classes, seeded with safe classes Allowed and sensitive ones Private.
+
+**Why:** Owners want research to stay possible without any agent that holds private data (HubSpot, mailboxes, finance, the board) sending it to the web.
+
+**Context:** Design and eng review in `docs/designs/research-agent-privacy.md` (owner direction and decisions D1 to D7, 2026-10-13). Research is walled off from the hive, business folder, palace and company knowledge (sandbox deny rules), excluded from broadcasts; other members cannot write its inbox, and the app sweeps any message it did not deliver; its replies are screened as outside text. Known limit: on Windows (no sandbox, #187) Research can be turned on with a warning, but its shell is not confined there. Michael's shell is not limited. Replaces the per member Sites code applied uncommitted on mit/named-links (keep the hook gate, `sandbox.network` plumbing and restart reason; remove the Sites group). Upgrade impact: every office loses web research until the owner turns Research on.
+
+**Status (2026-10-13):** built uncommitted on mit/named-links after the design review (D1 to D23): T1 to T8 and DT1 to DT6, tests green. Left before ship: the two live checks on a Mac with the packaged app (Research cannot read `tasks.json`; a member cannot write Research's inbox), and a look at the Settings section, the Team step row and the update card in the app.
+
+**Effort:** L
+**Priority:** P1
+**Depends on:** nothing.
 
 ## Schedules
 

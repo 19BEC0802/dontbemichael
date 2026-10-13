@@ -18,7 +18,7 @@
  * the app checks again every RETRY_MS. The state is saved, so a restart during
  * a break still shows it. Pure apart from the injected clock and storage.
  */
-import type { OfficeBreakView } from '../shared/officeBreak';
+import type { OfficeBreakView, OfficeStopReason } from '../shared/officeBreak';
 
 /** Wait after the reset before checking, so Claude Code's own continue (when
  *  the owner turned it on) runs first and is not doubled. */
@@ -42,7 +42,17 @@ export interface OfficeBreakState {
    *  theirs that finishes shows the plan answers. Any other turn that finishes
    *  while waiting was already on its way and ends nothing. */
   prompted: string[];
+  /** Why the office stopped (docs/designs/office-stopped-account.md). A state
+   *  saved by an older build has none and reads as `limit`. */
+  reason: OfficeStopReason;
+  /** A check found the same stop still on: the card says "still out". */
+  again: boolean;
+  /** No automatic recheck: only the owner's step ends the wait (an API key
+   *  that stopped working cannot fix itself). */
+  manual: boolean;
 }
+
+const REASONS: readonly OfficeStopReason[] = ['limit', 'credit', 'signin'];
 
 type Window = { used_percentage?: unknown; resets_at?: unknown };
 
@@ -86,7 +96,10 @@ export class OfficeBreak {
         ? {
             ...s, until: typeof s.until === 'number' ? s.until : null,
             cutOff: Array.isArray(s.cutOff) ? s.cutOff : [],
-            prompted: Array.isArray(s.prompted) ? s.prompted : []
+            prompted: Array.isArray(s.prompted) ? s.prompted : [],
+            reason: REASONS.includes(s.reason) ? s.reason : 'limit',
+            again: s.again === true,
+            manual: s.manual === true
           }
         : null;
     }
@@ -95,7 +108,8 @@ export class OfficeBreak {
 
   /** The view the owner sees, or null when the office is working. */
   view(): OfficeBreakView | null {
-    return this.state ? { until: this.state.until, checking: this.state.phase === 'checking' } : null;
+    const s = this.state;
+    return s ? { until: s.until, checking: s.phase === 'checking', reason: s.reason, again: s.again } : null;
   }
 
   /** The full state, for the timer and for tests. */
@@ -116,21 +130,45 @@ export class OfficeBreak {
     if (at === null) return false;
     this.lastReset = at;
     const s = this.state;
-    if (!s || s.phase !== 'waiting' || s.until !== null) return false;
+    // Only the plan limit has a reset time; a credit or signin stop never borrows one.
+    if (!s || s.phase !== 'waiting' || s.until !== null || s.reason !== 'limit') return false;
     this.set({ ...s, until: at, due: at + RESET_GRACE_MS });
     return true;
   }
 
-  /** A Claude turn ended on the usage limit. Returns 'started' for a new
-   *  break, 'again' when a check found the limit still on, else 'held'. */
-  limitReached(agentId: string): 'started' | 'again' | 'held' {
+  /** A Claude turn ended on a stop: the usage limit, no credit, or a sign in
+   *  that no longer works. Returns 'started' for a new stop (or a new reason),
+   *  'again' when a check found the same stop still on, else 'held'. `retry`
+   *  false waits for the owner only (a key that stopped working). */
+  limitReached(agentId: string, reason: OfficeStopReason = 'limit', retry = true): 'started' | 'again' | 'held' {
     const now = this.now();
-    const until = this.lastReset !== null && this.lastReset > now ? this.lastReset : null;
-    const due = until !== null ? until + RESET_GRACE_MS : now + RETRY_MS;
     const prev = this.state;
     const cutOff = prev ? (prev.cutOff.includes(agentId) ? prev.cutOff : [...prev.cutOff, agentId]) : [agentId];
+    const prompted = prev ? prev.prompted.filter((id) => id !== agentId) : [];
+    // A stop only the owner can fix is never hidden behind a plan limit: a
+    // limit during it only adds the agent to the cut off list (eng R4).
+    if (prev && prev.reason !== 'limit' && reason === 'limit') {
+      this.set({ ...prev, cutOff, prompted });
+      return 'held';
+    }
+    if (reason !== 'limit') {
+      const same = prev?.reason === reason ? prev : null;
+      if (same && same.phase === 'waiting') {
+        this.set({ ...same, cutOff, prompted, manual: same.manual || !retry });
+        return 'held';
+      }
+      // No reset time: the office checks again every RETRY_MS (eng R2), or
+      // only on the owner's step.
+      this.set({
+        phase: 'waiting', since: same ? same.since : now, until: null, due: now + RETRY_MS,
+        cutOff, prompted, reason, again: !!same, manual: !retry
+      });
+      return same ? 'again' : 'started';
+    }
+    const until = this.lastReset !== null && this.lastReset > now ? this.lastReset : null;
+    const due = until !== null ? until + RESET_GRACE_MS : now + RETRY_MS;
     if (!prev) {
-      this.set({ phase: 'waiting', since: now, until, due, cutOff, prompted: [] });
+      this.set({ phase: 'waiting', since: now, until, due, cutOff, prompted: [], reason: 'limit', again: false, manual: false });
       return 'started';
     }
     const again = prev.phase === 'checking';
@@ -138,8 +176,7 @@ export class OfficeBreak {
     // pulls it in (another window may still be full).
     const nextUntil = again ? until : (until !== null && (prev.until === null || until > prev.until) ? until : prev.until);
     const nextDue = again ? due : (nextUntil !== null ? Math.max(prev.due, nextUntil + RESET_GRACE_MS) : prev.due);
-    const prompted = prev.prompted.filter((id) => id !== agentId);
-    this.set({ ...prev, phase: 'waiting', until: nextUntil, due: nextDue, cutOff, prompted });
+    this.set({ ...prev, phase: 'waiting', until: nextUntil, due: nextDue, cutOff, prompted, again: again || prev.again });
     return again ? 'again' : 'held';
   }
 
@@ -168,11 +205,21 @@ export class OfficeBreak {
     return ended;
   }
 
+  /** The owner acted (Try again, a finished sign in, a saved key): check
+   *  now, the way the timer would. False when nothing is waiting. */
+  ownerRetry(): boolean {
+    const s = this.state;
+    if (!s || s.phase !== 'waiting') return false;
+    this.set({ ...s, phase: 'checking', due: this.now() + CHECK_TIMEOUT_MS });
+    return true;
+  }
+
   /** The timer ran out. Waiting moves to checking ('check'); a check that
-   *  heard nothing ends the break ('over', with the ended state). */
+   *  heard nothing ends the break ('over', with the ended state). A wait for
+   *  the owner only never moves on its own. */
   tick(): { step: 'check' } | { step: 'over'; ended: OfficeBreakState } | null {
     const s = this.state;
-    if (!s || this.now() < s.due) return null;
+    if (!s || (s.phase === 'waiting' && s.manual) || this.now() < s.due) return null;
     if (s.phase === 'waiting') {
       this.set({ ...s, phase: 'checking', due: this.now() + CHECK_TIMEOUT_MS });
       return { step: 'check' };

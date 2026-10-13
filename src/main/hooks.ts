@@ -88,6 +88,7 @@ import { isQuickBooksConnectorTool, isQuickBooksResourceCall, quickbooksAccess, 
 import { handoffContext } from '../shared/safeClear';
 import { ownerQuestionsContext, ownerRequestsContext, stuckCardsContext } from '../shared/ownerRequests';
 import { lastAssistantText } from './transcriptText';
+import { stopReasonFor, type OfficeStopReason } from '../shared/officeBreak';
 
 /** An MCP tool, or Claude Code's tools for MCP resources. */
 function isMcpCall(tool: string | undefined): boolean {
@@ -111,7 +112,9 @@ interface HookPayload {
   /** Status-line payloads only, on a Claude plan: each usage window's fill and
    *  reset time (`five_hour`, `seven_day`, ...). */
   rate_limits?: unknown;
-  /** StopFailure only: why the turn ended (`rate_limit` is the usage limit). */
+  /** StopFailure only: why the turn ended (`rate_limit` is the usage limit,
+   *  `billing_error` no credit, `authentication_failed` a sign in or key that
+   *  no longer works). */
   error?: string;
   cwd?: string;
   tool_name?: string;
@@ -135,7 +138,7 @@ interface HookPayload {
 /** What the hook stream tells the office break (src/main/officeBreak.ts). */
 export type PlanSignal =
   | { kind: 'limits'; agentId: string; rateLimits: unknown }
-  | { kind: 'limit'; agentId: string }
+  | { kind: 'limit'; agentId: string; reason: OfficeStopReason }
   | { kind: 'prompt'; agentId: string }
   | { kind: 'turn'; agentId: string };
 
@@ -393,10 +396,12 @@ export class HookServer {
     }
 
     // A turn that ended on an API error (issue 124). Claude Code ignores the
-    // answer; the usage limit starts the office break. Registered with the
-    // `rate_limit` matcher, and checked again here.
+    // answer; the usage limit, no credit and a sign in that no longer works
+    // stop the office (docs/designs/office-stopped-account.md). Registered
+    // with STOP_FAILURE_MATCHER, and checked again here.
     if (event === 'StopFailure') {
-      if (agentId && !subagent && p.error === 'rate_limit') this.plan({ kind: 'limit', agentId });
+      const reason = stopReasonFor(p.error);
+      if (agentId && !subagent && reason) this.plan({ kind: 'limit', agentId, reason });
       return {};
     }
     if (event === 'UserPromptSubmit' && agentId && !subagent) this.plan({ kind: 'prompt', agentId });

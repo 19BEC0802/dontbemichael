@@ -686,6 +686,14 @@ export function useHive(config: HarnessConfig | null): void {
   useEffect(() => {
     return window.cth.onHiveHookEvent((e) => {
       if (!e.agentId) return;
+      // A new Claude process (a start or a --resume, not a /compact or /clear)
+      // has not been told about the mail already in its inbox: the nudge typed
+      // into the process it replaced (signed out, wedged, killed) went with it.
+      // Forget what this agent was nudged about, so the inbox wake (#3) names
+      // that mail again. Without it, Michael restarted after the owner saved
+      // an API key sat idle: the office open standup had been nudged into a
+      // signed out Claude and was never named again.
+      if (e.event === 'SessionStart' && (e.source === 'startup' || e.source === 'resume')) delete nudged.current[e.agentId];
       if (e.event === 'Notification' || e.event === 'PermissionRequest') promptSubmits.noteAttention(e.agentId);
       const { updateAgent, agents } = useStore.getState();
       const self = agents.find((a) => a.id === e.agentId);
@@ -1358,7 +1366,12 @@ export function useHive(config: HarnessConfig | null): void {
       }
     };
     window.addEventListener(ENGINE_READY_EVENT, onReady);
-    return () => window.removeEventListener(ENGINE_READY_EVENT, onReady);
+    // A new API key replaced one that stopped working (office-stopped-account.md):
+    // the running Claude terminals restart, resumed, the same way.
+    const offKey = window.cth.onOfficeRestartClaude?.((restart) => {
+      onReady(new CustomEvent(ENGINE_READY_EVENT, { detail: { restart } }));
+    });
+    return () => { window.removeEventListener(ENGINE_READY_EVENT, onReady); offKey?.(); };
   }, [config?.onboardingComplete]);
 
   // 8) Restart to apply (docs/designs/multi-mailbox.md E2 + E5, and
