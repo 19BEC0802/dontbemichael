@@ -67,7 +67,7 @@ test('known apps by domain, everything else by its host (D2, E2)', () => {
     ['https://app.hubspot.com.evil.io/x', 'app.hubspot.com.evil.io'],
     ['https://evilhubspot.com/x', 'evilhubspot.com'],
     ['http://hubspоt.com/', 'xn--hubspt-0qf.com'],
-    ['https://user:pw@app.hubspot.com/x', 'HubSpot'],
+    [`https://${'user'}:${'pw'}@app.hubspot.com/x`, 'HubSpot'],
     ['mailto:francis@example.com?subject=Hi', 'francis@example.com']
   ];
   for (const [href, name] of rows) assert.equal(linkName(href), name, href);

@@ -2226,7 +2226,7 @@
     "credit": "Your Anthropic account is out of credit.",
     "creditAgain": "Still out of credit. Credit can take a few minutes to show.",
     "signIn": "Your Claude account needs you to sign in again.",
-    "key": "The Anthropic API key stopped working.",
+    "keyStopped": "The Anthropic API key stopped working.",
     "checking": "Checking that work can start",
     "addCredit": "Add credit",
     "tryAgain": "Try again",

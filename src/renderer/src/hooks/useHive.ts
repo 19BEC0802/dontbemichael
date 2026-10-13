@@ -346,7 +346,12 @@ async function startBusinessTeam(config: HarnessConfig): Promise<void> {
   const team = config.businessTeam ?? [];
   // After the first run, only the members that failed to start are tried.
   const retry = config.businessTeamStarted ? new Set(config.businessTeamRetry ?? []) : undefined;
-  if (team.length === 0 || retry?.size === 0) return;
+  // Research, when the owner picked it in the Team step (issue #230): started
+  // with the first run even when no other member was picked.
+  if (team.length === 0 || retry?.size === 0) {
+    if (!retry) await startPickedResearch(config);
+    return;
+  }
 
   const { packs, core } = await window.cth.packsList();
   // The business's pack; when its type is unknown (an office continued from its
@@ -444,11 +449,14 @@ async function startBusinessTeam(config: HarnessConfig): Promise<void> {
     }
   }
   await window.cth.updateConfig({ businessTeamStarted: true, businessTeamRetry: failed }).catch(() => undefined);
-  // Research, when the owner picked it in the Team step (issue #230).
-  if (!retry && config.research?.on && !useStore.getState().agents.some((a) => a.id === RESEARCH_ID)) {
-    const r = await startResearch(config);
-    if (!r.ok) console.warn(`[team] Research did not start: ${r.error ?? 'unknown error'}`);
-  }
+  if (!retry) await startPickedResearch(config);
+}
+
+/** Research, when the owner picked it in the Team step (issue #230). */
+async function startPickedResearch(config: HarnessConfig): Promise<void> {
+  if (!config.research?.on || useStore.getState().agents.some((a) => a.id === RESEARCH_ID)) return;
+  const r = await startResearch(config);
+  if (!r.ok) console.warn(`[team] Research did not start: ${r.error ?? 'unknown error'}`);
 }
 
 /**

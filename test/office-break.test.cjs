@@ -353,7 +353,7 @@ test('the office says the real cause to the owner, Michael and the team, and res
   assert.doesNotMatch(card.slice(card.indexOf('const stopCard'), card.indexOf('function LimitBreakCard')), /border(Left|InlineStart)|inset 3px/, 'no side rule (design D5)');
   for (const loc of ['en', 'zh-CN', 'ar']) {
     const j = JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`));
-    for (const k of ['title', 'credit', 'creditAgain', 'signIn', 'key', 'checking', 'addCredit', 'tryAgain', 'signInAction', 'changeKey', 'chip', 'creditInfo', 'signInInfo', 'keyInfo']) {
+    for (const k of ['title', 'credit', 'creditAgain', 'signIn', 'keyStopped', 'checking', 'addCredit', 'tryAgain', 'signInAction', 'changeKey', 'chip', 'creditInfo', 'signInInfo', 'keyInfo']) {
       assert.equal(typeof j.officeStop[k], 'string', `${loc} ${k}`);
     }
     assert.doesNotMatch(JSON.stringify(j.officeStop), /[–—]| - /, `${loc}: no dashes`);

@@ -82,7 +82,7 @@ function OfficeStopCard({ view }: { view: OfficeBreakView }) {
   const title = t('officeStop.title');
   const line = view.checking ? null
     : credit ? (view.again ? t('officeStop.creditAgain') : t('officeStop.credit'))
-    : key ? t('officeStop.key') : t('officeStop.signIn');
+    : key ? t('officeStop.keyStopped') : t('officeStop.signIn');
   const info = credit ? t('officeStop.creditInfo') : key ? t('officeStop.keyInfo') : t('officeStop.signInInfo');
   const closeFix = (): void => {
     // A finished sign in moves the stop to checking; a saved key does so in

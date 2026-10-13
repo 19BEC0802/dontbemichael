@@ -604,7 +604,10 @@ export class HookServer {
     // (one with a business folder), a file write into it is refused unless it's a
     // protocol file; the reason tells the agent where the work belongs instead.
     // The tool check comes first so ordinary tool calls never read config.
-    if (event === 'PreToolUse' && agentId && GUARDED_TOOLS.has(p.tool_name ?? '')) {
+    // Research's desk sits in the app's home, so its own wall below judges its
+    // writes instead: that wall already shuts everything there but its own
+    // folders (issue #230).
+    if (event === 'PreToolUse' && agentId && GUARDED_TOOLS.has(p.tool_name ?? '') && !this.safeRegistryAgent(agentId)?.isResearch) {
       const cfg = this.getConfig();
       const hiveRoot = this.hive.root();
       if ((cfg.businessFolder || cfg.officeFolder) && cfg.harnessHome && hiveRoot) {

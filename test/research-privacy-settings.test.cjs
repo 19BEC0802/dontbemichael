@@ -78,6 +78,10 @@ test('setup offers Research as one unchecked Team step row', () => {
   const wiz = read('src/renderer/src/components/OnboardingWizard.tsx');
   assert.match(wiz, /const \[researchPicked, setResearchPicked\] = useState\(false\);/);
   assert.match(wiz, /research: \{ on: researchPicked, notice: false \}/);
+  // Picked alone, with no other member, Research still starts (ship plan audit).
+  const hive = read('src/renderer/src/hooks/useHive.ts');
+  assert.match(hive, /if \(team\.length === 0 \|\| retry\?\.size === 0\) \{\n    if \(!retry\) await startPickedResearch\(config\);\n    return;\n  \}/);
+  assert.match(hive, /if \(!retry\) await startPickedResearch\(config\);\n\}/);
   assert.equal(en.research.teamTag, 'uses the internet');
 });
 
