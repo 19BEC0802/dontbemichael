@@ -108,6 +108,7 @@ interface HookPayload {
   cwd?: string;
   tool_name?: string;
   tool_input?: unknown;
+  tool_use_id?: string;
   stop_hook_active?: boolean;
   prompt?: string;
   source?: string;
@@ -934,6 +935,7 @@ export class HookServer {
       agentId,
       event,
       tool: p.tool_name,
+      toolUseId: typeof p.tool_use_id === 'string' ? p.tool_use_id : undefined,
       notificationType: p.notification_type,
       source: p.source,
       message: p.message,
