@@ -70,7 +70,11 @@ export function resolveLocalImageRel(baseRel: string | undefined, src: string | 
   if (hasScheme(raw)) return null;
   if (!isImagePath(raw)) return null;
   // Strip the query/hash before resolving — they are cache-busters, not path.
-  const clean = raw.split('#')[0].split('?')[0];
+  let clean = raw.split('#')[0].split('?')[0];
+  // react-markdown hands over the src percent-encoded ("My shot.png" arrives as
+  // "My%20shot.png"), and the file on disk has the name as written.
+  try { clean = decodeURIComponent(clean); } catch { /* a stray % stays as written */ }
+  if (hasScheme(clean) || !isImagePath(clean)) return null;
   const rooted = clean.startsWith('/');
   const rel = resolveRel(rooted ? undefined : baseRel, clean);
   return rel || null;
