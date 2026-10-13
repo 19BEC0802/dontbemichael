@@ -483,7 +483,11 @@ const memoryTidy = new MemoryTidy(
   () => memory.env(),
   () => isFloorQuiet(300_000),
   (id) => hive.registry().agents[id]?.name ?? id,
-  (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
+  (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } },
+  () => {
+    const cfg = readConfig();
+    return { engine: cfg.godProvider ?? 'claude', engineModel: cfg.godModel };
+  }
 );
 // Durable harness state (SQLite, main process). Phase A: window bounds (kv) +
 // net-new command history. Opened in whenReady, closed in the teardown blocks.
@@ -605,6 +609,10 @@ const standingFit = standingFitCheck({
     return dir;
   },
   command: () => readConfig().defaultCommand ?? 'claude',
+  modelEngine: () => {
+    const cfg = readConfig();
+    return { engine: cfg.godProvider ?? 'claude', engineModel: cfg.godModel };
+  },
   env: () => memory.env(),
   log: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
 });
@@ -5271,6 +5279,8 @@ ipcMain.handle('hire:checkDistinct', async (_evt, payload: unknown) => {
   if (requestId) checkRuns.set(requestId, stop);
   try {
     return await checkDistinct(job, team, {
+      engine: cfg.godProvider ?? 'claude',
+      engineModel: cfg.godModel,
       cwd: cfg.harnessHome ?? app.getPath('home'),
       command: cfg.defaultCommand ?? 'claude',
       env: memory.env(),
@@ -5300,6 +5310,8 @@ ipcMain.handle('workStyle:suggest', async (evt, payload: unknown) => {
   const cfg = readConfig();
   try {
     return await suggestWorkStyle(req, {
+      engine: cfg.godProvider ?? 'claude',
+      engineModel: cfg.godModel,
       cwd: cfg.harnessHome ?? app.getPath('home'),
       command: cfg.defaultCommand ?? 'claude',
       env: memory.env(),
@@ -5323,6 +5335,8 @@ ipcMain.handle('workStyle:convert', async (_evt, payload: unknown) => {
   if (!req) return { text: '', source: 'rules' };
   const cfg = readConfig();
   return convertWorkStyle(req, {
+    engine: cfg.godProvider ?? 'claude',
+    engineModel: cfg.godModel,
     cwd: cfg.harnessHome ?? app.getPath('home'),
     command: cfg.defaultCommand ?? 'claude',
     env: memory.env(),
@@ -5348,6 +5362,8 @@ ipcMain.handle('workStyle:checkFocus', async (_evt, payload: unknown) => {
     req.sending = req.sending ? `${req.sending}; ${line}` : line;
   }
   return checkFocusArea(req, {
+    engine: cfg.godProvider ?? 'claude',
+    engineModel: cfg.godModel,
     cwd: cfg.harnessHome ?? app.getPath('home'),
     command: cfg.defaultCommand ?? 'claude',
     env: memory.env(),
