@@ -1314,6 +1314,7 @@
     "noHandoffs": "لا تسليمات بعد. توجد إشعارات المكتب فقط حتى الآن.",
     "today": "اليوم",
     "yesterday": "أمس",
+    "undated": "بدون تاريخ",
     "verb": {
       "request": "طلب {{from}} من {{to}}",
       "query": "سأل {{from}} {{to}}",
@@ -1969,6 +1970,7 @@
     "michaelWaiting": "ينتظر الفريق",
     "michaelBoard": "يحدّث اللوحة",
     "minutes": "{{count}} دقيقة",
+    "agentWords": "«{{text}}»",
     "sendFailed": "لم يُرسل. حاول مجددًا.",
     "michaelEnded": "انتهت الطرفية: اضغط \"إلغاء والعودة إلى العمل\" أو \"خروج قسري الآن\"",
     "confirmedCount": "{{acked}} / {{total}} أكّدوا",
@@ -2055,7 +2057,14 @@
   },
   "workTab": {
     "live": "مباشر",
-    "focus": "تركيز"
+    "focus": "تركيز",
+    "exitFocus": "الخروج من وضع التركيز (Esc)",
+    "zoomOut": "تصغير ({{mod}} مع علامة الناقص)",
+    "zoomOutLabel": "تصغير",
+    "zoomIn": "تكبير ({{mod}} مع علامة الزائد)",
+    "zoomInLabel": "تكبير",
+    "zoomReset": "إعادة ضبط التكبير ({{mod}} مع 0)",
+    "zoomResetLabel": "إعادة ضبط التكبير"
   },
   "quit": {
     "killing": "جارٍ الخروج…",

@@ -39,6 +39,7 @@ import {
   appendOnce,
   bindingLines,
   cardJobs,
+  hireAgentId,
   hireFolderName,
   hireRole,
   jobFor,
@@ -54,7 +55,7 @@ import {
 import { firstTaskSection, roleLabel, plainFallback } from '@shared/workStyleText';
 import { useRtl } from '@/i18n/useDirection';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
-import { SHOW_IMPORT_HIRE, SHOW_ENGINE_PICKER } from '@shared/buildFeatures';
+import { SHOW_IMPORT_HIRE, SHOW_ENGINE_PICKER, SHOW_MAILBOXES } from '@shared/buildFeatures';
 import { seedStarterJobs } from '@/shell/seedStarterJobs';
 import { sendTypedFirstTask } from '@/shell/typedFirstTask';
 
@@ -113,10 +114,6 @@ const joinPath = (root: string, name: string) => `${root.replace(/[\\/]+$/, '')}
  *  becomes "AR-AP Clerk", never a folder inside a folder. */
 function safeFolder(raw: string): string {
   return raw.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/^[.\s-]+/, '').replace(/[.\s]+$/, '').trim().slice(0, 60);
-}
-
-function uniqueId(name: string): string {
-  return `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
 }
 
 const TOPIC_MAX = 120;
@@ -657,7 +654,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
         return;
       }
     }
-    const id = uniqueId(name);
+    const id = hireAgentId(name);
     const ptyId = `pty-${id}`;
     const description = hireRole(title, routing);
     // Give back what a binding granted (a mailbox, a connector) when the hire fails.
@@ -1399,12 +1396,12 @@ function DistinctBox(p: DistinctBoxProps) {
           <span>{t('addAgent.wizard.makeParticular', { name: p.name })}</span>
           {p.verdict?.suggestion && <span style={helperStyle}>{t('addAgent.wizard.suggestion', { text: p.verdict.suggestion })}</span>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => p.setBindMode('mailbox')} style={chip(p.bindMode === 'mailbox', p.freeMailboxes.length === 0)} disabled={p.freeMailboxes.length === 0} title={p.freeMailboxes.length === 0 ? t('addAgent.wizard.noFreeMailbox') : undefined}>{t('addAgent.wizard.bindMailbox')}</button>
+            {SHOW_MAILBOXES && <button type="button" onClick={() => p.setBindMode('mailbox')} style={chip(p.bindMode === 'mailbox', p.freeMailboxes.length === 0)} disabled={p.freeMailboxes.length === 0} title={p.freeMailboxes.length === 0 ? t('addAgent.wizard.noFreeMailbox') : undefined}>{t('addAgent.wizard.bindMailbox')}</button>}
             <button type="button" onClick={() => p.setBindMode('topic')} style={chip(p.bindMode === 'topic')}>{t('addAgent.wizard.bindTopic')}</button>
             <button type="button" onClick={() => p.setBindMode('connection')} style={chip(p.bindMode === 'connection', p.bindConnectors.length === 0)} disabled={p.bindConnectors.length === 0} title={p.bindConnectors.length === 0 ? t('addAgent.wizard.noConnection') : undefined}>{t('addAgent.wizard.bindConnection')}</button>
             <button type="button" onClick={p.onRecheck} style={chip(false)}>{t('addAgent.wizard.checkAgain')}</button>
           </div>
-          {p.bindMode === 'mailbox' && (
+          {SHOW_MAILBOXES && p.bindMode === 'mailbox' && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <select value={p.bindMailbox} onChange={(e) => p.setBindMailbox(e.target.value)} aria-label={t('addAgent.wizard.bindMailbox')} className="cth-input" style={{ ...inputStyle, width: 'auto' }}>
                 <option value="">{t('capabilities.pickMailbox')}</option>

@@ -92,17 +92,6 @@
 **Effort:** S
 **Priority:** P1
 
-### A build switch for the mailbox feature
-
-**What:** A `buildFeatures.ts` flag that hides Mailboxes and the Email section, with the hook falling back to the Claude account switch alone when off.
-
-**Why:** Plan Section 9 rollout.
-
-**Context:** Deferred from plan: docs/designs/multi-mailbox.md
-
-**Effort:** S
-**Priority:** P1
-
 ### Read one email without downloading its attachments
 
 **What:** `MailService.read` fetches the whole message, attachments included, before trimming the text to 50K. Fetch the body structure plus the text part only, and take attachment names and sizes from the structure.
@@ -148,15 +137,6 @@
 
 **Effort:** M
 **Priority:** P3
-
-### Say "closing" in dev builds when reopen is skipped
-
-**What:** In dev (`ELECTRON_RENDERER_URL` set) the app quits instead of relaunching, but the dialog still says "reopening".
-
-**Why:** Cosmetic, dev only; the event could carry whether a relaunch will really happen.
-
-**Effort:** S
-**Priority:** P4
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
 
@@ -377,6 +357,7 @@ agent idle, with no coral bar and Talk 1:1 not leading. Found by the red team in
 review of feat/per-agent-schedules (2026-09-25); the owner chose a follow-up.
 
 **Priority:** P2
+**Completed:** `isTerminalPrompt` moved to `src/shared/hookEvents.ts` and consumed in `useHive.ts`'s Notification hook handler alongside `notificationType`.
 
 ### Block mouse and focus reports in a watch-only terminal
 
@@ -389,16 +370,6 @@ tracking, a click in the watch-only terminal still reaches it. Low confidence in
 review (2026-09-25); needs a check with a mouse-aware prompt.
 
 **Priority:** P3
-
-### Label messages with no usable date
-
-**What:** In the Messages tab, give conversations whose messages have no valid `created_at` a
-heading ("Undated") instead of an empty one (`src/shared/messageView.ts` localDay returns '').
-
-**Why:** Only malformed files hit it, but the section then has no heading. Found by the local
-model review (2026-09-25).
-
-**Priority:** P4
 
 ## Business mode (deferred from plan, v0.0.1 ship)
 
@@ -566,7 +537,7 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 1. ~~The team always starts on the default engine.~~ Done 2026-09-26: setup now writes `defaultCommand` from Michael's engine (`teamDefaultsFromMichael`, `test/team-engine-from-michael.test.cjs`).
 2. Cost and token data: Codex is done. The telemetry fallback reads a Codex agent's rollout in its CODEX_HOME (`src/main/codexUsage.ts`, `hive.codexHome`), and `src/main/pricing.ts` prices GPT-5 models. Still open: Gemini and the other engines (no usage source yet), the context gauge for Codex (`readContextTokens` reads only the default engine's transcripts), and the lifetime cost ledger, which only records live OTel samples. For Gemini, issue #113 has the plan: read the session `.jsonl` at the hook payload's `transcript_path` (already kept as `hookServer.transcriptPath(id)`), skip `$set` and `$rewindTo` lines, keep the last copy of each message id (late token updates re-append it), keep rewound turns (they were billed), map `cacheRead = cached`, `input = input - cached + tool`, `output = output + thoughts`; fall back to the project slug in `~/.gemini/projects.json` when no hook has fired; add Gemini Pro and Flash rows to `pricing.ts`; prove it live with one Gemini worker under a low token cap.
 3. MCP servers go only into Claude's `--settings` (`src/main/hive.ts:1163`). Codex now gets bundled skills in its private `CODEX_HOME/skills`; other engines still need native skill discovery. The md-mail server is the same gap (issue #109): `index.ts` writes it and passes `--mcp-config` only for Claude, so a Codex member with email starts with no mail tools. Fix: write an `[mcp_servers.md-mail]` entry in the agent's private `CODEX_HOME/config.toml` (same command, args and env, a fresh broker token each spawn), removed at teardown like the Claude file. The mail gate in `hooks.ts` matches only Claude's `mcp__md-mail__` tool names, so the same change makes it match Codex's names too: a mail tool on any engine passes the same check, and a test proves a Codex mail call is gated.
-4. Gemini and Antigravity get no extra writable directories (`--add-dir` exists for Codex only, `src/main/hive.ts:859`), so hive file writes may be refused.
+4. Antigravity gets no extra writable directories, so hive file writes may be refused. Gemini CLI done 2026-10-11: the folders Codex gets with `--add-dir` go into its per-agent settings file as `context.includeDirectories` and onto argv as `--include-directories` (Gemini CLI 0.60 and later skip a system settings file in a folder the user owns; `geminiIncludeDirArg`, `test/auto-mode-sandbox.test.cjs`).
 5. Antigravity agents never get their standing goal, and an Antigravity Michael never gets the roster (no SessionStart/UserPromptSubmit event).
 6. The app's own background calls run only on Claude (issue #85): memory tidy up (`src/main/memoryTidy.ts`), the standing approval check (`standingCheck.ts`), the hire check (`hireCheck.ts`) and the three Work style helpers (`workStyleConvert.ts`) all pass `defaultCommand` to `runHiddenClaude`, which builds Claude arguments. On a Codex office each fails; the worst is the standing approval check, so every email under a standing approval falls back to Ask me. Fix: a `runHiddenModel({ engine, tier, prompt, noTools, cwd, timeoutMs })` with one runner per engine, the engine taken from Michael's preset, not the command string. Claude keeps the current path. Codex runs `codex exec --ephemeral --ignore-user-config --skip-git-repo-check -s read-only -C <empty dir> --disable shell_tool --disable unified_exec --disable apps --disable browser_use --disable computer_use -c web_search=disabled -o <answer file>` (tested in #85 with codex-cli 0.162.1: two standing checks judged right, a prompt asking for a shell command refused). An engine with no runner returns unavailable at once and the caller uses its existing fallback. Callers that read text written by agents or outside senders (the standing check, the memory tidy up) keep `noTools: true` and a runner serves them only with every tool off. Tests: each caller with a fake runner, answered and unavailable, and one that a Codex office never runs `codex` with Claude arguments.
 7. Michael's first prompt is still written for one engine (`INITIAL_GOD_PROMPT` in `src/renderer/src/hooks/useHive.ts:77`). The spawn prompt and PROTOCOL.md now say "AI agents".

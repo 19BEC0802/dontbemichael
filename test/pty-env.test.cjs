@@ -96,6 +96,17 @@ test('app defaults land: PATH, terminal identity, color', () => {
   assert.equal(env.FORCE_COLOR, '1');
 });
 
+test('on Windows the inherited "Path" gives way to our PATH, so the bundled node is found', () => {
+  // A Windows process inherits the variable as "Path"; names ignore case there,
+  // so two spellings in one environment leave the child reading the stale one.
+  const env = buildPtyEnv({ Path: 'C:\\Windows', SystemRoot: 'C:\\Windows' }, 'C:\\Windows;C:\\hive\\bin\\runtime', undefined, 'win32');
+  assert.deepEqual(Object.keys(env).filter((k) => k.toUpperCase() === 'PATH'), ['PATH']);
+  assert.equal(env.PATH, 'C:\\Windows;C:\\hive\\bin\\runtime');
+  assert.equal(env.SystemRoot, 'C:\\Windows', 'the rest of the environment is inherited as before');
+  // Elsewhere names are case sensitive, and a variable named Path is the user's own.
+  assert.equal(buildPtyEnv({ Path: 'mine' }, '/bin', undefined, 'linux').Path, 'mine');
+});
+
 test('locale: UTF-8 defaults on darwin, the user\'s exported locale wins, win32 untouched', () => {
   const bare = buildPtyEnv({}, '/bin', undefined, 'darwin');
   assert.equal(bare.LANG, 'en_US.UTF-8');

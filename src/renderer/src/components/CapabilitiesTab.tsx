@@ -14,6 +14,7 @@ import { quickbooksCapability, type QuickBooksCapability } from '@shared/quickbo
 import { connectorGranted, connectorOn, isQuickBooksKey } from '@shared/claudeConnectors';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
 import { InfoTip } from './InfoTip';
+import { SHOW_MAILBOXES } from '@shared/buildFeatures';
 
 type SectionKey = 'email' | 'connectors' | 'schedules';
 
@@ -223,7 +224,8 @@ export function CapabilitiesTab({ agent }: { agent: Agent }) {
         <div style={hint}>{t('capabilities.intro', { name })}</div>
 
         <div style={{ height: 8 }} />
-        <TriggerCard
+        {/* Email: hidden in this build when SHOW_MAILBOXES is off. */}
+        {SHOW_MAILBOXES && <TriggerCard
           title={t('capabilities.email')}
           blurb={t('capabilities.emailBlurb', { name })}
           summary={inUse ? t('capabilities.emailSummary', { count: inUse }) : t('capabilities.emailSummaryNone')}
@@ -360,7 +362,7 @@ export function CapabilitiesTab({ agent }: { agent: Agent }) {
               <MiniButton onClick={() => setMoving(null)}>{t('capabilities.keepIt')}</MiniButton>
             </div>
           )}
-        </TriggerCard>
+        </TriggerCard>}
 
         <TriggerCard
           title={t('capabilities.connectors')}

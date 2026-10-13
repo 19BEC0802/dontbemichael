@@ -57,6 +57,9 @@ export function buildPtyEnv(
   for (const [k, v] of Object.entries(parentEnv)) {
     if (v === undefined) continue;
     if (CLAUDE_MARKER_RE.test(k) && !CLAUDE_CONFIG_KEEP.has(k)) continue;
+    // Windows names it "Path", and names ignore case there: kept beside the
+    // PATH below, the child reads the inherited one and never sees ours.
+    if (platform === 'win32' && k.toUpperCase() === 'PATH') continue;
     inherited[k] = v;
   }
   return {

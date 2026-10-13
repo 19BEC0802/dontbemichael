@@ -1314,6 +1314,7 @@
     "noHandoffs": "No handoffs yet. Only office notices so far.",
     "today": "Today",
     "yesterday": "Yesterday",
+    "undated": "Undated",
     "verb": {
       "request": "{{from}} asked {{to}}",
       "query": "{{from}} asked {{to}}",
@@ -1969,6 +1970,7 @@
     "michaelWaiting": "waiting for the team",
     "michaelBoard": "updating the board",
     "minutes": "{{count}} min",
+    "agentWords": "“{{text}}”",
     "sendFailed": "Didn't send. Try again.",
     "michaelEnded": "terminal ended: Cancel and go back to work, or Force quit now",
     "confirmedCount": "{{acked}} / {{total}} workers confirmed",
@@ -2055,7 +2057,14 @@
   },
   "workTab": {
     "live": "Live",
-    "focus": "Focus"
+    "focus": "Focus",
+    "exitFocus": "Exit focus mode (Esc)",
+    "zoomOut": "Zoom out ({{mod}} and minus)",
+    "zoomOutLabel": "Zoom out",
+    "zoomIn": "Zoom in ({{mod}} and plus)",
+    "zoomInLabel": "Zoom in",
+    "zoomReset": "Reset zoom ({{mod}} and 0)",
+    "zoomResetLabel": "Reset zoom"
   },
   "quit": {
     "killing": "Quitting…",

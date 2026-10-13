@@ -40,6 +40,7 @@ import {
   type TerminalAutomationBlock
 } from './terminalAutomation';
 import { sanitizeTerminalSelection } from './terminalSelection';
+import { watchOnlyData } from './watchOnlyInput';
 import '@xterm/xterm/css/xterm.css';
 
 export interface TerminalEntry {
@@ -357,8 +358,11 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
   // Keystrokes → pty. A small line buffer surfaces the last submitted prompt.
   // It lives on the entry (see TerminalEntry.lineBuf) so every prompt-clearing
   // path resets it too.
-  term.onData((data) => {
+  term.onData((raw) => {
     if (entry.exited) return;
+    // Watch-only: the owner's mouse and focus never reach the program.
+    const data = entry.inputLocked ? watchOnlyData(raw) : raw;
+    if (!data) return;
     window.cth.writePty(ptyId, data);
     // A lone Escape or Ctrl-C closes interactive pickers. Arrow-key escape
     // sequences must NOT clear the block while the user navigates a picker.
