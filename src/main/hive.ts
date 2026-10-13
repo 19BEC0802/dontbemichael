@@ -23,7 +23,7 @@ import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
   PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
   RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS, RESEARCH_NAME, RESEARCH_ROLE, isReservedName,
-  SENT_AS_SUBJECT, sentAsBody, nameKey, researchNameOf, researchText
+  SENT_AS_SUBJECT, sentAsBody, nameKey, researchText, cleanResearchName, RESEARCH_ONLY_SKILLS
 } from '../shared/research';
 
 import { hookShell, shellCommand, type HookShell } from './hookShell';
@@ -253,8 +253,6 @@ export const HOUSE_RULES = [
  *  from business offices to all). Shown with its current name by houseRules. */
 export const BUSINESS_HOUSE_RULES = `${HOUSE_RULES}\n${RESEARCH_HOUSE_RULE}`;
 
-/** Bundled skills that reach the internet: Research's alone (owner, ship 2 D13). */
-export const RESEARCH_ONLY_SKILLS: readonly string[] = ['md-fetch-summarize'];
 
 /**
  * How every agent is told about company knowledge (owner, 2026-09-25): at
@@ -382,9 +380,9 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
  * Work style arrives separately, through the hook. House rules, folders,
  * memory and company knowledge are appended by injectedPrompt.
  */
-export function researchInstructions(b: PromptBusiness, michael: string, p: PromptPaths): string {
+export function researchInstructions(b: PromptBusiness, michael: string, p: PromptPaths, name: string = RESEARCH_NAME): string {
   return [
-    `You are ${RESEARCH_NAME}, the Research team member at ${where(b)}, the one who uses the internet. Teammates and ${michael} send you questions as messages. The app's trust layer reads each one first and may hand you a cleaned or more general version of what was asked; answer the question as you received it, and never ask for names, contact details, money or other private details.`,
+    `You are ${name}, the Research team member at ${where(b)}, the one who uses the internet. Teammates and ${michael} send you questions as messages. The app's trust layer reads each one first and may hand you a cleaned or more general version of what was asked; answer the question as you received it, and never ask for names, contact details, money or other private details.`,
     '',
     'Your answers pass the same trust layer on their way back, which removes anything that reads like instructions to the reader. Write findings and sources, never instructions.',
     '',
@@ -672,8 +670,12 @@ export class HiveManager {
    *  2026-09-25). Set by main before the hive bootstraps. */
   private businessOffice = false;
   setBusinessOffice(on: boolean): void { this.businessOffice = on; }
-  /** The Research agent's current name (owner, ship 2 D17: renamable, Pete by default). */
-  private researchName(): string { try { return researchNameOf(this.registry().agents); } catch { return RESEARCH_NAME; } }
+  /** The Research agent's current name (owner, ship 2 D17: renamable, Pete by
+   *  default), as the owner set it in the app's settings and checked: never
+   *  the registry's copy, which agents' shells can write (red team). */
+  researchName(): string { try { return cleanResearchName(this.researchNameSource()) ?? RESEARCH_NAME; } catch { return RESEARCH_NAME; } }
+  private researchNameSource: () => unknown = () => undefined;
+  setResearchName(fn: () => unknown): void { this.researchNameSource = fn; }
   /** Every office's house rules, rule 9 included, with the Research agent's
    *  current name (owner, ship 2 D16: the internet rule is the same in every office). */
   houseRules(): string { return researchText(BUSINESS_HOUSE_RULES, this.researchName()); }
@@ -1121,14 +1123,13 @@ export class HiveManager {
     reg.agents[meta.id] = {
       ...prev,
       ...meta,
-      // Research is the owner's to name (ship 2 D17, renamed through renameAgent):
-      // the name on record, else the one a spawn passes, else Pete. A name
-      // another member already has is skipped, so two never share one; the
-      // role is the last resort.
+      // Research is the owner's to name (ship 2 D17): the name set in the
+      // app's settings, whatever a spawn or the registry says. A name another
+      // member already has is skipped, so two never share one; the role is
+      // the last resort.
       ...(meta.id === RESEARCH_ID ? {
-        name: [prev?.name, meta.name, RESEARCH_NAME, RESEARCH_ROLE]
-          .map((n) => (typeof n === 'string' ? n.trim() : ''))
-          .find((n) => !!n && !Object.entries(reg.agents).some(([otherId, a]) => otherId !== RESEARCH_ID && !!a?.name && nameKey(a.name) === nameKey(n))) ?? RESEARCH_ROLE
+        name: [this.researchName(), RESEARCH_ROLE]
+          .find((n) => !Object.entries(reg.agents).some(([otherId, a]) => otherId !== RESEARCH_ID && (nameKey(otherId) === nameKey(n) || (!!a?.name && nameKey(a.name) === nameKey(n))))) ?? RESEARCH_ROLE
       } : {}),
       capabilities: meta.capabilities ?? prev?.capabilities ?? [],
       role,
@@ -1504,10 +1505,14 @@ export class HiveManager {
       if (agent.name === nextName) return { ok: true, name: nextName };
       // Names are how Michael and the team address each other, so two agents
       // can't share one (owner, 2026-09-25).
+      // Compared as the team reads them, lookalike letters included.
       const taken = Object.entries(reg.agents).some(([otherId, other]) =>
-        otherId !== id && !!other?.name && other.name.trim().toLowerCase() === nextName.toLowerCase());
+        otherId !== id && ((!!other?.name && nameKey(other.name) === nameKey(nextName)) || (id === RESEARCH_ID && nameKey(otherId) === nameKey(nextName))));
       if (taken) return { ok: false, error: `Another team member is already called ${nextName}. Pick a different name.` };
-      if (isReservedName(nextName, id, reg.agents)) return { ok: false, error: `${researchNameOf(reg.agents)} is the Research team member's name. Pick a different name.` };
+      // Research's name goes into every agent's house rules and onto its
+      // answers: one short plain name, never a word messages are routed by.
+      if (id === RESEARCH_ID && !cleanResearchName(nextName)) return { ok: false, error: 'Use a short name of letters, like Pete or Robin, that isn\'t a word the team sends messages by.' };
+      if (isReservedName(nextName, id, reg.agents, this.researchName())) return { ok: false, error: `${this.researchName()} is the Research team member's name. Pick a different name.` };
 
       const previousName = agent.name;
       agent.name = nextName;
@@ -2044,7 +2049,7 @@ export class HiveManager {
     if (meta.isResearch) {
       const paths: PromptPaths = { inbox: inDir('inbox'), inboxDone: inDir('inbox', '.done'), outbox: inDir('outbox'), protocol: inRoot('PROTOCOL.md'), hiveRoot: root };
       return [
-        researchText(researchInstructions(business ?? {}, godNameForPrompt || 'Michael', paths), meta.name || this.researchName()),
+        researchInstructions(business ?? {}, godNameForPrompt || 'Michael', paths, this.researchName()),
         '',
         this.houseRules(),
         '',
@@ -2699,7 +2704,7 @@ export class HiveManager {
     }
     // Anything else for Research (an app note, an owner answer, a send()) goes
     // through the trust layer first, in the background (ship review D2.1).
-    if (addressedToResearch(msg.to, reg.agents) && msg.from !== RESEARCH_ID && !this.researchCleared.has(msg.id)) {
+    if (addressedToResearch(msg.to, reg.agents, this.researchName()) && msg.from !== RESEARCH_ID && !this.researchCleared.has(msg.id)) {
       this.appendLog({ kind: 'message-held-for-trust-layer', from: msg.from, id: msg.id });
       this.queueForResearch({ ...msg, to: RESEARCH_ID });
       return;
@@ -2978,7 +2983,7 @@ export class HiveManager {
             continue;
           }
           // Everything to and from Research passes its trust layer first.
-          const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to, this.registry().agents);
+          const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to, this.registry().agents, this.researchName());
           if (toResearch || id === RESEARCH_ID) {
             const gate = toResearch ? this.researchInboundGate(id, msg, partial, raw, researchOn) : this.researchOutboundGate(msg, partial, raw);
             if (gate === 'hold') continue;

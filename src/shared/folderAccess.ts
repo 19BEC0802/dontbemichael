@@ -188,13 +188,13 @@ export function shellTempWalls(platform: string, tmpdir: string): string[] {
 /** A file tool saving into the shared temporary folders while Research is on
  *  (owner, D7.2): Research's shell can read /tmp, so another agent saves its
  *  scratch work in its own folder instead and carries on there. */
-export function sharedTempWriteDecision(temps: string[], ownTmp: string, ownCwd: string | undefined, tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
+export function sharedTempWriteDecision(temps: string[], ownTmp: string, ownCwd: string | undefined, tool: string, target: string, caseInsensitive: boolean, name: string = RESEARCH_NAME): { deny: boolean; reason?: string } {
   if (!FOLDER_WRITE_TOOLS.has(tool)) return { deny: false };
   const inside = insideFn(caseInsensitive);
   // Its own folders stay open, even in an office that sits in a temp folder.
   if ([ownTmp, ownCwd].some((f) => f && inside(f, target))) return { deny: false };
   if (!temps.some((f) => f && inside(f, target))) return { deny: false };
-  return { deny: true, reason: `While ${RESEARCH_NAME} is on, the shared temporary folders are closed for saving. Save it in your own scratch folder, ${ownTmp}, and carry on from there.` };
+  return { deny: true, reason: `While ${name} is on, the shared temporary folders are closed for saving. Save it in your own scratch folder, ${ownTmp}, and carry on from there.` };
 }
 
 /** A save aimed at the shared temporary folders, judged on the file it names
@@ -309,7 +309,7 @@ export function withAgentTmpWall(policy: AgentFolderPolicy, home: string, agentI
 }
 
 /** A file tool reaching into Research's folders, by anyone but Research. */
-export function researchWallDecision(researchFolders: string[], tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
+export function researchWallDecision(researchFolders: string[], tool: string, target: string, caseInsensitive: boolean, name: string = RESEARCH_NAME): { deny: boolean; reason?: string } {
   const writes = FOLDER_WRITE_TOOLS.has(tool);
   if (!writes && !FOLDER_READ_TOOLS.has(tool)) return { deny: false };
   const inside = insideFn(caseInsensitive);
@@ -320,8 +320,8 @@ export function researchWallDecision(researchFolders: string[], tool: string, ta
     return {
       deny: true,
       reason: writes
-        ? `That is ${RESEARCH_NAME}'s folder. To ask ${RESEARCH_NAME} something, write a message to "${RESEARCH_ID}" in your own outbox; the app checks it and delivers it.`
-        : `That is ${RESEARCH_NAME}'s folder, and only ${RESEARCH_NAME} reads it. What ${RESEARCH_NAME} finds reaches you in his messages, after the app checks them.`
+        ? `That is ${name}'s folder. To ask ${name} something, write a message to "${RESEARCH_ID}" in your own outbox; the app checks it and delivers it.`
+        : `That is ${name}'s folder, and only ${name} reads it. What ${name} finds reaches you in their messages, after the app checks them.`
     };
   }
   return { deny: false };

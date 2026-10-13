@@ -71,7 +71,7 @@ export const ASK_TOOL_REFUSAL =
 
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
 import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, agentTmpDecision, agentTmpName, folderDecision, folderToolTarget, AGENT_TMP_DIR, isSharedTempSave, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
-import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_NAME, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL, researchNameOf, researchText } from '../shared/research';
+import { REFUSAL_WEB_TOOL, REFUSAL_WEB_TOOL_OFF, RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_NAME, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL, researchText } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
 import { CONNECTOR_UNDECIDED, connectorAccess, MCP_RESOURCE_TOOLS } from '../shared/claudeConnectors';
@@ -93,6 +93,9 @@ function mcpDeny(reason: string): unknown {
   return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } };
 }
 
+
+/** The app's fixed refusals that name the Research agent (shown with its current name). */
+const NAMED_REFUSALS: ReadonlySet<string> = new Set([REFUSAL_WEB_TOOL, REFUSAL_WEB_TOOL_OFF, RESEARCH_SANDBOX_ONLY]);
 
 /** File tools that may run with no path at all: Grep searches the folder it
  *  runs in. */
@@ -358,15 +361,15 @@ export class HookServer {
     return this.contextById.get(agentId);
   }
 
-  /** A refusal names the Research agent by its current name (owner, ship 2 D17):
-   *  the app's text is written with the default. Only the reason, which is
-   *  the app's own words, is changed. */
+  /** A refusal names the Research agent by its current name (owner, ship 2 D17).
+   *  Only the app's fixed refusals, written with the default name, are
+   *  changed; a reason that carries a path or anyone's name already has the
+   *  current name in it (review: a path with "Pete" in it stays as it is). */
   private named(res: unknown): unknown {
     const o = res as { hookSpecificOutput?: { permissionDecisionReason?: unknown } } | null;
     const r = o?.hookSpecificOutput?.permissionDecisionReason;
-    if (typeof r !== 'string') return res;
-    let n = RESEARCH_NAME;
-    try { n = researchNameOf(this.hive.registry().agents); } catch { /* the default */ }
+    if (typeof r !== 'string' || !NAMED_REFUSALS.has(r)) return res;
+    const n = this.hive.researchName();
     return n === RESEARCH_NAME ? res : { ...o, hookSpecificOutput: { ...o!.hookSpecificOutput, permissionDecisionReason: researchText(r, n) } };
   }
 
@@ -1015,7 +1018,7 @@ export class HookServer {
       return { deny: false };
     }
     for (const t of both) {
-      const r = researchWallDecision(researchOwn, tool, t, ci);
+      const r = researchWallDecision(researchOwn, tool, t, ci, this.hive.researchName());
       if (r.deny) return r;
     }
     // While Research is on, nobody saves into the shared temp folders its
@@ -1024,7 +1027,7 @@ export class HookServer {
       const temps = tempFolders(process.platform, tmpdir());
       const ownTmp = join(home, AGENT_TMP_DIR, agentTmpName(agentId));
       for (const t of both) {
-        const r = sharedTempWriteDecision(temps, ownTmp, me?.cwd, tool, t, ci);
+        const r = sharedTempWriteDecision(temps, ownTmp, me?.cwd, tool, t, ci, this.hive.researchName());
         if (r.deny) return r;
       }
     }

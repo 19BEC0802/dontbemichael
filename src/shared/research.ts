@@ -21,17 +21,41 @@ export const RESEARCH_ID = 'research';
 export const RESEARCH_NAME = 'Pete';
 export const RESEARCH_ROLE = 'Research';
 
-/** The Research agent's current name: as the registry has it, else the default. */
-export function researchNameOf(agents?: Record<string, unknown>): string {
-  const a = agents?.[RESEARCH_ID];
-  const n = a && typeof a === 'object' ? (a as { name?: unknown }).name : undefined;
-  return typeof n === 'string' && n.trim() ? n.trim() : RESEARCH_NAME;
+/** Words the hive routes by, and the app's own senders: never a name for
+ *  Research, or messages meant for them would go its way (ship review). */
+export const ROUTING_WORDS: readonly string[] = ['human', 'owner', 'god', 'michael', 'broadcast', 'all', 'everyone', 'team', 'scheduler', 'heartbeat', 'mail', 'system', 'privacy-check', 'app'];
+
+/** A name the owner may give Research, or undefined: one short line of
+ *  letters (any language), digits, spaces and . ' -, never a routing word.
+ *  The name goes into every agent's house rules and onto Research's answers,
+ *  so nothing else gets in (red team: a name that read as an instruction). */
+export function cleanResearchName(raw: unknown): string | undefined {
+  // One line: a line break or any control or invisible character refuses it.
+  if (typeof raw !== 'string' || /[\p{Cc}\p{Cf}\u2028\u2029]/u.test(raw)) return undefined;
+  const n = raw.normalize('NFKC').replace(/ +/g, ' ').trim();
+  if (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} .'\u2019-]{0,31}$/u.test(n)) return undefined;
+  const key = nameKey(n);
+  if (!key || ROUTING_WORDS.some((w) => nameKey(w) === key)) return undefined;
+  return n;
 }
 
-/** App text written with the default name, shown with the current one. */
-export function researchText(text: string, name: string): string {
-  return name === RESEARCH_NAME ? text : text.replace(/\bPete\b/g, () => name);
+/** The Research agent's name as a record of agents has it, checked, else
+ *  the default. For display; the app's own rules take the name the owner set
+ *  (config), never one a file agents can write gives. */
+export function researchNameOf(agents?: Record<string, unknown>): string {
+  const a = agents?.[RESEARCH_ID];
+  return cleanResearchName(a && typeof a === 'object' ? (a as { name?: unknown }).name : undefined) ?? RESEARCH_NAME;
 }
+
+/** The app's own text, written with the default name, shown with the current
+ *  one. Only for the app's fixed wording: text that carries anyone's words
+ *  takes the name before those words go in. Never inside a path. */
+export function researchText(text: string, name: string): string {
+  return name === RESEARCH_NAME ? text : text.replace(/(?<![\\/\w])Pete\b(?![\\/])/g, () => name);
+}
+
+/** Bundled skills that reach the internet: Research's alone (owner, ship 2 D13). */
+export const RESEARCH_ONLY_SKILLS: readonly string[] = ['md-fetch-summarize'];
 /** The sender of every trust layer note (design review D22). */
 export const PRIVACY_CHECK_SENDER = 'privacy-check';
 
@@ -41,6 +65,9 @@ export interface ResearchConfig {
   on: boolean;
   /** The one time update card is waiting (updated offices only, D9). */
   notice?: boolean;
+  /** The name the owner gave it (ship 2 D17); absent means Pete. Kept here,
+   *  in the app's settings, not in the registry agents' shells can write. */
+  name?: string;
 }
 
 /** The job text Research starts with (design review D17). Names nobody. */
@@ -102,11 +129,12 @@ export function nameKey(name: string): string {
 /** Does this message go to Research. `to` as the sender wrote it. Its
  *  current name counts too, unless another agent already has it as an id or
  *  a name (Michael renamed Pete, or an older hire): then only its id does. */
-export function addressedToResearch(to: unknown, agents?: Record<string, unknown>): boolean {
+export function addressedToResearch(to: unknown, agents?: Record<string, unknown>, current?: string): boolean {
   if (typeof to !== 'string') return false;
   const t = to.trim().toLowerCase();
   if (t === RESEARCH_ID) return true;
-  const name = researchNameOf(agents);
+  // The name the owner set (the app's config), never the registry's.
+  const name = cleanResearchName(current) ?? researchNameOf(agents);
   if (!agents || nameKey(to) !== nameKey(name)) return false;
   return !Object.entries(agents).some(([id, a]) => id !== RESEARCH_ID && (nameKey(id) === nameKey(name)
     || (!!a && typeof a === 'object' && typeof (a as { name?: unknown }).name === 'string' && nameKey((a as { name: string }).name) === nameKey(name))));
@@ -115,8 +143,8 @@ export function addressedToResearch(to: unknown, agents?: Record<string, unknown
 /** Research's current name is its alone: no one else is hired or renamed to
  *  it, or to a name that reads the same (names are how the team addresses
  *  each other). `agents` gives the current name; without it, the default. */
-export function isReservedName(name: string, id?: string, agents?: Record<string, unknown>): boolean {
-  return id !== RESEARCH_ID && nameKey(name) === nameKey(researchNameOf(agents));
+export function isReservedName(name: string, id?: string, agents?: Record<string, unknown>, current?: string): boolean {
+  return id !== RESEARCH_ID && nameKey(name) === nameKey(cleanResearchName(current) ?? researchNameOf(agents));
 }
 
 /** Did the sender attach files. Messages carry no attachment field today, but

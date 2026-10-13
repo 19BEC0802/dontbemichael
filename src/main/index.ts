@@ -23,7 +23,7 @@ import {
 import { runHiddenClaude, setHiddenClaudeAuthEnv } from './hiddenClaude';
 import { makeTrustLayer, TRUST_MODEL, TRUST_TIMEOUT_MS } from './trustLayer';
 import { dataClassSettings } from '../shared/dataClasses';
-import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_WORK_STYLE, researchNameOf } from '../shared/research';
+import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_WORK_STYLE } from '../shared/research';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
@@ -3749,14 +3749,14 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // It runs in its desk, sees no office data and is the only one on the web.
   const isResearch = !!opts.hive && opts.hive.id === RESEARCH_ID && !opts.hive.isGod && !!readConfig().research?.on && hive.enabled();
   if (opts.hive?.id === RESEARCH_ID && !isResearch) {
-    return { ok: false, error: `${researchNameOf(hive.registry().agents)} is off. Turn them on in Settings, Research & privacy.` };
+    return { ok: false, error: `${hive.researchName()} is off. Turn them on in Settings, Research & privacy.` };
   }
   // Research's walls are Claude Code's: on any other engine it does not
   // start, and its switch goes back off (ship review D6.2).
   if (isResearch && !claudeProvider) {
     console.error(`[research] engine ${provider} has none of Research's walls; Research did not start`);
     turnResearchOff();
-    return { ok: false, error: `${researchNameOf(hive.registry().agents)} runs only on Claude. Turn them on again in Settings, Research & privacy.` };
+    return { ok: false, error: `${hive.researchName()} runs only on Claude. Turn them on again in Settings, Research & privacy.` };
   }
   // Research starts only inside its walls (ship review D2.8).
   let researchWalled = false;
@@ -3903,7 +3903,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // accounts and the web: it does not start, and the switch goes back off.
     console.error('[research] walls not in place; Research did not start');
     turnResearchOff();
-    return { ok: false, error: `${researchNameOf(hive.registry().agents)} could not be set up safely, so they did not start. Try again.` };
+    return { ok: false, error: `${hive.researchName()} could not be set up safely, so they did not start. Try again.` };
   }
   if (connectorPlan && !connectorsApplied) {
     console.warn(`[connectors] ${opts.hive?.id}: no hive settings, starting without connectors`);
@@ -4890,8 +4890,14 @@ ipcMain.handle('hive:renameAgent', (_evt, id: unknown, name: unknown) => {
   if (typeof id !== 'string' || typeof name !== 'string') {
     return { ok: false, error: 'Invalid rename request' };
   }
-  // The owner may rename Research (ship 2 D17); the app knows it by its id.
-  return hive.renameAgent(id, name);
+  // The owner may rename Research (ship 2 D17); the app knows it by its id,
+  // and keeps the name in its own settings, where the rules read it.
+  const r = hive.renameAgent(id, name);
+  if (r.ok && id === RESEARCH_ID && r.name) {
+    const cfg = readConfig();
+    writeConfig({ research: { ...(cfg.research ?? { on: false }), name: r.name } });
+  }
+  return r;
 });
 ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
   if (typeof id !== 'string' || typeof hold !== 'boolean') {
@@ -6290,7 +6296,7 @@ ipcMain.handle('missions:upsert', (_evt, mission: unknown): MissionOpResult => {
   if (!isMission(mission)) return { ok: false, error: 'invalid schedule' };
   // Research answers asks only; a schedule's text would skip the privacy
   // check (design review D19).
-  if (mission.to === RESEARCH_ID) return { ok: false, error: `${researchNameOf(hive.registry().agents)} has no schedules` };
+  if (mission.to === RESEARCH_ID) return { ok: false, error: `${hive.researchName()} has no schedules` };
   // Several "when" lines are stored canonical, or the save is refused: a bad
   // line would run on a clock nobody set.
   // The focus area is stored clean (FA1); an empty one is no focus.
@@ -7425,6 +7431,7 @@ function bootstrapHiveServices(): void {
   hive.setTrustLayer(trustLayer);
   memory.setNotesFilter(researchNotesForPalace);
   hive.setResearchEnabled(() => !!readConfig().research?.on);
+  hive.setResearchName(() => readConfig().research?.name);
   // The update that took the internet from the team (issue #230): an office
   // that was already running gets the one time card, whatever its pack (owner,
   // ship 2 D16); a new one decides in the onboarding Team step instead.

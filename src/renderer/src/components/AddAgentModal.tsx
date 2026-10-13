@@ -1,4 +1,4 @@
-import { isReservedName, RESEARCH_ID } from '@shared/research';
+import { isReservedName, RESEARCH_ID, RESEARCH_ONLY_SKILLS } from '@shared/research';
 import { useResearchName } from '@/shell/research';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -855,10 +855,10 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
                 {hireMeta.commandFlags.map((f, i) => <code key={`${f}-${i}`} style={codeChip('paprika')}>{f}</code>)}
               </span>
             )}
-            {hireMeta.skills && hireMeta.skills.length > 0 && (
+            {hireMeta.skills && hireMeta.skills.some((s) => !RESEARCH_ONLY_SKILLS.includes(s)) && (
               <span style={chipRow}>
                 <span style={{ fontSize: 12 }}>{tr('addAgent.hireSkills')}</span>
-                {hireMeta.skills.map((s) => <code key={s} style={codeChip('mint')}>{s}</code>)}
+                {hireMeta.skills.filter((s) => !RESEARCH_ONLY_SKILLS.includes(s)).map((s) => <code key={s} style={codeChip('mint')}>{s}</code>)}
               </span>
             )}
             {hireMeta.mcpServers && hireMeta.mcpServers.length > 0 && (() => {

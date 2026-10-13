@@ -21,14 +21,17 @@ export const RESEARCH_DESCRIPTION = `${RESEARCH_ROLE}: looks things up on the in
 
 /** Research's current name (owner, ship 2 D17: the owner may rename it, Pete by
  *  default): as the floor or the archive has it. */
+type NameLists = { agents: Array<{ id: string; name?: string }>; archivedAgents: Array<{ id: string; name?: string }>; restorableAgents?: Array<{ id: string; name?: string }> };
+const nameIn = (s: NameLists): string =>
+  [s.agents, s.archivedAgents, s.restorableAgents ?? []].map((l) => l.find((a) => a.id === RESEARCH_ID)).find(Boolean)?.name?.trim() || RESEARCH_NAME;
+
 export function researchNameNow(): string {
-  const s = useStore.getState();
-  return (s.agents.find((a) => a.id === RESEARCH_ID) ?? s.archivedAgents.find((a) => a.id === RESEARCH_ID))?.name?.trim() || RESEARCH_NAME;
+  return nameIn(useStore.getState() as unknown as NameLists);
 }
 
 /** The same, for a component that redraws when it changes. */
 export function useResearchName(): string {
-  return useStore((s) => (s.agents.find((a) => a.id === RESEARCH_ID) ?? s.archivedAgents.find((a) => a.id === RESEARCH_ID))?.name?.trim() || RESEARCH_NAME);
+  return useStore((s) => nameIn(s as unknown as NameLists));
 }
 
 /** Is Research on the floor now, with a terminal. */

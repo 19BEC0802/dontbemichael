@@ -260,6 +260,7 @@ test('every office tells every agent the rule with the Research agent\'s current
   const { hive } = await office(t);
   assert.match(hive.houseRules(), /^9\. Only Pete, the Research team member/m);
   assert.equal(hive.renameAgent('research', 'Robin').ok, true, 'the owner names it');
+  hive.setResearchName(() => 'Robin'); // saved in the app's settings (index.ts)
   assert.match(hive.houseRules(), /^9\. Only Robin, the Research team member, uses the internet/m);
   assert.doesNotMatch(hive.houseRules(), /Pete/);
   const prompt = hive['injectedPrompt'](
@@ -700,8 +701,10 @@ test('the Research agent is Pete by default, the owner may rename it, and the ap
   await hive.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
   assert.equal(hive.registry().agents.research.name, 'Pete');
   assert.equal(hive.renameAgent('research', 'Robin').ok, true);
+  hive.setResearchName(() => 'Robin'); // saved in the app's settings (index.ts)
   await hive.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
-  assert.equal(hive.registry().agents.research.name, 'Robin', 'a later start keeps the name on record');
+  assert.equal(hive.registry().agents.research.name, 'Robin', 'a later start keeps the owner\'s name, whatever a spawn passes');
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8'), /if \(r\.ok && id === RESEARCH_ID && r\.name\) \{\n\s+const cfg = readConfig\(\);\n\s+writeConfig\(\{ research: \{ \.\.\.\(cfg\.research \?\? \{ on: false \}\), name: r\.name \} \}\);/, 'the rename is saved where the rules read it');
   assert.equal(R.researchText(R.REFUSAL_OFF, 'Robin'), 'Not sent: Robin is off, so nobody can look this up. Work without it.');
   assert.equal(R.researchText('Peter asked Pete', 'Robin'), 'Peter asked Robin', 'whole word only');
   assert.match(R.RESEARCH_HOUSE_RULE, /"to": "research"/, 'agents still address its id');
@@ -713,6 +716,7 @@ test('the Research agent is Pete by default, the owner may rename it, and the ap
   // A note the trust layer sends back names the current name.
   const { hive: h2 } = await office(t, { on: false });
   h2.renameAgent('research', 'Robin');
+  h2.setResearchName(() => 'Robin');
   send(h2, 'pam', { to: 'robin', act: 'query', subject: 'Flour', body: 'Flour prices' });
   h2.routeOnce(); await tick(); h2.routeOnce();
   const [back] = notes(h2, 'pam', 'Not sent to Robin');

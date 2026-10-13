@@ -2274,7 +2274,7 @@
     "teamTag": "uses the internet",
     "privacyCheck": "Privacy check",
     "noticeTitle": "Your team no longer uses the internet",
-    "noticeBody": "This keeps your private data in. One team member, {{name}}, can look things up for them, after a privacy check. They're off until you turn them on.",
+    "noticeBody": "This keeps your private data in. One team member, {{name}}, can look things up for them, after a privacy check. {{name}} is off until you turn them on.",
     "noticeOpen": "Open Research & privacy",
     "class": {
       "places": {

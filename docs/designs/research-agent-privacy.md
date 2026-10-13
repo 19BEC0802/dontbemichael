@@ -794,6 +794,11 @@ that limits the rule to a business office, or that fixes the name to Pete.
   every app message, refusal, house rule and Settings string shows the current name
   (`researchText`, `{{name}}` in the locale files). Messages reach it by its id or its current name,
   unless another member already has that name. No one else is hired or renamed to its name.
+  The name is kept in the app's settings (`research.name`), never read from the registry that
+  agents' shells can write, and only a short plain name is taken: one line of letters, digits,
+  spaces and . ' -, at most 32 characters, never a word the hive routes by (human, Michael,
+  broadcast and the like) or another member's id (review of this change: a name is in every
+  agent's house rules and on every answer label).
 
 ## GSTACK REVIEW REPORT
 

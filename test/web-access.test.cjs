@@ -88,7 +88,7 @@ test('Research can hold no mailbox, connector or schedule', () => {
   assert.match(main, /\/\/ Research holds no office data \(issue #230\): no mailbox, ever\.\n  if \(agentId === RESEARCH_ID\) return \{ ok: false, restartNeeded: false \};/);
   assert.match(main, /agentId === RESEARCH_ID \|\| typeof key !== 'string'/, 'connectors');
   assert.match(main, /if \(agentId === RESEARCH_ID\) return \{ ok: false \};\n  const quickbooks/, 'QuickBooks');
-  assert.match(main, /if \(mission\.to === RESEARCH_ID\) return \{ ok: false, error: `\$\{researchNameOf\(hive\.registry\(\)\.agents\)\} has no schedules` \};/);
+  assert.match(main, /if \(mission\.to === RESEARCH_ID\) return \{ ok: false, error: `\$\{hive\.researchName\(\)\} has no schedules` \};/);
   assert.match(main, /if \(actor === RESEARCH_ID\) return 'You have no schedules/);
 });
 
@@ -106,7 +106,7 @@ test('Research\'s notes reach the shared memory only as a cleaned copy', () => {
 test('Research runs only on Claude, where its walls work', () => {
   // Value: protects=an engine change can't start Research without its walls; fails_when=the spawn skips the engine check or Edit agent offers other engines for Research; why_new=security review pass 2, ship review D6.2; seam=none
   const main = read('src/main/index.ts');
-  assert.match(main, /if \(isResearch && !claudeProvider\) \{[\s\S]{0,300}turnResearchOff\(\);\s*return \{ ok: false, error: `\$\{researchNameOf\(hive\.registry\(\)\.agents\)\} runs only on Claude\. Turn them on again in Settings, Research & privacy\.` \};/);
+  assert.match(main, /if \(isResearch && !claudeProvider\) \{[\s\S]{0,300}turnResearchOff\(\);\s*return \{ ok: false, error: `\$\{hive\.researchName\(\)\} runs only on Claude\. Turn them on again in Settings, Research & privacy\.` \};/);
   const modal = read('src/renderer/src/components/EditAgentModal.tsx');
   assert.match(modal, /const isResearch = agent\.id === RESEARCH_ID;/);
   assert.match(modal, /BUILD_ENGINES\.includes\(p\.id\) && \(!isResearch \|\| isClaudeProvider\(p\.id\)\)/);
