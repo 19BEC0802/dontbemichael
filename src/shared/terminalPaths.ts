@@ -75,7 +75,8 @@ export type PathAction = 'preview' | 'edit' | 'reveal';
  * `C:\Users\x\a.ts` starts at the backslash, and a drive-less `\Users\x\a.ts`
  * then looks RELATIVE and gets joined onto the agent's cwd.
  */
-const PATH_TOKEN_RE = /(?:[A-Za-z]:[\\/])?[A-Za-z0-9_@.~/\\+-]*[A-Za-z0-9_@~/\\+-]\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+)?/g;
+// Match complete quoted paths first, so spaces cannot discard a folder or drive.
+const PATH_TOKEN_RE = /"[^"\r\n]*\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+)?"|'[^'\r\n]*\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+)?'|`[^`\r\n]*\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+)?`|(?:[A-Za-z]:[\\/])?[A-Za-z0-9_@.~/\\+-]*[A-Za-z0-9_@~/\\+-]\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+)?/g;
 
 /** A fresh matcher. The regex is stateful (`g`), so callers must never share one. */
 export function pathTokenMatcher(): RegExp {
