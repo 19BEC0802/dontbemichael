@@ -763,7 +763,8 @@ export class HiveManager {
    * agents a `$HIVE_NODE` they can invoke directly (running the Electron binary
    * WITHOUT the env var would launch a second app window, not a script).
    *
-   * Rewritten on every bootstrap, so an app update/move re-bakes execPath.
+   * Checked on every bootstrap and rewritten when its text changed, so an app
+   * update/move re-bakes execPath (see writeIfChanged for why not every time).
    */
   private nodeLauncherPath(): string | null {
     const root = this.root();
@@ -771,28 +772,34 @@ export class HiveManager {
     return join(root, 'bin', process.platform === 'win32' ? 'hive-node.cmd' : 'hive-node');
   }
 
-  /** Write the launcher described above. Best-effort: on failure callers fall
-   *  back to bare `node`, i.e. exactly the pre-fix behavior.
+  /** Write `text` to `p` unless the file already says exactly that.
    *
-   *  Written only when its text changed. ensureHive runs on every task write
-   *  and every spawn, not just at startup, and on Windows cmd.exe keeps
-   *  `hive-node.cmd` open for as long as a hook runs through it, so rewriting
-   *  the same bytes then fails with EBUSY and logs an error on every board
+   *  For the bundled-node shims (the launcher below and the PATH `node` in
+   *  writeRuntimeShims). ensureHive runs on every task write and every spawn,
+   *  not just at startup, and on Windows something holds a running `.cmd` open
+   *  (cmd.exe, or a scanner) for as long as a hook runs through it, so rewriting
+   *  the same bytes failed with EBUSY and logged an error on every board
    *  change (seen live, 2026-10-12). The text only changes when the app moves
    *  or updates, and that write still lands on the next bootstrap with no hook
    *  in flight. */
+  private writeIfChanged(p: string, text: string): void {
+    let current: string | null;
+    try { current = readFileSync(p, 'utf8'); } catch { current = null; }
+    if (current !== text) writeFileSync(p, text, 'utf8');
+  }
+
+  /** Write the launcher described above. Best-effort: on failure callers fall
+   *  back to bare `node`, i.e. exactly the pre-fix behavior. */
   private writeNodeLauncher(): void {
     const p = this.nodeLauncherPath();
     if (!p) return;
-    const windows = process.platform === 'win32';
-    const launcher = windows
-      ? `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`
-      : `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`;
     try {
-      let current: string | null;
-      try { current = readFileSync(p, 'utf8'); } catch { current = null; }
-      if (current !== launcher) writeFileSync(p, launcher, 'utf8');
-      if (!windows) chmodSync(p, 0o755);
+      if (process.platform === 'win32') {
+        this.writeIfChanged(p, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`);
+      } else {
+        this.writeIfChanged(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`);
+        chmodSync(p, 0o755);
+      }
     } catch (e) {
       console.error('[hive] writeNodeLauncher failed:', e);
     }
@@ -854,14 +861,10 @@ export class HiveManager {
     try {
       mkdirSync(dir, { recursive: true });
       if (process.platform === 'win32') {
-        writeFileSync(
-          join(dir, 'node.cmd'),
-          `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`,
-          'utf8'
-        );
+        this.writeIfChanged(join(dir, 'node.cmd'), `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`);
       } else {
         const p = join(dir, 'node');
-        writeFileSync(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`, 'utf8');
+        this.writeIfChanged(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`);
         chmodSync(p, 0o755);
       }
     } catch (e) {
