@@ -13,16 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from './PixelButton';
 import type { LocalSkill, CatalogSkill } from '../../../preload';
-import {create, insertMultiple, search as oSearch } from "@orama/orama"
-
-// needed for orama catalog indexing
-export const CATALOG_SCHEMA = {
-  name: 'string',
-  description: 'string',
-  owner: 'string',
-category: 'string',
-  url: 'string',
-} as const;
+import { filterCatalog } from './skillSearch';
 
 type Mode = 'installed' | 'browse';
 
@@ -61,7 +52,6 @@ export function SkillsTab({ agentCwd }: { agentCwd?: string }) {
   /** Uninstall is destructive, so it is two clicks: the first arms this, the
    *  second does it. No modal — the row itself becomes the confirmation. */
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [catalogIndex, setCatalogIndex] = useState<Awaited<ReturnType<typeof create<typeof CATALOG_SCHEMA>>> | null>(null);
 
   const loadLocal = useCallback(async () => {
     try { setLocal(await window.cth.skillsLocal(agentCwd)); } catch { setLocal([]); }
@@ -78,25 +68,6 @@ export function SkillsTab({ agentCwd }: { agentCwd?: string }) {
       setCatalogMeta({ stale: true, error: t('skillsTab.catalogUnreachable'), fetchedAt: 0 });
     } finally { setBusy(false); }
   }, [t]);
-
-// as soon as the catalog is fetched we'll genrate an index for it
- useEffect(() => {
-if (!catalog) {
-      setCatalogIndex(null);
-      return;
-    }
-let cancelled = false;
-
-    (async () => {
-      const db = create({ schema: CATALOG_SCHEMA })
-      await insertMultiple(db, catalog);
-      if (!cancelled) setCatalogIndex(db);
-    })();
-
-    return () => {
-      cancelled = true;
-    }
-  }, [catalog]) 
 
   useEffect(() => { void loadLocal(); }, [loadLocal]);
   // The catalog is fetched only when the user actually opens Browse — no network
@@ -124,59 +95,10 @@ let cancelled = false;
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [catalog]);
 
-  // const shownCatalog = useMemo(() => {
-  //   let list = catalog ?? [];
-  //   if (owner !== 'all') list = list.filter((s) => s.owner === owner);
-  //   if (category !== 'all') list = list.filter((s) => s.category === category);
-  //   if (q) {
-  //     list = list.filter((s) =>
-  //       s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
-  //   }
-  //   // Bounded render: 1,200 rows in a DOM list makes the panel janky, and nobody
-  //   // scrolls past a few hundred. The count below always states the real total.
-  //   return list.slice(0, 300);
-  // }, [catalog, owner, category, q]);
-  //
-  // const totalMatching = useMemo(() => {
-  //   let list = catalog ?? [];
-  //   if (owner !== 'all') list = list.filter((s) => s.owner === owner);
-  //   if (category !== 'all') list = list.filter((s) => s.category === category);
-  //   if (!q) return list.length;
-  //   return list.filter((s) =>
-  //     s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)).length;
-  // }, [catalog, owner, category, q]);
-
-  const {shownCatalog, totalMatching } = useMemo(() => {
-const list = catalog ?? [];
-    if (!q) {
-    let out = list;
-      if (owner !== 'all') {
-        out = out.filter((s) => s.owner === owner)
-      }
-      if (category !== 'all') {
-        out = out.filter((s) => s.category === category )
-      }
-
-      return {shownCatalog: out.slice(0, 300), totalMatching: out.length }
-    }
-
-    if (!catalogIndex) return { shownCatalog: [] as CatalogSkill[], totalMatching: 0};
-  const where: Partial<Record<'owner' | 'category', string>> = {};
-    if (owner !== "all") where.owner = owner;
-  if (category !== 'all') where.category = category;
-  const res = oSearch(catalogIndex, {
-      term : q,
-      properties: ['name', 'description'],
-      tolerance: 2,
-limit: 300,
-      ...(Object.keys(where).length ? {where} : {})
-    }) as {
-        hits: Array<{
-        document: CatalogSkill}>;
-        count: number
-      };
-    return {shownCatalog: res.hits.map((h) => h.document), totalMatching: res.count}
-  }, [catalog, catalogIndex, owner, category, q])
+  const { shown: shownCatalog, total: totalMatching } = useMemo(
+    () => filterCatalog(catalog ?? [], query, owner, category),
+    [catalog, owner, category, query]
+  );
 
   const install = async (c: CatalogSkill) => {
     setAction((a) => ({ ...a, [c.url]: { busy: true } }));
