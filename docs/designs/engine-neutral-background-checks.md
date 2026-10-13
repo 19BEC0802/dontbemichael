@@ -57,3 +57,45 @@ failure/cancel/timeout, cleanup, and each caller's success/unavailable paths.
 They do not prove a real Codex release exposes no tools. The real CLI must be
 verified against these restrictions before Codex can enter `BUILD_ENGINES`.
 That engine list and all other engine-readiness gaps are unchanged here.
+
+### Optional live acceptance checks
+
+Run `node tools/verify-background-codex.cjs --live` after signing in to Codex.
+Set `CODEX_TEST_BINARY` to an installed binary's path if it is not on PATH.
+The explicit `--live` opt-in uses the CLI's existing authentication and model
+usage. It sends synthetic fixtures only; no mailbox is connected or email sent.
+
+The nine checks exercise both standing-approval outcomes, hiring, both
+work-style conversion directions, focus checking, suggestion, memory tidy and
+a file-access canary. The CLI's JSON event stream must contain only reasoning
+and answer items. The canary's contents must stay unread and its requested
+output file must not appear. All fixture files are removed afterwards.
+
+This validates the background runner, not the other engine-readiness gaps or
+an entire office. `BUILD_ENGINES` stays Claude only.
+
+### Recorded validation, 2026-10-13
+
+After merging upstream `c7a191ad`, the feature source at `b11919d2` passed the
+full suites on the fork's validation branch. That branch's only extra file was
+the Linux CI workflow, which is not part of the upstream PR.
+
+| Platform | Passed | Failed | Skipped |
+| --- | ---: | ---: | ---: |
+| macOS | 2,416 | 0 | 3 |
+| Windows | 2,384 | 0 | 35 |
+| Linux | 2,409 | 0 | 10 |
+
+[macOS and Windows CI](https://github.com/kimtour/dontbemichael/actions/runs/38464053624)
+also passed the production build, both type checks and release-link checks.
+[Linux validation](https://github.com/kimtour/dontbemichael/actions/runs/38464053792)
+passed type checks, the production build and its complete test suite. Skips
+follow the repository's platform-specific tests; the new Windows npm-shim
+execution test passed on Windows.
+
+On macOS 26.3 with Codex CLI `0.162.0-alpha.17.2`, nine checks using the real
+Codex service and synthetic fixtures passed. Only answer items were emitted;
+the canary stayed unread and its requested output file was not created. The
+initial positive email fixture promised a pickup date and was correctly
+rejected; the passing positive fixture was a plain acknowledgement. No
+production restrictions were weakened to obtain these results.
