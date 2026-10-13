@@ -96,7 +96,8 @@ export class MailApprovals implements ProposalStore {
         && typeof rec.to === 'string'
         && typeof rec.subject === 'string'
         && typeof rec.sentAt === 'number'
-        && Number.isFinite(rec.sentAt);
+        && Number.isFinite(rec.sentAt)
+        && Number.isFinite(new Date(rec.sentAt).getTime());
     }) : [];
     const paused = raw.paused && typeof raw.paused === 'object' && !Array.isArray(raw.paused) ? (raw.paused as Record<string, PausedNotice>) : {};
     return { ...raw, proposals: ok<MailProposal>(raw.proposals), standing: ok<StandingApproval>(raw.standing), sends, paused };
