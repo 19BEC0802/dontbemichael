@@ -205,13 +205,20 @@ function readSlides(files: Record<string, Uint8Array>): string {
       // ZIP entry paths always use '/', including when the app runs on Windows.
       targets.set(id, posix.normalize(path.startsWith('/') ? path.slice(1) : posix.join('ppt', path)));
     }
-    ordered = [...strFromU8(files['ppt/presentation.xml']).matchAll(/<p:sldId\b([^>]*)\/?>/g)]
-      .map((m, index) => {
-        const n = targets.get(attr(m[1], 'r:id') ?? '');
-        // A broken manifest must not silently fall back to a guessed order.
-        if (!n || !files[n]) throw new Error('Missing presentation slide');
-        return { n, i: index + 1 };
-      });
+    ordered = [];
+    const seen = new Set<string>();
+    let position = 0;
+    for (const m of strFromU8(files['ppt/presentation.xml']).matchAll(/<p:sldId\b([^>]*)\/?>/g)) {
+      position++;
+      const n = targets.get(attr(m[1], 'r:id') ?? '');
+      // A broken manifest must not silently fall back to a guessed order.
+      if (!n || !files[n]) throw new Error('Missing presentation slide');
+      // Untrusted slide lists can repeat one part thousands of times. Read it
+      // only at its first position, even if different relationships name it.
+      if (seen.has(n)) continue;
+      seen.add(n);
+      ordered.push({ n, i: position });
+    }
   }
 
   const slides = ordered

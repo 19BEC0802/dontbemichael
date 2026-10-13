@@ -154,6 +154,35 @@ test('PowerPoint: relationship targets resolve as package paths and blank slides
   assert.equal(r.text, 'Slide 2\nSecond slide\n\nSlide 3\nThird slide');
 });
 
+test('PowerPoint: a slide listed 20,000 times is extracted only once', async () => {
+  const text = 'Repeated slide content. '.repeat(50).trim();
+  const r = await extractDocumentText(zip('repeated-slide.pptx', {
+    'ppt/presentation.xml': presentation(Array(20000).fill('first')),
+    'ppt/_rels/presentation.xml.rels': `<Relationships>
+      <Relationship Id="first" Type="${SLIDE_REL}" Target="slides/slide1.xml"/></Relationships>`,
+    'ppt/slides/slide1.xml': slideXml(text)
+  }));
+  assert.equal(r.kind, 'text');
+  assert.equal(r.text.length, `Slide 1\n${text}`.length, 'repeated references must not amplify the output');
+  assert.equal(r.text, `Slide 1\n${text}`);
+});
+
+test('PowerPoint: duplicate slide parts keep their first position even through different relationships', async () => {
+  const r = await extractDocumentText(zip('duplicate-targets.pptx', {
+    'ppt/presentation.xml': presentation(['blank', 'first', 'alias', 'blank', 'last']),
+    'ppt/_rels/presentation.xml.rels': `<Relationships>
+      <Relationship Id="blank" Type="${SLIDE_REL}" Target="slides/slide9.xml"/>
+      <Relationship Id="first" Type="${SLIDE_REL}" Target="slides/slide1.xml"/>
+      <Relationship Id="alias" Type="${SLIDE_REL}" Target="/ppt/slides/../slides/slide1.xml"/>
+      <Relationship Id="last" Type="${SLIDE_REL}" Target="slides/slide2.xml"/></Relationships>`,
+    'ppt/slides/slide9.xml': `<p:sld ${A}/>`,
+    'ppt/slides/slide1.xml': slideXml('Read once'),
+    'ppt/slides/slide2.xml': slideXml('Last slide')
+  }));
+  assert.equal(r.kind, 'text');
+  assert.equal(r.text, 'Slide 2\nRead once\n\nSlide 5\nLast slide');
+});
+
 test('PowerPoint: a broken slide reference is refused rather than guessed from filenames', async () => {
   for (const rels of [
     '<Relationships/>',
