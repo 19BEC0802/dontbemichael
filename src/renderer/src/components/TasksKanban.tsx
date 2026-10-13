@@ -1,4 +1,4 @@
-import { askTitle } from './askHeadline';
+import { askTitle, askedAgo } from './askHeadline';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
@@ -477,12 +477,16 @@ export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign
             <div data-next-at style={{ fontSize: 12.5, color: 'var(--cth-ink)' }}>{t('kanban.nextAt', { when: next })}</div>
           )}
 
-          {/* The owner Q&A trail: every decision documented on the card. */}
+          {/* The owner Q&A trail: every decision documented on the card, newest
+              first like Ask me (owner, 2026-10-12), each with when it was asked.
+              The key stays the entry's place in the ledger, so a new ask does not
+              shift the others. Agents write tasks.json, so check the time's type. */}
           {(task.humanQA?.length ?? 0) > 0 && (
             <div>{label(t('kanban.humanQA'))}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {task.humanQA!.map((e, i) => {
+                {task.humanQA!.map((e, i) => [e, i] as const).reverse().map(([e, i]) => {
                   const open = !isAnswered(e) && !isWithdrawn(e);
+                  const ago = askedAgo(typeof e.askedAt === 'string' ? e.askedAt : undefined, Date.now(), i18n.language, t('askMe.justNow'));
                   return (
                     <div key={i} style={{
                       padding: '10px 12px', borderRadius: 'var(--cth-r-lg)',
@@ -492,6 +496,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--cth-ink-2)' }}>{t('kanban.question')}</span>
+                        {ago && <span style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{ago}</span>}
                         {open && <span style={{ marginInlineStart: 'auto', padding: '1px 8px', borderRadius: 999, background: 'var(--cth-coral-strong)', color: 'var(--cth-on-coral)', fontSize: 10.5, fontWeight: 600 }}>{t('kanban.awaitingAnswer')}</span>}
                       </div>
                       <FileText source={e.q} who={{ raisedBy: e.raisedBy, assignee: qaAssignee }} checks={qaFiles[e.raisedBy ?? ''] ?? {}} />
