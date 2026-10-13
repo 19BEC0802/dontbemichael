@@ -128,7 +128,7 @@ test('the running hook keeps Research out of the office\'s files and everyone el
     for (const file of [path.join(o.desk, 'notes.md'), path.join(researchDir, 'outbox', 'a.json'), path.join(researchDir, 'memory', 'inbox.md')]) {
       const r = call(id, 'Read', file);
       assert.ok(denied(r), `${id} must not read ${path.relative(o.base, file)}`);
-      assert.match(reason(r), /only Research reads it/);
+      assert.match(reason(r), /only Pete reads it/);
     }
     assert.ok(!denied(call(id, 'Read', path.join(o.hive.root(), 'tasks.json'))), `${id} still reads the hive`);
   }
@@ -141,7 +141,7 @@ test('the running hook keeps Research out of the office\'s files and everyone el
     for (const file of [path.join(researchDir, 'inbox', 'sneak.json'), path.join(o.desk, 'x.md')]) {
       const r = call(id, 'Write', file);
       assert.ok(denied(r), `${id} must not write ${path.relative(o.base, file)} (no business folder)`);
-      assert.match(reason(r), /That is Research's folder/);
+      assert.match(reason(r), /That is Pete's folder/);
     }
   }
   assert.ok(!denied(call(R.RESEARCH_ID, 'Write', path.join(o.desk, 'notes.md'))), 'Research writes its desk (no business folder)');

@@ -142,3 +142,15 @@ test('case does not decide the verdict', () => {
   assert.equal(classifyPathToken('README.MD'), 'preview');
   assert.equal(classifyPathToken('src/App.TSX'), 'edit');
 });
+
+test('a link covers the cells of its path, past wide characters and inside its quotes', () => {
+  // Value: protects=the underline and click land on the path when the line holds Chinese text or quotes; fails_when=string offsets are used as cell columns or the quotes are underlined; why_new=design review of #280; seam=none
+  const { linkCellRange } = loadTs('src/shared/terminalPaths.ts');
+  const cellsFor = (s) => [...s].flatMap((ch) => (/[一-鿿]/.test(ch) ? [{ chars: ch, width: 2 }, { chars: '', width: 0 }] : [{ chars: ch, width: 1 }]));
+  const line = '报告 "/tmp/a b.md"';
+  const raw = '"/tmp/a b.md"';
+  const start = line.indexOf(raw);
+  assert.deepEqual(linkCellRange(cellsFor(line), start, start + raw.length, raw), { startX: 7, endX: 17 });
+  const plain = 'see notes.md';
+  assert.deepEqual(linkCellRange(cellsFor(plain), 4, 12, 'notes.md'), { startX: 5, endX: 12 });
+});

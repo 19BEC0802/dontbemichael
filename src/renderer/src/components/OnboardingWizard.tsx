@@ -1094,7 +1094,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                   ))}
                   <TeamCard
                     character="ryan"
-                    name={RESEARCH_NAME}
+                    name={`${RESEARCH_NAME} · ${t('research.title')}`}
                     summary={t('research.teamSummary')}
                     chips={[{ tone: 'muted', label: t('research.teamTag') }]}
                     picked={researchPicked}

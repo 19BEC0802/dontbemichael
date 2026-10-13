@@ -7,6 +7,10 @@
 import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
+/** The most one note file may hold; a bigger one is skipped, not read whole
+ *  into the app's memory. */
+export const MAX_NOTE_BYTES = 256 * 1024;
+
 export function readResearchNotes(agentDir: string): string {
   let root = '';
   try { root = realpathSync(agentDir); } catch { return ''; }
@@ -21,9 +25,12 @@ export function readResearchNotes(agentDir: string): string {
     // link) may be one Research can't read, so it is skipped too.
     let fd = -1;
     try {
-      fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+      // Without waiting: a pipe Research made would otherwise hold the open
+      // forever and freeze the app (ship review). Then only a plain file, of
+      // a size a note can have.
+      fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
       const st = fstatSync(fd);
-      if (!st.isFile() || st.nlink !== 1) return null;
+      if (!st.isFile() || st.nlink !== 1 || st.size > MAX_NOTE_BYTES) return null;
       // The open file must be the one its path names inside the folder now,
       // so a folder swapped for a link between the check and the open is
       // caught (verification of the Codex fix).

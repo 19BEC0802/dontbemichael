@@ -351,6 +351,9 @@ test('over the hook socket, a gate that throws refuses an MCP call and lets a bu
   for (const tool_name of ['WebFetch', 'Read', 'Bash']) {
     assert.equal((await ask({ ...base, agent_id: 'research', tool_name })).hookSpecificOutput.permissionDecisionReason, R.RESEARCH_UNCHECKED_TOOL, `Research ${tool_name}`);
   }
+  // A save into the shared temp folders fails closed here too, as in the hook program (api review).
+  assert.equal((await ask({ ...base, tool_name: 'Write', tool_input: { file_path: '/TMP/draft.md', content: 'x' } })).hookSpecificOutput.permissionDecisionReason, R.RESEARCH_UNCHECKED_TOOL);
+  assert.ok(!denied(await ask({ ...base, tool_name: 'Write', tool_input: { file_path: path.join(os.homedir(), 'Office', 'x.md'), content: 'x' } })), 'a folder outside the temp folders goes on');
 });
 
 // Value: protects=the no-agent check runs before the md-mail skip, and a needs-sign-in connector the owner turned on and gave works without a re-read; fails_when=connectorAccess checks the app server before agentId (md-mail calls with no agent id then pass, since the md-mail gate needs an agent id), or the gate starts reading the stale saved status; why_new=no test calls md-mail without an agent id or a needs-sign-in connector that is on and granted; seam=none

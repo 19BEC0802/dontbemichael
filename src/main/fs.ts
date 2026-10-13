@@ -519,6 +519,25 @@ const PACKAGE_EXTENSIONS = new Set([
  * shown in their parent instead (eng review R4). Any other folder opens, dots
  * in its name included (`Sales`, `acme.com`, `Q3.2026`).
  */
+/**
+ * What ⌘-clicking a path an agent printed may do (ship review, red team): a
+ * plain folder opens; anything else is only shown in its folder. Judged on
+ * the real path behind any link, so a link named `report.md` to an app an
+ * agent built never launches it; and a folder that is an app or bundle by its
+ * contents, whatever its name, is shown, not opened.
+ */
+export async function revealTarget(p: string): Promise<{ exists: false } | { exists: true; path: string; open: boolean }> {
+  const st = await statAbs(p);
+  if (!st.exists) return { exists: false };
+  let real: string;
+  try { real = await realpath(st.path); } catch { return { exists: false }; }
+  let isDir = false;
+  try { isDir = (await stat(real)).isDirectory(); } catch { return { exists: false }; }
+  if (!isDir || !opensAsFolder(real)) return { exists: true, path: real, open: false };
+  const bundle = await Promise.all(['Contents/Info.plist', 'Contents/MacOS', 'Info.plist'].map((f) => stat(join(real, f)).then(() => true, () => false)));
+  return { exists: true, path: real, open: !bundle.some(Boolean) };
+}
+
 export function opensAsFolder(path: string): boolean {
   return !PACKAGE_EXTENSIONS.has(extensionOf(path));
 }

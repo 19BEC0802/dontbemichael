@@ -226,7 +226,7 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
               stays as it is, shown as text (owner, 2026-10-13). */}
           <Row label={t('editAgent.name')} info={isResearch ? t('editAgent.researchName') : undefined}>
             {isResearch ? (
-              <span style={{ fontSize: 13, color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)' }}>{agent.name}</span>
+              <input readOnly value={agent.name} aria-label={t('editAgent.name')} style={lockedValueStyle} />
             ) : (
             <input
               value={name}
@@ -328,7 +328,7 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
             {researchLocked ? (
               // Nothing to choose: the engine as plain text, with its reason
               // behind the info icon.
-              <span style={{ fontSize: 13, color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)' }}>{providerLabel}</span>
+              <input readOnly value={providerLabel} aria-label={t('editAgent.provider')} style={lockedValueStyle} />
             ) : (
             <select
               value={provider}
@@ -402,6 +402,13 @@ const inputStyle: CSSProperties = {
   color: 'var(--cth-ink)',
   outline: 'none',
   boxSizing: 'border-box'
+};
+
+/** A value that can't be changed here, shown as text but still a labelled,
+ *  read only field for screen readers (Pete's name and engine). */
+const lockedValueStyle: CSSProperties = {
+  border: 'none', background: 'transparent', padding: 0, outline: 'none',
+  fontSize: 13, color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)'
 };
 
 /** A group of fields with no heading (D3: field labels only). `id` names the

@@ -70,7 +70,7 @@ export const ASK_TOOL_REFUSAL =
   "Don't ask the owner here: nobody answers your terminal. File it as one new file in the hive's triage folder (your questions as one \"ask\", what you were doing in \"description\"). Michael checks it and puts it on the owner's ASK ME board.";
 
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
-import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, AGENT_TMP_DIR, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
+import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, AGENT_TMP_DIR, isSharedTempSave, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
 import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
@@ -291,6 +291,8 @@ export class HookServer {
             : pre && WEB_TOOLS.has(payload.tool_name ?? '') && payload.agent_id !== RESEARCH_ID ? mcpDeny(WEB_SETTINGS_UNREADABLE)
             // Research's file tools have the hook as their only wall.
             : pre && payload.agent_id === RESEARCH_ID ? mcpDeny(RESEARCH_UNCHECKED_TOOL)
+            // A save into the shared temp folders, as the hook program does.
+            : pre && isSharedTempSave(payload.tool_name ?? '', payload.tool_input) ? mcpDeny(RESEARCH_UNCHECKED_TOOL)
             : {};
         }
         conn.end(JSON.stringify(res ?? {}));

@@ -334,7 +334,7 @@ follow.
   internet from a command (on a Mac). Every message to Pete first passes a trust layer that keeps
   out the kinds of data you mark private in Settings, Research & privacy, and his answers are
   cleaned of instructions before your team reads them. Pete sees none of your files, and he is off
-  until you turn him on. On Windows his commands aren't fenced in yet.
+  until you turn him on. On Windows, Pete can still reach your office files.
 - **No usage data.** The app sends nothing about how you use it. See [`TELEMETRY.md`](./TELEMETRY.md).
 
 ## For developers

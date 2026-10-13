@@ -27,6 +27,7 @@
  * rules without touching the plumbing.
  */
 
+import { RESEARCH_ID, RESEARCH_NAME } from './research';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export interface FolderLayout {
@@ -193,7 +194,17 @@ export function sharedTempWriteDecision(temps: string[], ownTmp: string, ownCwd:
   // Its own folders stay open, even in an office that sits in a temp folder.
   if ([ownTmp, ownCwd].some((f) => f && inside(f, target))) return { deny: false };
   if (!temps.some((f) => f && inside(f, target))) return { deny: false };
-  return { deny: true, reason: `While Research is on, the shared temporary folders are closed for saving. Save it in your own scratch folder, ${ownTmp}, and carry on from there.` };
+  return { deny: true, reason: `While ${RESEARCH_NAME} is on, the shared temporary folders are closed for saving. Save it in your own scratch folder, ${ownTmp}, and carry on from there.` };
+}
+
+/** A save aimed at the shared temporary folders, judged on the path as
+ *  written: the fail closed checks use it when the app's own check can't run
+ *  (the hook program has the same pattern). */
+export function isSharedTempSave(tool: string, input: unknown): boolean {
+  if (!FOLDER_WRITE_TOOLS.has(tool) || !input || typeof input !== 'object') return false;
+  const i = input as { file_path?: unknown; notebook_path?: unknown };
+  const target = typeof i.file_path === 'string' ? i.file_path : typeof i.notebook_path === 'string' ? i.notebook_path : '';
+  return /^(?:\/private)?\/(?:tmp|var\/tmp|var\/folders)(?:\/|$)/i.test(target);
 }
 
 /** Where an office agent's Claude session keeps its scratch files: under the
@@ -272,8 +283,8 @@ export function researchWallDecision(researchFolders: string[], tool: string, ta
     return {
       deny: true,
       reason: writes
-        ? 'That is Research\'s folder. To ask Research something, write a message to "research" in your own outbox; the app checks it and delivers it.'
-        : 'That is Research\'s folder, and only Research reads it. What Research finds reaches you in its messages, after the app checks them.'
+        ? `That is ${RESEARCH_NAME}'s folder. To ask ${RESEARCH_NAME} something, write a message to "${RESEARCH_ID}" in your own outbox; the app checks it and delivers it.`
+        : `That is ${RESEARCH_NAME}'s folder, and only ${RESEARCH_NAME} reads it. What ${RESEARCH_NAME} finds reaches you in his messages, after the app checks them.`
     };
   }
   return { deny: false };

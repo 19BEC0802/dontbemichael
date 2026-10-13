@@ -31,7 +31,7 @@ import {
   modelForRole, OPS_STANDUP_MISSION, OPS_STANDUP_BUILT_IN_BODIES, OPS_STANDUP_FOCUS, OPS_STANDUP_BUILT_IN_FOCUSES, HEARTBEAT_MISSION, COMPACT_MAINTENANCE_MISSION, type HarnessConfig, type ScheduledMission
 } from './config';
 import { terminalLaunches } from './terminalAtFolder';
-import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder, readAskFile, type AskFileAgent } from './fs';
+import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder, readAskFile, revealTarget, type AskFileAgent } from './fs';
 import { answerMessages, cardConversation, mergeHumanQA, MICHAEL_ID, raiserOf } from '../shared/askMeRouting';
 import { FIRST_TASK_EDITED_MAX, firstTaskCard, firstTaskCardFromText } from '../shared/firstTask';
 import { answerKey, catchUpRequests, ownerWorkOrder } from '../shared/ownerRequests';
@@ -1386,7 +1386,7 @@ function closeAgentByOwner(id: string): { ok: boolean; paused: number } {
  * asking agent.
  */
 function receiveScheduleRequest(actor: string, payload: unknown, why = ''): string {
-  if (actor === RESEARCH_ID) return 'Research has no schedules: it answers the questions teammates send it.';
+  if (actor === RESEARCH_ID) return 'You have no schedules: you answer the questions teammates send you.';
   const cfg = readConfig();
   const godId = hiveGodId();
   const op = payload && typeof payload === 'object' ? (payload as { op?: unknown }).op : undefined;
@@ -4634,10 +4634,10 @@ ipcMain.handle('fs:revealPath', async (_evt, p: unknown) => {
   if (typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) {
     return { ok: false, error: 'bad request' };
   }
-  const st = await statAbs(p);
-  if (!st.exists) return { ok: false, error: 'not found' };
-  if (st.isFile || !opensAsFolder(st.path)) { shell.showItemInFolder(st.path); return { ok: true }; }
-  const err = await shell.openPath(st.path);
+  const t = await revealTarget(p);
+  if (!t.exists) return { ok: false, error: 'not found' };
+  if (!t.open) { shell.showItemInFolder(t.path); return { ok: true }; }
+  const err = await shell.openPath(t.path);
   return err ? { ok: false, error: err } : { ok: true };
 });
 

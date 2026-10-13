@@ -28,7 +28,7 @@ test('the Research row speaks every state and acts at once', () => {
   // Value: protects=the owner sees whether Research started; fails_when=a state has no words or waits for Save; why_new=design review D6; seam=source
   assert.match(ui, /<span role="status"/);
   for (const k of ['off', 'on', 'starting', 'stopping', 'failed']) assert.ok(en.research[k], k);
-  assert.equal(en.research.off, "Off. Your team can't look things up online.");
+  assert.equal(en.research.off, "Off. Pete can't look things up for your team.");
   assert.equal(en.research.on, 'On. Pete looks things up for the team.');
   assert.match(ui, /await startResearch\(config\)/);
 });
@@ -93,4 +93,15 @@ test('Research copy has no dashes', () => {
     const l = JSON.parse(read(`src/renderer/src/i18n/locales/${lang}.json`));
     assert.doesNotMatch(JSON.stringify(l.research) + l.capabilities.research, /[–—]| - /, lang);
   }
+});
+
+test('Pete reads as the Research member everywhere the owner sees him', () => {
+  // Value: protects=the setup card shows his role, his locked name and engine stay labelled for screen readers, and the floor never calls him Ryan; fails_when=a span replaces the read only field, the card drops the role, or he joins the in character banter; why_new=design review; seam=source
+  const wiz = read('src/renderer/src/components/OnboardingWizard.tsx');
+  assert.match(wiz, /name=\{`\$\{RESEARCH_NAME\} · \$\{t\('research\.title'\)\}`\}/);
+  const modal = read('src/renderer/src/components/EditAgentModal.tsx');
+  assert.match(modal, /<input readOnly value=\{agent\.name\} aria-label=\{t\('editAgent\.name'\)\} style=\{lockedValueStyle\} \/>/);
+  assert.match(modal, /<input readOnly value=\{providerLabel\} aria-label=\{t\('editAgent\.provider'\)\} style=\{lockedValueStyle\} \/>/);
+  assert.match(read('src/renderer/src/scene/studio/StudioStage.tsx'), /\.filter\(\(p\) => p\.id !== RESEARCH_ID\)/);
+  assert.match(read('src/main/hive.ts'), /const bigCheck = payload\.hook_event_name === 'PreToolUse' && \(\['Write', 'Edit', 'MultiEdit', 'NotebookEdit'\]\.indexOf\(tool\) >= 0 \|\| \(tool === 'Bash' && input\.dangerouslyDisableSandbox === true\)\);/);
 });

@@ -15,7 +15,8 @@ import { classPhrase, type DataClassId } from './dataClasses';
 /** Research's agent id. Reserved: no other hire takes it. */
 export const RESEARCH_ID = 'research';
 /** Its name (owner, 2026-10-13: Pete, from The Office; it was "Research",
- *  design review D15) and its role. Every text that names it uses this. */
+ *  design review D15) and its role. The app's text names it through this; the
+ *  locale files repeat the name, and a test keeps them in step. */
 export const RESEARCH_NAME = 'Pete';
 export const RESEARCH_ROLE = 'Research';
 /** The sender of every trust layer note (design review D22). */
@@ -70,9 +71,19 @@ export const RESEARCH_UNCHECKED_TOOL = 'The app could not check this step, so it
 export const REFUSAL_WEB_TOOL = `Only ${RESEARCH_NAME} uses the internet. Send ${RESEARCH_NAME} a message ("to": "${RESEARCH_ID}", "act": "query") with a plain question, leaving out names, contact details, money and anything from the owner's files or email.`;
 export const REFUSAL_WEB_TOOL_OFF = `Only ${RESEARCH_NAME} uses the internet, and ${RESEARCH_NAME} is off, so nobody in the office can look this up. Work without it and say what you could not check.`;
 
-/** Does this message go to Research. `to` as the sender wrote it. */
-export function addressedToResearch(to: unknown): boolean {
-  return typeof to === 'string' && to.trim().toLowerCase() === RESEARCH_ID;
+/** Does this message go to Research. `to` as the sender wrote it. His name
+ *  counts too, unless an older hire already has it as an id (`agentIds`). */
+export function addressedToResearch(to: unknown, agentIds?: Record<string, unknown>): boolean {
+  if (typeof to !== 'string') return false;
+  const t = to.trim().toLowerCase();
+  if (t === RESEARCH_ID) return true;
+  return !!agentIds && t === RESEARCH_NAME.toLowerCase() && !(t in agentIds);
+}
+
+/** Research's name is his alone: no one else is hired or renamed to it
+ *  (names are how the team addresses each other). */
+export function isReservedName(name: string, id?: string): boolean {
+  return id !== RESEARCH_ID && name.trim().toLowerCase() === RESEARCH_NAME.toLowerCase();
 }
 
 /** Did the sender attach files. Messages carry no attachment field today, but

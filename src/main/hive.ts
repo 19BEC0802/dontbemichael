@@ -22,7 +22,7 @@ import { WEB_SETTINGS_UNREADABLE, WEB_TOOLS, type SandboxNetwork } from '../shar
 import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
   PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
-  RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS, RESEARCH_NAME,
+  RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS, RESEARCH_NAME, RESEARCH_ROLE, isReservedName,
   SENT_AS_SUBJECT, sentAsBody
 } from '../shared/research';
 
@@ -1057,8 +1057,9 @@ export class HiveManager {
       /** Its Claude connectors (shared/claudeConnectors.ts): start with none, or
        *  deny everything not given. Absent means none. */
       connectors?: SpawnConnectorPlan;
-      /** Shell network (shared/webAccess.ts): an empty strict list for every
-       *  team member but Research; absent for Research and Michael. */
+      /** Shell network (shared/webAccess.ts): an empty strict list for
+       *  everyone in a business office, Michael included (D9.1); absent for
+       *  Research. */
       network?: SandboxNetwork;
     } = {}
   ): Promise<SpawnInjection> {
@@ -1111,8 +1112,12 @@ export class HiveManager {
     reg.agents[meta.id] = {
       ...prev,
       ...meta,
-      // Research's name is the app's, whatever a spawn passes (owner, 2026-10-13).
-      ...(meta.id === RESEARCH_ID ? { name: RESEARCH_NAME } : {}),
+      // Research's name is the app's, whatever a spawn passes (owner,
+      // 2026-10-13); an office that already has a member by that name keeps
+      // calling Research by its role, so two never share a name.
+      ...(meta.id === RESEARCH_ID ? {
+        name: Object.entries(reg.agents).some(([otherId, a]) => otherId !== RESEARCH_ID && a?.name?.trim().toLowerCase() === RESEARCH_NAME.toLowerCase()) ? RESEARCH_ROLE : RESEARCH_NAME
+      } : {}),
       capabilities: meta.capabilities ?? prev?.capabilities ?? [],
       role,
       status: 'idle',
@@ -1490,6 +1495,7 @@ export class HiveManager {
       const taken = Object.entries(reg.agents).some(([otherId, other]) =>
         otherId !== id && !!other?.name && other.name.trim().toLowerCase() === nextName.toLowerCase());
       if (taken) return { ok: false, error: `Another team member is already called ${nextName}. Pick a different name.` };
+      if (isReservedName(nextName, id)) return { ok: false, error: `${RESEARCH_NAME} is the Research team member's name. Pick a different name.` };
 
       const previousName = agent.name;
       agent.name = nextName;
@@ -2641,7 +2647,7 @@ export class HiveManager {
     }
     // Anything else for Research (an app note, an owner answer, a send()) goes
     // through the trust layer first, in the background (ship review D2.1).
-    if (addressedToResearch(msg.to) && msg.from !== RESEARCH_ID && !this.researchCleared.has(msg.id)) {
+    if (addressedToResearch(msg.to, reg.agents) && msg.from !== RESEARCH_ID && !this.researchCleared.has(msg.id)) {
       this.appendLog({ kind: 'message-held-for-trust-layer', from: msg.from, id: msg.id });
       this.queueForResearch({ ...msg, to: RESEARCH_ID });
       return;
@@ -2920,7 +2926,7 @@ export class HiveManager {
             continue;
           }
           // Everything to and from Research passes its trust layer first.
-          const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to);
+          const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to, this.registry().agents);
           if (toResearch || id === RESEARCH_ID) {
             const gate = toResearch ? this.researchInboundGate(id, msg, partial, raw, researchOn) : this.researchOutboundGate(msg, partial, raw);
             if (gate === 'hold') continue;
@@ -5293,7 +5299,11 @@ process.stdin.on('end', () => {
   // with only its short input fields: the connector, mail and QuickBooks gates
   // decide on the tool name, server and mailbox, never the body (owner, 2026-10-02).
   let line = JSON.stringify(payload);
-  if ((mcp || research || tempSave) && Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
+  // Any save, and any command asked to run outside the sandbox, is sent with
+  // only its short fields when it is too big for one frame, so the app still
+  // judges where it goes (ship review): a lost answer would let it through.
+  const bigCheck = payload.hook_event_name === 'PreToolUse' && (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].indexOf(tool) >= 0 || (tool === 'Bash' && input.dangerouslyDisableSandbox === true));
+  if ((mcp || research || tempSave || bigCheck) && Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
     const small = {};
     const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
     for (const k of Object.keys(input)) {

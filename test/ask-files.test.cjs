@@ -133,7 +133,7 @@ test('revealing a directory never opens an app bundle, and the IPC re-checks bef
   assert.equal(opensAsFolder('/Users/x/Report.pages'), false);
   for (const dotted of ['/Users/x/office/acme.com', '/Users/x/office/Q3.2026', '/Users/x/office/v1.2']) assert.equal(opensAsFolder(dotted), true, dotted);
   const main = read('src/main/index.ts');
-  assert.match(main, /if \(st\.isFile \|\| !opensAsFolder\(st\.path\)\) \{ shell\.showItemInFolder\(st\.path\); return \{ ok: true \}; \}/);
+  assert.match(main, /if \(!t\.open\) \{ shell\.showItemInFolder\(t\.path\); return \{ ok: true \}; \}/, 'judged on the real path (test/reveal-target.test.cjs)');
   // Open runs the check again in main; a document that will not open is shown instead.
   assert.match(main, /ipcMain\.handle\('fs:openAskFile'[\s\S]*?const r = await askFileVerdict\(p, askFileRoots\(who\)\);[\s\S]*?if \(r\.verdict === 'open' && !\(await shell\.openPath\(r\.path\)\)\)[\s\S]*?shell\.showItemInFolder\(r\.path\);/);
   assert.match(main, /function askFileRoots\(who: unknown\): string\[\] \{\n\s+const cfg = readConfig\(\);\n\s+const office = cfg\.businessFolder \?\? legacyBusinessFolder\(cfg\.officeFolder\);\n\s+\/\/ gstack-shortcut\(dec-150d1c26[\s\S]*?return askFileRootsFor\(office, agents, who\);/);

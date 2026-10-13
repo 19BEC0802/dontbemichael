@@ -2250,7 +2250,7 @@
   "research": {
     "title": "Research",
     "tip": "Pete, the one team member who can use the internet. Sees no office data, only what your team sends, after the privacy check.",
-    "off": "Off. Your team can't look things up online.",
+    "off": "Off. Pete can't look things up for your team.",
     "on": "On. Pete looks things up for the team.",
     "starting": "Hiring Pete…",
     "stopping": "Turning off Pete…",
@@ -2275,7 +2275,7 @@
     "privacyCheck": "Privacy check",
     "noticeTitle": "Your team no longer uses the internet",
     "noticeBody": "This keeps your private data in. One team member, Pete, can look things up for them, after a privacy check. He's off until you turn him on.",
-    "noticeOpen": "Open Research settings",
+    "noticeOpen": "Open Research & privacy",
     "class": {
       "places": {
         "name": "Places",

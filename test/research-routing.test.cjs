@@ -543,14 +543,19 @@ test('Research writes only to someone whose question it is answering, or to Mich
   const told = msgsIn(hive, 'research').filter((m) => m.subject === R.NOT_SENT_SUBJECT_OUT);
   assert.equal(told.length, 2);
   assert.equal(told[0].body, R.RESEARCH_ONLY_ASKERS);
+  const pamsAsk = await askFrom(hive, 'pam');
   await askFrom(hive, 'jim');
   const jimsAsk = msgsIn(hive, 'research').find((m) => m.from === 'jim');
   send(hive, 'research', { to: 'jim', act: 'inform', subject: 'Unasked', body: 'Something else entirely' }, 'r4.json');
   send(hive, 'research', { to: 'jim', act: 'inform', subject: 'Answer', body: 'Pizza is up 4 percent', in_reply_to: jimsAsk.id }, 'r5.json');
-  send(hive, 'research', { to: 'jim', act: 'inform', subject: 'Wrong', body: 'x', in_reply_to: msgsIn(hive, 'research').find((m) => m.from === 'pam')?.id ?? 'none' }, 'r6.json');
+  send(hive, 'research', { to: 'jim', act: 'inform', subject: 'Wrong', body: 'x', in_reply_to: pamsAsk }, 'r6.json');
+  // An answer named only by its thread still reaches the one who asked.
+  const pamsCopy = msgsIn(hive, 'research').find((m) => m.id === pamsAsk);
+  send(hive, 'research', { to: 'pam', act: 'inform', subject: 'ByThread', body: 'z', conversation: pamsCopy.conversation }, 'r7.json');
   hive.routeOnce(); await tick(); hive.routeOnce();
   assert.equal(msgsIn(hive, 'jim').filter((m) => m.subject === 'Answer').length, 1, 'Research answers the question Jim asked');
   assert.equal(msgsIn(hive, 'jim').filter((m) => m.subject === 'Unasked' || m.subject === 'Wrong').length, 0, 'never a new conversation, nor an answer to someone else\'s question');
+  assert.equal(msgsIn(hive, 'pam').filter((m) => m.subject === 'ByThread').length, 1, 'by thread too');
 });
 
 test('Research\'s answer to a refusal note or the scheduler is dropped quietly, never a loop', async (t) => {
@@ -651,4 +656,94 @@ test('Research is called Pete, whatever name a spawn passes, and the app\'s text
   assert.match(read('src/renderer/src/hooks/useRestoreTeam.ts'), /name: a\.id === RESEARCH_ID \? RESEARCH_NAME : a\.name/);
   assert.match(read('src/renderer/src/components/EditAgentModal.tsx'), /info=\{isResearch \? t\('editAgent\.researchName'\) : undefined\}>\s*\{isResearch \? \(/);
   for (const loc of ['en', 'ar', 'zh-CN']) assert.match(JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`)).research.starting, /Pete/, loc);
+});
+
+test('Research\'s notes reader skips a pipe and an oversized file instead of hanging', posixOnly('mkfifo'), (t) => {
+  // Value: protects=a pipe Pete makes can't freeze the app when his notes are read; fails_when=the open waits on a pipe or a huge note is read whole; why_new=security review (reproduced hang); seam=none
+  const { readResearchNotes, MAX_NOTE_BYTES } = loadTs('src/main/researchNotes.ts');
+  const { execFileSync } = require('node:child_process');
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'md-notes3-')));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const dir = path.join(base, 'research');
+  fs.mkdirSync(path.join(dir, 'memory'), { recursive: true });
+  execFileSync('mkfifo', [path.join(dir, 'memory', 'pipe.md')]);
+  fs.writeFileSync(path.join(dir, 'memory', 'huge.md'), 'x'.repeat(MAX_NOTE_BYTES + 1));
+  fs.writeFileSync(path.join(dir, 'memory.md'), 'Flour suppliers');
+  assert.equal(readResearchNotes(dir), 'Flour suppliers');
+});
+
+test('nobody else takes Pete\'s name, and "to": "pete" reaches him unless an older hire has that id', async (t) => {
+  // Value: protects=names stay unique and a message to Pete by name is not lost; fails_when=a rename or hire takes "Pete", an office with a Pete ends up with two, or "pete" bounces; why_new=api review; seam=none
+  assert.equal(R.isReservedName(' pete '), true);
+  assert.equal(R.isReservedName('Pete', 'research'), false);
+  assert.equal(R.addressedToResearch('Pete', { pam: {} }), true);
+  assert.equal(R.addressedToResearch('pete', { pete: {} }), false, 'an older hire called pete keeps his messages');
+  assert.equal(R.addressedToResearch('pete'), false, 'by id only without the roster');
+  const { hive } = await office(t);
+  assert.equal(hive.renameAgent('pam', 'Pete').ok, false, 'Pete is on the floor: taken');
+  const { hive: noPete } = await office(t, { research: false });
+  assert.match(noPete.renameAgent('pam', 'Pete').error, /Pete is the Research team member's name/, 'reserved even while he is not hired');
+  const home2 = fs.mkdtempSync(path.join(os.tmpdir(), 'md-pete2-'));
+  t.after(() => fs.rmSync(home2, { recursive: true, force: true }));
+  const h2 = new HiveManager(() => home2);
+  await h2.ensureAgent({ id: 'pete-1', name: 'Pete', provider: 'claude', cwd: home2 });
+  await h2.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home2, 'research-desk'), isResearch: true });
+  assert.equal(h2.registry().agents.research.name, 'Research', 'an office that already has a Pete keeps Research by its role');
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/components/AddAgentModal.tsx'), 'utf8'), /const nameTaken = \(n: string\) => isReservedName\(n\) \|\|/);
+});
+
+test('every locale that names Pete says the same name the app uses', () => {
+  // Value: protects=the owner and the agents call him by one name; fails_when=RESEARCH_NAME changes but a locale keeps the old one; why_new=api review (locales repeat the name); seam=none
+  for (const loc of ['en', 'ar', 'zh-CN']) {
+    const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', `src/renderer/src/i18n/locales/${loc}.json`), 'utf8'));
+    for (const k of ['tip', 'on', 'off', 'starting', 'stopping', 'failed', 'windows', 'windowsTip', 'sendTitle', 'sendTip', 'usedWhenOn', 'noticeBody']) {
+      assert.ok(d.research[k].includes(R.RESEARCH_NAME), `${loc} research.${k}`);
+    }
+    for (const k of ['researchEngine', 'researchName']) assert.ok(d.editAgent[k].includes(R.RESEARCH_NAME), `${loc} editAgent.${k}`);
+  }
+});
+
+test('Pete may write to Michael by his display name', async (t) => {
+  // Value: protects=a note to Michael under the name the owner gave him still reaches him; fails_when=the display name drops out of the Michael aliases; why_new=testing review; seam=fake layer
+  const { hive } = await office(t);
+  hive.renameAgent('god', 'Mike');
+  send(hive, 'research', { to: 'mike', act: 'inform', subject: 'Stuck', body: 'No source has it' });
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  assert.equal(msgsIn(hive, 'god').filter((m) => m.subject === 'Stuck').length, 1);
+});
+
+test('Research\'s notes: memory.md and memory/*.md are read, inbox.md is not, and a linked memory folder is refused', (t) => {
+  // Value: protects=his own notes reach the shared memory and an office folder linked in as memory/ does not; fails_when=the folder checks go; why_new=testing review (only single file links were covered); seam=none
+  const { readResearchNotes } = loadTs('src/main/researchNotes.ts');
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'md-notes4-')));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const dir = path.join(base, 'research');
+  fs.mkdirSync(path.join(dir, 'memory'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'memory.md'), 'Flour');
+  fs.writeFileSync(path.join(dir, 'memory', 'yeast.md'), 'Yeast');
+  fs.writeFileSync(path.join(dir, 'memory', 'inbox.md'), 'not mined');
+  assert.equal(readResearchNotes(dir), 'Flour\n\nYeast');
+  if (process.platform === 'win32') return;
+  fs.rmSync(path.join(dir, 'memory'), { recursive: true });
+  fs.mkdirSync(path.join(base, 'office'));
+  fs.writeFileSync(path.join(base, 'office', 'ledger.md'), 'SECRET ledger');
+  fs.symlinkSync(path.join(base, 'office'), path.join(dir, 'memory'));
+  assert.equal(readResearchNotes(dir), 'Flour');
+});
+
+test('an owner note whose check fails leaves nothing pending, so no second note comes at the next start', async (t) => {
+  // Value: protects=Michael hears once about a refused note; fails_when=the pending entry is left after a failed check; why_new=testing review; seam=fake layer
+  const { hive } = await office(t, { layer: fakeLayer({ inbound: () => { throw new Error('down'); } }) });
+  hive.rememberOwnerNote('research', 'Focus on flour');
+  await tick(); await tick();
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(path.dirname(hive.root()), 'private', 'research-pending.json'), 'utf8')), []);
+  assert.equal(msgsIn(hive, 'god').filter((m) => m.subject === R.NOT_SENT_SUBJECT).length, 1);
+});
+
+test('the refusals agents read from the folder walls and the scheduler name Pete', () => {
+  // Value: protects=agents hear one name for him; fails_when=a refusal keeps the old name; why_new=testing and api review; seam=none
+  const F = loadTs('src/shared/folderAccess.ts');
+  assert.match(F.researchWallDecision(['/w/r'], 'Write', '/w/r/x', false).reason, /That is Pete's folder\. To ask Pete something/);
+  assert.match(F.researchWallDecision(['/w/r'], 'Read', '/w/r/x', false).reason, /only Pete reads it/);
+  assert.match(F.sharedTempWriteDecision(['/tmp'], '/h/agent-tmp/pam', undefined, 'Write', '/tmp/x', false).reason, /^While Pete is on/);
 });

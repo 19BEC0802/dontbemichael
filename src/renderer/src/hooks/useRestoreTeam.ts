@@ -105,7 +105,7 @@ export function useRestoreTeam(config?: HarnessConfig | null): RestoreTeamState 
             // No spawn recipe (an old entry persisted before `command`, with no
             // config to rebuild one). Keep it restorable and SAY why rather than
             // silently dropping it — silent removal read as "nothing happened".
-            failures.push(`${a.name}: no saved command`);
+            failures.push(`${a.id === RESEARCH_ID ? RESEARCH_NAME : a.name}: no saved command`);
             return null;
           }
           const [exe, ...args] = tokenizeCommand(command);
@@ -183,11 +183,11 @@ export function useRestoreTeam(config?: HarnessConfig | null): RestoreTeamState 
           } else {
             // Leave it restorable so the user can retry — but record WHY so the
             // outcome is shown on the floor, not buried in the devtools console.
-            failures.push(`${a.name}: ${res.error ?? 'spawn failed'}`);
+            failures.push(`${a.id === RESEARCH_ID ? RESEARCH_NAME : a.name}: ${res.error ?? 'spawn failed'}`);
             console.error('[restore] spawn failed for', a.id, res.error);
           }
         } catch (e) {
-          failures.push(`${a.name}: ${e instanceof Error ? e.message : String(e)}`);
+          failures.push(`${a.id === RESEARCH_ID ? RESEARCH_NAME : a.name}: ${e instanceof Error ? e.message : String(e)}`);
           console.error('[restore] error for', a.id, e);
         }
         return null;

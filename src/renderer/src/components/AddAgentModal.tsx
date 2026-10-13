@@ -1,3 +1,4 @@
+import { isReservedName } from '@shared/research';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from './PixelButton';
@@ -570,7 +571,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
     advanceHireReview();
   };
 
-  const nameTaken = (n: string) => agents.some((a) => a.name.trim().toLowerCase() === n.trim().toLowerCase());
+  const nameTaken = (n: string) => isReservedName(n) || agents.some((a) => a.name.trim().toLowerCase() === n.trim().toLowerCase());
   const whoError = !name.trim() ? tr('addAgent.errName') : nameTaken(name) ? tr('addAgent.wizard.nameTaken', { name: name.trim() }) : undefined;
 
   /** The role step's gate: a name, what they handle, and a job that is

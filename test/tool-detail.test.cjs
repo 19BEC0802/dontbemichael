@@ -191,7 +191,9 @@ test('a web page or a command outside the sandbox, refused in a business office,
   const o = await businessOffice(t);
   const rows = [
     ['Pam fetches a page', 'pam', 'WebFetch', { url: 'https://example.com/prices', prompt: 'prices' }],
-    ['Michael runs a command outside the sandbox', 'god', 'Bash', { command: 'curl https://example.com', description: 'Fetch the price list', dangerouslyDisableSandbox: true }]
+    ['Michael runs a command outside the sandbox', 'god', 'Bash', { command: 'curl https://example.com', description: 'Fetch the price list', dangerouslyDisableSandbox: true }],
+    // A connector the owner never turned on (testing review: the connector gate's refusal too).
+    ['Pam searches a connector she was not given', 'pam', 'mcp__claude_ai_HubSpot__search_crm_objects', { query: 'Acme' }]
   ];
   for (const [label, id, tool, input] of rows) {
     const r = o.call(id, tool, input);
