@@ -73,9 +73,12 @@ export function GetMichaelReady({ provider, onReadyChange }: {
     setKeyBusy(false);
     if (!res.ok) {
       // A refusal shows Anthropic's own reason (a workspace key has its own message).
+      // A key the computer cannot store shows what to do about it (keychain or keyring).
       setKeyError(res.error === 'refused' && 'reason' in res && res.reason
         ? t('engineSetup.keyError.refused', { reason: res.reason })
-        : t(`engineSetup.keyError.${res.error ?? 'unreachable'}`));
+        : res.error === 'store' && 'reason' in res && res.reason
+          ? res.reason
+          : t(`engineSetup.keyError.${res.error ?? 'unreachable'}`));
       return;
     }
     setKeyDraft('');

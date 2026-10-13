@@ -5503,6 +5503,9 @@ ipcMain.handle('engineSetup:signIn', (e): { ok: boolean; error?: string } => {
 ipcMain.handle('engineSetup:useApiKey', async (_e, raw: unknown): Promise<{ ok: boolean; error?: 'invalid' | 'rejected' | 'refused' | 'workspace' | 'busy' | 'unreachable' | 'store'; reason?: string }> => {
   const key = typeof raw === 'string' ? raw.trim() : '';
   if (!apiKeyShapeOk(key)) return { ok: false, error: 'invalid' };
+  // A key this computer cannot encrypt is never saved, so say so (and what to do
+  // about it) before the key is sent to Anthropic or approved for Claude.
+  if (!integrations.canStoreSecrets()) return { ok: false, error: 'store', reason: integrations.secretStoreUnavailableReason() };
   // Electron's fetch follows the system proxy, so the check works wherever Claude does.
   const { verdict, reason } = await checkAnthropicKey(key, net.fetch as unknown as KeyCheckFetch);
   if (verdict !== 'ok') return { ok: false, error: verdict, ...(reason ? { reason } : {}) };
