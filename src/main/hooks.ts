@@ -600,7 +600,7 @@ export class HookServer {
     // setting catches up at its restart.
     if (event === 'PreToolUse' && agentId && agentId !== RESEARCH_ID && p.tool_name === 'Bash'
       && (p.tool_input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true && this.businessOffice()) {
-      this.emit(agentId, event, p);
+      this.emitRefused(agentId, event, p);
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
@@ -620,7 +620,7 @@ export class HookServer {
         d = { ok: false, reason: WEB_SETTINGS_UNREADABLE };
       }
       if (!d.ok) {
-        this.emit(agentId, event, p);
+        this.emitRefused(agentId, event, p);
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
