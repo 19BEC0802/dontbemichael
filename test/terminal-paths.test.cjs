@@ -111,14 +111,22 @@ test('quoted paths with spaces keep their entire path, including the Windows dri
   );
   assert.deepEqual(tokensIn("saved '/Users/Jane/Business Reports/summary.md'"), ['/Users/Jane/Business Reports/summary.md']);
   assert.deepEqual(tokensIn('saved `~/Business Reports/summary.md`'), ['~/Business Reports/summary.md']);
-  assert.deepEqual(tokensIn('saved "Business Reports/summary.md"'), ['Business Reports/summary.md']);
+  assert.deepEqual(tokensIn('saved "./Business Reports/summary.md"'), ['./Business Reports/summary.md']);
+  assert.deepEqual(tokensIn('saved "../Business Reports/summary.md"'), ['../Business Reports/summary.md']);
+  assert.deepEqual(tokensIn('saved "\\Business Reports\\summary.md"'), ['\\Business Reports\\summary.md']);
 });
 
 test('quoted paths coexist with unquoted paths and preserve line suffix handling', () => {
   assert.deepEqual(
-    tokensIn('see "src/my folder/index.ts:42", build/icon.png and \'docs/my notes.md\''),
-    ['src/my folder/index.ts', 'build/icon.png', 'docs/my notes.md']
+    tokensIn('see "./src/my folder/index.ts:42", build/icon.png and \'./docs/my notes.md\''),
+    ['./src/my folder/index.ts', 'build/icon.png', './docs/my notes.md']
   );
+});
+
+test('quoted prose keeps linking the file name inside it', () => {
+  assert.deepEqual(tokensIn('git commit -m "Update README.md"'), ['README.md']);
+  assert.deepEqual(tokensIn('error: "Could not read config.yml"'), ['config.yml']);
+  assert.deepEqual(tokensIn("Michael's notes: see plan.md' later"), ['plan.md']);
 });
 
 test('quoted versions and prose do not become file paths', () => {
