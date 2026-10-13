@@ -18,6 +18,7 @@ import { getOfficeBreak } from '@/components/OfficeBreakNotice';
 import { resolveGodName } from '../../../shared/godIdentity';
 import { acquireTerminal, resetTerminal, isTerminalAutomationSafe, hasTerminalDraft } from '@/components/terminalPool';
 import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition } from './queueDelivery';
+import { RunningToolCalls } from './runningToolCalls';
 import { OFFICE_CAST, DEFAULT_CHARACTER, type OfficeCharacterName } from '@/scene/office/cast';
 import { teamMemberName, teamMemberRole, teamMemberGoal, teamAccent, teamMemberStart, rewrittenInstructions } from '../../../shared/teamPlan';
 import type { AgentDefinitionV2 } from '../../../shared/agentDefinition';
@@ -28,6 +29,7 @@ import { ACTION_AT_PROMPT, ACTION_CLOCKING_IN } from '@/store/store';
 import { ENGINE_READY_EVENT } from '@/shell/useNeedsYou';
 import { seedStarterJobs } from '@/shell/seedStarterJobs';
 import { PromptSubmits, confirmSubmit } from '../../../shared/submitConfirm';
+import { isTerminalPrompt } from '../../../shared/hookEvents';
 
 const GOD_ID = 'god';
 /** Accent palette for MAIN-spawned (voice-hired) agents — picked deterministically
@@ -122,6 +124,8 @@ async function waitForTerminalReady(
 // When each agent last accepted a prompt (its UserPromptSubmit hook), so a
 // submit can confirm it landed (shared/submitConfirm.ts).
 const promptSubmits = new PromptSubmits();
+// Each agent's tool calls still running, so parallel calls keep their detail.
+const runningCalls = new RunningToolCalls();
 
 function submitToPty(
   ptyId: string,
@@ -705,6 +709,7 @@ export function useHive(config: HarnessConfig | null): void {
         const m = stationForTool(e.tool);
         // Each tool call restarts the clock the closing-time rows show.
         if (!breakerArmed) updateAgent(e.agentId, { status: 'working', currentStation: m.station, carrying: m.carry, action: `using ${e.tool}`, actionDetail: e.detail, actionAt: Date.now() });
+        if (e.toolUseId) runningCalls.start(e.agentId, e.toolUseId, { tool: e.tool, detail: e.detail, at: Date.now() });
         useStore.getState().bumpToolCount(e.agentId); // usage proxy for the command center
       } else if (e.event === 'PostToolUse' || e.event === 'UserPromptSubmit') {
         // A turn is in progress (prompt submitted / tool just finished) — keep
@@ -712,8 +717,11 @@ export function useHive(config: HarnessConfig | null): void {
         // finished tool's detail goes, so the closing-time row never shows a
         // tool that already ended as still running (owner, 2026-09-29).
         if (!breakerArmed) updateAgent(e.agentId, { status: 'working', actionDetail: undefined, actionAt: Date.now() });
+        // With parallel calls, the row goes back to the latest one still running.
+        const running = e.event === 'PostToolUse' ? runningCalls.end(e.agentId, e.toolUseId) : undefined;
+        if (running && !breakerArmed) updateAgent(e.agentId, { action: `using ${running.tool}`, actionDetail: running.detail, actionAt: running.at });
         // The prompt landed: a submit waiting on it stops pressing Enter.
-        if (e.event === 'UserPromptSubmit') promptSubmits.note(e.agentId);
+        if (e.event === 'UserPromptSubmit') { promptSubmits.note(e.agentId); runningCalls.clear(e.agentId); }
       } else if (e.event === 'PreInvocation') {
         // Antigravity (agy): the model is being called — it's thinking/working.
         if (!breakerArmed) updateAgent(e.agentId, { status: 'working', action: 'thinking', actionDetail: undefined, actionAt: Date.now() });
@@ -731,6 +739,7 @@ export function useHive(config: HarnessConfig | null): void {
         } else {
           // A genuine stop clears any breaker override — the run is over.
           breakerLevel.current[e.agentId] = 'healthy';
+          runningCalls.clear(e.agentId);
           updateAgent(e.agentId, { status: 'idle', action: 'idle', carrying: undefined, actionDetail: undefined, actionAt: Date.now() });
         }
       } else if (e.event === 'Notification' && !breakerArmed) {
@@ -740,17 +749,9 @@ export function useHive(config: HarnessConfig | null): void {
         //      input") — i.e. the agent answered and has nothing queued.
         // Only (1) is a real "needs you". Treating (2) as blocked made Michael
         // march to the door with a red "!" right after finishing, so detect the
-        // idle case and let him linger on the floor instead.
-        const msg = (e.message ?? '').toLowerCase();
-        const idleWaiting = !msg
-          || msg.includes('waiting for your input')
-          || msg.includes('is idle')
-          || msg.includes('waiting for input');
-        const needsHuman = msg.includes('permission')
-          || msg.includes('approve')
-          || msg.includes('confirm')
-          || msg.includes('needs your');
-        if (needsHuman && !idleWaiting) {
+        // idle case and let him linger on the floor instead. One rule shared
+        // with main (isTerminalPrompt): prompt types or permission messages.
+        if (isTerminalPrompt(e)) {
           // Only the god agent escalates to the human; sub-agents are autonomous
           // and read as "waiting" (parked on god, not on you).
           updateAgent(e.agentId, self.isGod ? { status: 'blocked' } : { status: 'waiting', action: ACTION_AT_PROMPT, actionDetail: undefined, actionAt: Date.now() });

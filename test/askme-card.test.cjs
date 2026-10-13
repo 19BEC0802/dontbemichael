@@ -21,6 +21,14 @@ test('the headline is Michael\'s bold lead, else the first sentence, as plain te
   assert.equal(askHeadline('Sign in again\nwith the app password'), 'Sign in again');
 });
 
+test('the headline keeps underscores in file names and addresses, and drops them as emphasis', () => {
+  assert.equal(askHeadline('Should I send `monthly_report.pdf` to Kelly? It is ready.'), 'Should I send monthly_report.pdf to Kelly?');
+  assert.equal(askHeadline('Can I email first_last@acme.com the quote?'), 'Can I email first_last@acme.com the quote?');
+  assert.equal(askHeadline('Is `a*b` the right formula?'), 'Is a*b the right formula?');
+  assert.equal(askHeadline('**Approve the _final_ invoice?** It is ready.'), 'Approve the final invoice?');
+  assert.equal(askHeadline('__Approve__ the *new* price?'), 'Approve the new price?');
+});
+
 test('how long ago, in plain words', () => {
   const now = Date.parse('2026-09-30T12:00:00Z');
   assert.equal(askedAgo('2026-09-30T11:59:30Z', now, 'en'), 'just now');
@@ -178,6 +186,20 @@ test('askTitle never throws on agent-written data, stays fast, and keeps readabl
   assert.equal(askTitle('Review Q3_2026_budget_final export'), 'Review Q3_2026_budget_final export');
   assert.equal(askTitle('Sign the lease (Suite 100)'), 'Sign the lease (Suite 100)');
   assert.equal(askTitle('Refund for Northwind Cafe (#4471, 30 Sep)'), 'Refund for Northwind Cafe');
+  // A word that only starts like a month is part of the name, not a date.
+  assert.equal(askTitle('Approve ad spend (3 marketing campaigns)'), 'Approve ad spend (3 marketing campaigns)');
+  assert.equal(askTitle('Hire help (2 junior designers)'), 'Hire help (2 junior designers)');
+  assert.equal(askTitle('Pick a supplier (Decision 2 of 3)'), 'Pick a supplier (Decision 2 of 3)');
+  // Full and dotted month names are still dates.
+  assert.equal(askTitle('Renew the lease (March 3)'), 'Renew the lease');
+  assert.equal(askTitle('Send the quote (Sept. 30)'), 'Send the quote');
+  assert.equal(askTitle('Pay the invoice (3 Sep.)'), 'Pay the invoice');
   const tab = read('src/renderer/src/components/AskMeTab.tsx');
   assert.match(tab, /const who = nameFor\(typeof t\.assignee === 'string' \? t\.assignee : undefined\);/);
+});
+
+test('a reply that does not save says so and keeps the draft', () => {
+  const tab = read('src/renderer/src/components/AskMeTab.tsx');
+  assert.match(tab, /catch \{[\s\S]{0,300}setFailed\(row\.key\);[\s\S]{0,80}refreshNeedsYou\(\);/);
+  assert.match(tab, /failed === row\.key && \([\s\S]{0,200}role="alert"[\s\S]{0,200}translate\('askMe\.mailFailed'\)/);
 });

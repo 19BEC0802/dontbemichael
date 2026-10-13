@@ -53,7 +53,7 @@ async function hookServer(t) {
   await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
   const sent = [];
   const server = new HookServer(hive, () => ({ send: (c, p) => sent.push({ c, p }) }), () => ({ harnessHome: home }), undefined, undefined);
-  const call = (event, tool_name, tool_input) => server.handle({ agent_id: 'pam', session_id: 's1', hook_event_name: event, tool_name, tool_input, cwd: home });
+  const call = (event, tool_name, tool_input, extra = {}) => server.handle({ agent_id: 'pam', session_id: 's1', hook_event_name: event, tool_name, tool_input, cwd: home, ...extra });
   const lastHook = () => sent.filter((s) => s.c === 'hive:hookEvent').pop()?.p;
   return { call, lastHook };
 }
@@ -71,6 +71,17 @@ test('the hook sends the detail on PreToolUse only, redacted and at most 80 char
   assert.equal(h.lastHook().detail, undefined);
   await h.call('PreToolUse', 'Bash', { command: 'secret-command --token abc' });
   assert.equal(h.lastHook().detail, undefined, 'no description: nothing, never the command');
+});
+
+test('the hook passes on the call id, so parallel calls can be told apart', async (t) => {
+  // Value: protects=the panel can match a PostToolUse to its PreToolUse; fails_when=emit drops tool_use_id or passes a non-string; why_new=TODOS "Parallel tool calls clear each other's detail"; seam=none
+  const h = await hookServer(t);
+  await h.call('PreToolUse', 'Read', { file_path: '/a/plan.md' }, { tool_use_id: 'toolu_1' });
+  assert.equal(h.lastHook().toolUseId, 'toolu_1');
+  await h.call('PostToolUse', 'Read', { file_path: '/a/plan.md' }, { tool_use_id: 'toolu_1' });
+  assert.equal(h.lastHook().toolUseId, 'toolu_1');
+  await h.call('PostToolUse', 'Read', {}, { tool_use_id: 42 });
+  assert.equal(h.lastHook().toolUseId, undefined);
 });
 
 test('a huge agent-written description is cut before redaction, so the hook stays fast', () => {

@@ -91,7 +91,7 @@ import { analytics, isRendererMessageSurface } from './analytics';
 import type { SpawnFailReason } from './analytics';
 import { IntegrationBroker } from './integrationBroker';
 import * as integrations from './integrations';
-import { MailService, handleMailRequest, saveMailbox, removeMailbox, setAgentCapabilities, setSendOnly, type AddMailboxInput } from './mail';
+import { MailService, handleMailRequest, saveMailbox, removeMailbox, setAgentCapabilities, setSendOnly, cannotStoreReason, type AddMailboxInput } from './mail';
 import { MailApprovals } from './mailApprovals';
 import { standingFitCheck } from './standingCheck';
 import { terminalOverflowEvent } from '../shared/terminalOverflow';
@@ -103,12 +103,13 @@ import { quickbooksAccessToSave } from '../shared/quickbooks';
 import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
+import { pastesDir, savePaste, sweepOldPastes } from './pastes';
 import { buildWorkerLaunch } from './workerLaunch';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
-import { COLLECT_USAGE_STATS, SHOW_DELIVERY_SWITCH, SHOW_VOICE, SHOW_SLACK } from '../shared/buildFeatures';
+import { COLLECT_USAGE_STATS, SHOW_DELIVERY_SWITCH, SHOW_VOICE, SHOW_SLACK, SHOW_MAILBOXES } from '../shared/buildFeatures';
 import { fetchHireManifest, readHireManifestFiles } from './hire';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
@@ -121,7 +122,7 @@ import {
   installInfoForProvider,
   type AgentProvider
 } from '../shared/agentProvider';
-import { buildMissingCliScript, chooseInstallRung } from './cliInstall';
+import { buildMissingCliScript, chooseInstallRung, installSucceeded } from './cliInstall';
 import { detectNodeVersion, nodeIsUsable, resolveNodeInstaller } from './nodeInstall';
 import { toolCatalog, type ToolStatus } from '../shared/toolCatalog';
 import { listLocalSkills, loadCatalog, installSkill, uninstallSkill, type LocalSkill } from './skills';
@@ -146,7 +147,7 @@ import {
   codexRemoteSocketFits,
   withCodexRemoteArgs
 } from '../shared/codexRemote';
-import { restartApp } from './restart';
+import { canRelaunch, restartApp } from './restart';
 import { PromptSubmits, confirmSubmit } from '../shared/submitConfirm';
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
@@ -620,7 +621,7 @@ const standingFit = standingFitCheck({
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
   getSecret: integrations.getSecret,
-  mail: (agentId, op, body) => handleMailRequest(mailService, { getConfig: () => readConfig(), audit: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }, proposals: mailApprovals, fitCheck: standingFit, present: memberPresent, log: (line) => console.log(line) }, agentId, op, body)
+  mail: SHOW_MAILBOXES ? (agentId, op, body) => handleMailRequest(mailService, { getConfig: () => readConfig(), audit: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }, proposals: mailApprovals, fitCheck: standingFit, present: memberPresent, log: (line) => console.log(line) }, agentId, op, body) : undefined
 });
 
 /** Absolute path to the bundled md-mail MCP server (same resolution as the
@@ -964,7 +965,7 @@ ptyManager.setExitHandler((id, exitCode, info) => {
     // Activation funnel: did the auto-installer actually complete? A non-zero exit
     // is the Linux-installer-cannot-finish-unattended signal that used to be silent.
     const provider = pending.opts.provider ?? inferAgentProvider(pending.opts.command, undefined);
-    if (exitCode === 0) {
+    if (installSucceeded(exitCode, () => ptyManager.isCommandAvailable(pending.bin))) {
       analytics.track('agent_install_finished', { provider, rung: pending.rung, outcome: 'agent_launched' });
       // Re-arm the renderer's pooled terminal (clear the "process exited" line +
       // re-enable input) so the freshly-spawned CLI paints onto a clean, typeable
@@ -974,7 +975,8 @@ ptyManager.setExitHandler((id, exitCode, info) => {
       void spawnAgentCore({ ...pending.opts, noAutoInstall: true }, pending.owner);
       return; // an install PTY has no agent/worktree to tear down
     }
-    // Non-zero exit = install failed; leave its honest manual-fix message on screen.
+    // Install failed (non-zero exit, or the CLI still can't be found); leave its
+    // honest manual-fix message on screen.
     analytics.track('agent_install_finished', { provider, rung: pending.rung, outcome: 'install_failed' });
   }
   teardownPty(id);
@@ -3926,8 +3928,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // Capabilities include email gets the md-mail MCP server, which Claude Code
   // starts outside the Bash sandbox, holding this agent's own broker token.
   // Revoked in teardownPty with the rest of this PTY's grants. `--mcp-config`
-  // takes several values, so it must stay the last argument.
-  if (claudeProvider && opts.hive?.id && opts.hive.role !== 'worker' && integrationBroker.running()) {
+  // takes several values, so it must stay the last argument. Never while
+  // SHOW_MAILBOXES is off, even with email saved earlier.
+  if (SHOW_MAILBOXES && claudeProvider && opts.hive?.id && opts.hive.role !== 'worker' && integrationBroker.running()) {
     const agentId = opts.hive.id;
     const home = readConfig().harnessHome ? expandTilde(readConfig().harnessHome!) : null;
     const root = hive.root();
@@ -4109,10 +4112,13 @@ ipcMain.handle('terminal:openAtFolder', async (_evt, cwd: unknown) => {
 ipcMain.handle('integrations:list', () => integrations.listRecordsRedacted());
 ipcMain.handle('integrations:templates', () => INTEGRATION_TEMPLATES);
 ipcMain.handle('integrations:upsert', (_evt, record: unknown) => integrations.upsertRecord(record));
+ipcMain.handle('integrations:canStoreSecrets', () =>
+  integrations.canStoreSecrets() ? { ok: true as const } : { ok: false as const, error: cannotStoreReason() });
 ipcMain.handle('integrations:setSecret', (_evt, payload: unknown) => {
   const p = (payload ?? {}) as { id?: unknown; secret?: unknown };
   if (typeof p.id !== 'string' || !p.id) return { ok: false, error: 'id required' };
   if (typeof p.secret !== 'string' || !p.secret) return { ok: false, error: 'secret required' };
+  if (!integrations.canStoreSecrets()) return { ok: false, error: cannotStoreReason() };
   return integrations.setSecret(secretRefFor(p.id), p.secret);
 });
 ipcMain.handle('integrations:remove', (_evt, payload: unknown) => {
@@ -5170,6 +5176,8 @@ ipcMain.handle('hive:setArchived', (_evt, id: unknown, archived: unknown) => {
   if (typeof id !== 'string') return { ok: false, error: 'invalid id' };
   if (!hive.enabled()) return { ok: false, error: 'hive disabled (no harnessHome)' };
   hive.setArchived(id, archived === true);
+  // An archived team member leaves closing time's list, and Michael is told.
+  try { if (archived === true) closingTime.refresh(id); } catch (e) { console.error('[closing-time] refresh:', e); }
   return { ok: true };
 });
 ipcMain.handle('hive:patchAgentRole', (_evt, id: unknown, role: unknown) => {
@@ -5512,6 +5520,9 @@ ipcMain.handle('engineSetup:signIn', (e): { ok: boolean; error?: string } => {
 ipcMain.handle('engineSetup:useApiKey', async (_e, raw: unknown): Promise<{ ok: boolean; error?: 'invalid' | 'rejected' | 'refused' | 'workspace' | 'busy' | 'unreachable' | 'store'; reason?: string }> => {
   const key = typeof raw === 'string' ? raw.trim() : '';
   if (!apiKeyShapeOk(key)) return { ok: false, error: 'invalid' };
+  // A key this computer cannot encrypt is never saved, so say so (and what to do
+  // about it) before the key is sent to Anthropic or approved for Claude.
+  if (!integrations.canStoreSecrets()) return { ok: false, error: 'store', reason: integrations.secretStoreUnavailableReason() };
   // Electron's fetch follows the system proxy, so the check works wherever Claude does.
   const { verdict, reason } = await checkAnthropicKey(key, net.fetch as unknown as KeyCheckFetch);
   if (verdict !== 'ok') return { ok: false, error: verdict, ...(reason ? { reason } : {}) };
@@ -5663,19 +5674,15 @@ ipcMain.handle('dialog:attachFiles', async (evt) => {
   return { ok: true as const, files: res.filePaths.map((p) => ({ path: p, name: basename(p) })) };
 });
 
-// Persist the current native clipboard image to a temp PNG so a pasted
-// screenshot can be attached by PATH. Returns an error result when the
-// clipboard holds no image (e.g. a normal text paste).
+// Save the current native clipboard image as a PNG so a pasted screenshot can
+// be attached by PATH. It goes to the app's own folder, so a message still
+// queued across a restart points at a file that is there (pastes.ts). Returns
+// an error result when the clipboard holds no image (e.g. a normal text paste).
 ipcMain.handle('clipboard:saveImage', async () => {
   try {
     const img = clipboard.readImage();
     if (img.isEmpty()) return { ok: false as const, error: 'no image in clipboard' };
-    const dir = join(app.getPath('temp'), 'cth-pastes');
-    mkdirSync(dir, { recursive: true });
-    const name = `paste-${Date.now()}.png`;
-    const dest = join(dir, name);
-    writeFileSync(dest, img.toPNG());
-    return { ok: true as const, file: { path: dest, name } };
+    return { ok: true as const, file: savePaste(pastesDir(app.getPath('userData')), img.toPNG()) };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
   }
@@ -5754,7 +5761,7 @@ const closingTime = new ClosingTimeController(
   () => liveWebContents(),
   (relaunch) => {
     // Same dev-mode caveat as restart.ts: a relaunched dev build opens blank.
-    if (relaunch && !process.env.ELECTRON_RENDERER_URL) app.relaunch();
+    if (relaunch && canRelaunch()) app.relaunch();
     teardownAndQuit();
   },
   // #7C.2 steering — the graceful interrupt that reaches deeply busy agents
@@ -5762,8 +5769,9 @@ const closingTime = new ClosingTimeController(
   control
 );
 hive.setRoutedObserver((msg, targets) => closingTime.onRouted(msg, targets));
+// A dev build quits instead of reopening, so the dialog must not say "Reopening".
 ipcMain.handle('app:startClosingTime', (_evt, opts?: { relaunch?: boolean }) =>
-  closingTime.start({ relaunch: opts?.relaunch === true }));
+  closingTime.start({ relaunch: opts?.relaunch === true && canRelaunch() }));
 ipcMain.handle('app:cancelClosingTime', () => closingTime.cancel());
 /** The closing-time dialog's Remind and Close without them (owner, 2026-09-29). */
 ipcMain.handle('app:closingTimeRemind', (_evt, id: unknown) => closingTime.remind(id));
@@ -6542,6 +6550,7 @@ registerRealtimeActionIpc({
     // until the owner turns them on, design 6A).
     else hive.setClosedByOwner(id, false);
     hive.setArchived(id, archived);
+    try { if (archived) closingTime.refresh(id); } catch (e) { console.error('[closing-time] refresh:', e); }
     try { liveWebContents()?.send(archived ? 'hive:agentArchived' : 'hive:agentSpawned', { id }); } catch { /* window gone */ }
     return { ok: true };
   },
@@ -7096,6 +7105,7 @@ function bootstrapHiveServices(): void {
   hive.onScheduleRequest(receiveScheduleRequest);
   hive.ensureHive();
   try { sweepOrphanAgentMcp(); } catch (e) { console.error('[mail] orphan agent-mcp sweep failed', e); }
+  sweepOldPastes(pastesDir(app.getPath('userData')));
   // Read the Claude account's connectors in the background (D11).
   void refreshClaudeConnectors('start');
   // Waiting schedule requests reach Michael, and ones he leaves undecided

@@ -7,7 +7,7 @@ It is generated from the pull requests themselves rather than from commit metada
 dropped because their git email does not happen to match their GitHub account. It is regenerated
 from merged pull requests, so you appear without having to ask.
 
-**36 people** have contributed so far.
+**63 people** have contributed so far.
 
 <a href="https://github.com/agentvivekkumar/dontbemichael/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=agentvivekkumar/dontbemichael" alt="Contributor avatars">
@@ -23,12 +23,15 @@ requests, and a pull request always has a real account behind it.
 | Contributor | Contributions | First | Most recent |
 |---|---:|---|---|
 | [@agentvivekkumar](https://github.com/agentvivekkumar) | 47 | 2026-09-15 | 2026-10-12 |
-| [@amartya1523](https://github.com/amartya1523) | 10 | 2026-10-10 | 2026-10-12 |
+| [@amartya1523](https://github.com/amartya1523) | 17 | 2026-10-10 | 2026-10-13 |
+| [@SantoshMalana](https://github.com/SantoshMalana) | 9 | 2026-10-12 | 2026-10-13 |
 | [@dhruvpuri](https://github.com/dhruvpuri) | 7 | 2026-10-10 | 2026-10-10 |
-| [@codedbygo](https://github.com/codedbygo) | 2 | 2026-10-10 | 2026-10-10 |
+| [@Kartikey1306](https://github.com/Kartikey1306) | 6 | 2026-10-12 | 2026-10-12 |
+| [@codedbygo](https://github.com/codedbygo) | 3 | 2026-10-10 | 2026-10-12 |
+| [@adhi2801](https://github.com/adhi2801) | 3 | 2026-10-12 | 2026-10-12 |
+| [@ketki-mude](https://github.com/ketki-mude) | 3 | 2026-10-13 | 2026-10-13 |
 | [@init-pushu](https://github.com/init-pushu) | 2 | 2026-10-10 | 2026-10-12 |
 | [@shrinivas-sn](https://github.com/shrinivas-sn) | 2 | 2026-10-11 | 2026-10-11 |
-| [@adhi2801](https://github.com/adhi2801) | 2 | 2026-10-12 | 2026-10-12 |
 | [@josephzhang0602](https://github.com/josephzhang0602) | 1 | 2026-10-10 | 2026-10-10 |
 | [@rajukancharla21](https://github.com/rajukancharla21) † | 1 | 2026-10-10 | 2026-10-10 |
 | [@Junaid522](https://github.com/Junaid522) | 1 | 2026-10-10 | 2026-10-10 |
@@ -58,8 +61,32 @@ requests, and a pull request always has a real account behind it.
 | [@dhivij](https://github.com/dhivij) | 1 | 2026-10-12 | 2026-10-12 |
 | [@AryakumarMishra](https://github.com/AryakumarMishra) | 1 | 2026-10-12 | 2026-10-12 |
 | [@hanifstudio](https://github.com/hanifstudio) | 1 | 2026-10-12 | 2026-10-12 |
+| [@VaibhavGarg2003](https://github.com/VaibhavGarg2003) | 1 | 2026-10-12 | 2026-10-12 |
+| [@LhaseParth2610](https://github.com/LhaseParth2610) | 1 | 2026-10-12 | 2026-10-12 |
+| [@din-tezekbayev](https://github.com/din-tezekbayev) | 1 | 2026-10-12 | 2026-10-12 |
+| [@mlnu5-markaashish](https://github.com/mlnu5-markaashish) | 1 | 2026-10-12 | 2026-10-12 |
+| [@Ayash3690](https://github.com/Ayash3690) | 1 | 2026-10-12 | 2026-10-12 |
+| [@coolman-97](https://github.com/coolman-97) | 1 | 2026-10-12 | 2026-10-12 |
+| [@YRoyal-Inc](https://github.com/YRoyal-Inc) | 1 | 2026-10-12 | 2026-10-12 |
+| [@ncodekeng](https://github.com/ncodekeng) | 1 | 2026-10-12 | 2026-10-12 |
+| [@aria-sharifnia](https://github.com/aria-sharifnia) | 1 | 2026-10-12 | 2026-10-12 |
+| [@DavidFHCh](https://github.com/DavidFHCh) | 1 | 2026-10-12 | 2026-10-12 |
+| [@saialekya11729](https://github.com/saialekya11729) | 1 | 2026-10-12 | 2026-10-12 |
+| [@vedantvpednekar10](https://github.com/vedantvpednekar10) | 1 | 2026-10-12 | 2026-10-12 |
+| [@khusmit2112](https://github.com/khusmit2112) | 1 | 2026-10-12 | 2026-10-12 |
+| [@pratham-srivastava-07](https://github.com/pratham-srivastava-07) | 1 | 2026-10-12 | 2026-10-12 |
+| [@Sylesh29](https://github.com/Sylesh29) | 1 | 2026-10-12 | 2026-10-12 |
+| [@fahad10inb](https://github.com/fahad10inb) | 1 | 2026-10-12 | 2026-10-12 |
+| [@revanthchristober](https://github.com/revanthchristober) | 1 | 2026-10-12 | 2026-10-12 |
+| [@fasihw01](https://github.com/fasihw01) | 1 | 2026-10-12 | 2026-10-12 |
+| [@Deshik7177](https://github.com/Deshik7177) | 1 | 2026-10-12 | 2026-10-12 |
+| [@goharinam48](https://github.com/goharinam48) | 1 | 2026-10-12 | 2026-10-12 |
+| [@anish891](https://github.com/anish891) | 1 | 2026-10-13 | 2026-10-13 |
+| [@arksaraf135](https://github.com/arksaraf135) | 1 | 2026-10-13 | 2026-10-13 |
+| [@dave-16](https://github.com/dave-16) | 1 | 2026-10-13 | 2026-10-13 |
+| [@TolgaRodoplu](https://github.com/TolgaRodoplu) | 1 | 2026-10-13 | 2026-10-13 |
 
-_101 pull requests from 36 people._
+_152 pull requests from 63 people._
 
 ## † Contributions that never got the merged badge
 

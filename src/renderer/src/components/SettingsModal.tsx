@@ -17,7 +17,7 @@ import {
 import { SkillsTab } from './SkillsTab';
 import { clearLocalState, restoreLocalState, snapshotLocalState } from '@/store/localState';
 import { plainReasonKey } from '@/store/plainReason';
-import { ALLOW_TEMP_WORKERS, SHOW_ORG_TRIGGER, COLLECT_USAGE_STATS, SHOW_VOICE, SHOW_SLACK, SHOW_MCP_DEFAULTS, SHOW_SIMPLE_MODE_SWITCH, SHOW_ARABIC_TERMINAL_SWITCH, SHOW_LANGUAGE_PICKER } from '@shared/buildFeatures';
+import { ALLOW_TEMP_WORKERS, SHOW_ORG_TRIGGER, COLLECT_USAGE_STATS, SHOW_VOICE, SHOW_SLACK, SHOW_MAILBOXES, SHOW_MCP_DEFAULTS, SHOW_SIMPLE_MODE_SWITCH, SHOW_ARABIC_TERMINAL_SWITCH, SHOW_LANGUAGE_PICKER } from '@shared/buildFeatures';
 import { WebhookSchemaEditor } from './triggers/WebhookSchemaEditor';
 import { InfoTip } from './InfoTip';
 import { PixelButton } from './PixelButton';
@@ -461,6 +461,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
   const [webhookNote, setWebhookNote] = useState('');
   /** Which secrets the user has unmasked, by webhook id. Reset on every reopen. */
   const [shownSecrets, setShownSecrets] = useState<Record<string, boolean>>({});
+  /** Which Copy button just copied (`<webhook id>:url` or `:secret`), for its check mark. */
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   /** Webhook awaiting a second delete click — deleting one revokes a live caller. */
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [showWebhookHelp, setShowWebhookHelp] = useState(false);
@@ -769,6 +771,15 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
   /** Endpoint URL for one webhook: every entry shares the tunnel, the id picks it. */
   const webhookEndpoint = (id: string) => (webhookUrl ? `${webhookUrl.replace(/\/$/, '')}/${id}` : '');
   const copyTunnel = () => { void window.cth.copyToClipboard(tunnelUrl); };
+  /** Copy a webhook's URL or secret; its button shows a check mark for a moment
+   *  once the text is on the clipboard, as the setup screen's Copy does. */
+  const copyWebhookField = (field: string, text: string) => {
+    void window.cth.copyToClipboard(text).then((r) => {
+      if (!r.ok) return;
+      setCopiedField(field);
+      setTimeout(() => setCopiedField((f) => (f === field ? null : f)), 1200);
+    }).catch(() => undefined);
+  };
 
   // --- Organisation trigger handlers ---
   /** Same contract as webhooks: mirror first (so the Triggers tab is live), then
@@ -1625,10 +1636,13 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
 
                       <div style={sectionRule} />
 
-                      {/* The mailboxes added here (docs/designs/multi-mailbox.md). */}
-                      <MailboxesSettings />
+                      {/* The mailboxes added here (docs/designs/multi-mailbox.md).
+                          Hidden with SHOW_MAILBOXES. */}
+                      {SHOW_MAILBOXES && (<>
+                        <MailboxesSettings />
 
-                      <div style={sectionRule} />
+                        <div style={sectionRule} />
+                      </>)}
 
                       {/* Connected-services registry (generic, registry-driven);
                           the hardcoded Slack/Webhook/Free Flow blocks below stay as-is. */}
@@ -1940,10 +1954,10 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                                     <PixelButton
                                       variant="secondary"
                                       size="sm"
-                                      onClick={() => { void window.cth.copyToClipboard(endpoint); }}
+                                      onClick={() => copyWebhookField(`${w.id}:url`, endpoint)}
                                       disabled={!endpoint}
                                     >
-                                      {t('common.copy')}
+                                      {copiedField === `${w.id}:url` ? `${t('common.copy')} ✓` : t('common.copy')}
                                     </PixelButton>
                                   </div>
 
@@ -1967,9 +1981,9 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                                     <PixelButton
                                       variant="secondary"
                                       size="sm"
-                                      onClick={() => { void window.cth.copyToClipboard(w.secret); }}
+                                      onClick={() => copyWebhookField(`${w.id}:secret`, w.secret)}
                                     >
-                                      {t('common.copy')}
+                                      {copiedField === `${w.id}:secret` ? `${t('common.copy')} ✓` : t('common.copy')}
                                     </PixelButton>
                                     <PixelButton
                                       variant="ghost"

@@ -106,6 +106,13 @@ test('`..` cannot smuggle a write out of an allowed folder', () => {
   assert.equal(decide(`${HIVE}/agents/oscar/outbox/../report.pdf`).deny, true);
 });
 
+test('a name that starts with two dots is still inside the harness folder', () => {
+  assert.equal(decide(`${HOME}/..notes.md`).deny, true);
+  assert.equal(decide(`${HOME}/..shared/brand-voice.md`).deny, true);
+  assert.equal(decide(`${HIVE}/..board.md`).deny, true);
+  assert.equal(decide(`${HOME}/../outside.md`).deny, false, 'a real step out of the folder is still outside');
+});
+
 test('changing the case of the path does not get around it on macOS', () => {
   assert.equal(decide('/Users/me/harnessagents/HIVE/shared/x.md').deny, true);
   assert.equal(decide('/Users/me/HARNESSAGENTS/hive/agents/OSCAR/memory/inbox.md').deny, false, 'and plumbing still passes');

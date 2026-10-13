@@ -165,6 +165,11 @@ export function resultHeadline(result: string | undefined): string {
   return line
     .replace(/^#{1,6}\s+/, '')
     .replace(/^(?:[-*+]|\d+[.)])\s+/, '')
-    .replace(/(\*\*|__|\*|_|`)(.+?)\1/g, '$2')
+    // Underscores are emphasis only at a word's edges, so q3_sales_report.md
+    // and first_last@acme.com keep theirs.
+    .replace(
+      /(\*\*|\*|`)(.+?)\1|(?<![\p{L}\p{N}])(__?)(.+?)\3(?![\p{L}\p{N}])/gu,
+      (_m, _mark?: string, inner?: string, _under?: string, emph?: string) => inner ?? emph ?? ''
+    )
     .trim();
 }

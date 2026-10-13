@@ -74,17 +74,6 @@
 **Effort:** S
 **Priority:** P1
 
-### A build switch for the mailbox feature
-
-**What:** A `buildFeatures.ts` flag that hides Mailboxes and the Email section, with the hook falling back to the Claude account switch alone when off.
-
-**Why:** Plan Section 9 rollout.
-
-**Context:** Deferred from plan: docs/designs/multi-mailbox.md
-
-**Effort:** S
-**Priority:** P1
-
 ### Read one email without downloading its attachments
 
 **What:** `MailService.read` fetches the whole message, attachments included, before trimming the text to 50K. Fetch the body structure plus the text part only, and take attachment names and sizes from the structure.
@@ -149,15 +138,6 @@
 
 **Effort:** M
 **Priority:** P3
-
-### Say "closing" in dev builds when reopen is skipped
-
-**What:** In dev (`ELECTRON_RENDERER_URL` set) the app quits instead of relaunching, but the dialog still says "reopening".
-
-**Why:** Cosmetic, dev only; the event could carry whether a relaunch will really happen.
-
-**Effort:** S
-**Priority:** P4
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
 
@@ -378,6 +358,7 @@ agent idle, with no coral bar and Talk 1:1 not leading. Found by the red team in
 review of feat/per-agent-schedules (2026-09-25); the owner chose a follow-up.
 
 **Priority:** P2
+**Completed:** `isTerminalPrompt` moved to `src/shared/hookEvents.ts` and consumed in `useHive.ts`'s Notification hook handler alongside `notificationType`.
 
 ### Block mouse and focus reports in a watch-only terminal
 
