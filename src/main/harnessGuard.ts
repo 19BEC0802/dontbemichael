@@ -21,6 +21,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
+import { isSameOrInside } from './pathInside';
 
 /** Claude's tools that write a file at a path given in their input. */
 export const GUARDED_TOOLS: ReadonlySet<string> = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -44,14 +45,14 @@ export function harnessWriteDecision(i: HarnessWriteInput): { deny: boolean; rea
   if (!target) return { deny: false };
 
   const norm = (p: string) => (i.caseInsensitive ? p.toLowerCase() : p);
-  if (!isInside(norm(i.harnessHome), norm(target))) return { deny: false };
+  if (!isSameOrInside(norm(i.harnessHome), norm(target))) return { deny: false };
 
-  if (isInside(norm(i.hiveRoot), norm(target))) {
+  if (isSameOrInside(norm(i.hiveRoot), norm(target))) {
     const rel = relative(norm(resolve(i.hiveRoot)), norm(target)).split(/[\\/]/).join('/');
     if (isPlumbing(rel, norm(i.agentId), i.isGod, i.tool, () => existsSync(target))) return { deny: false };
   }
 
-  const workHere = i.cwd && !isInside(norm(i.harnessHome), norm(resolve(i.cwd))) ? ` (${i.cwd})` : '';
+  const workHere = i.cwd && !isSameOrInside(norm(i.harnessHome), norm(resolve(i.cwd))) ? ` (${i.cwd})` : '';
   return {
     deny: true,
     reason:
@@ -95,9 +96,4 @@ function targetPath(input: unknown, cwd: string | undefined): string | null {
   if (!p) return null;
   // resolve() also collapses `..`, so `outbox/../../board.md` is judged as board.md.
   return isAbsolute(p) ? resolve(p) : cwd ? resolve(cwd, p) : null;
-}
-
-function isInside(parent: string, child: string): boolean {
-  const rel = relative(resolve(parent), resolve(child));
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
