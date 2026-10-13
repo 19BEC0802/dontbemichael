@@ -1,3 +1,4 @@
+import { RESEARCH_ID } from '../../../shared/research';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { FIRST_TASK_EDITED_MAX } from '@shared/firstTask';
 import { useTranslation } from 'react-i18next';
@@ -47,9 +48,12 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
   const [config, setConfig] = useState<HarnessConfig | null>(null);
 
   const [name, setName] = useState(agent.name);
+  const isResearch = agent.id === RESEARCH_ID;
   const [provider, setProvider] = useState<AgentProvider>(
     inferAgentProvider(agent.command, agent.provider)
   );
+  // On Claude, Research's engine is fixed; on anything else only Claude is offered.
+  const researchLocked = isResearch && isClaudeProvider(provider) && AGENT_PROVIDER_PRESETS.filter((p) => BUILD_ENGINES.includes(p.id) && isClaudeProvider(p.id)).length <= 1;
   const [model, setModel] = useState<string | undefined>(agent.model);
   // Folded by default: the engine rarely changes after hiring.
   const [engineOpen, setEngineOpen] = useState(false);
@@ -306,18 +310,21 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
         </button>
         {engineOpen && (
         <Fields id="engine">
-          <Row label={t('editAgent.provider')}>
+          {/* Research's walls are Claude Code's, so its engine is locked
+              (ship review D6.2). */}
+          <Row label={t('editAgent.provider')} info={isResearch ? t('editAgent.researchEngine') : undefined}>
             {/* A list, not a grid of buttons. Only the engines this build
                 offers (BUILD_ENGINES, like setup), plus the agent's own if it
                 runs on another, so a list never hides what it is on. */}
             <select
               value={provider}
               onChange={(e) => pickProvider(e.target.value as AgentProvider)}
+              disabled={researchLocked}
               className="cth-input"
-              style={inputStyle}
+              style={{ ...inputStyle, ...(researchLocked ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
             >
               {AGENT_PROVIDER_PRESETS
-                .filter((p) => BUILD_ENGINES.includes(p.id) || p.id === provider)
+                .filter((p) => (BUILD_ENGINES.includes(p.id) && (!isResearch || isClaudeProvider(p.id))) || p.id === provider)
                 .map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </Row>

@@ -120,3 +120,12 @@ test('locale: UTF-8 defaults on darwin, the user\'s exported locale wins, win32 
   assert.ok(!('LANG' in win));
   assert.ok(!('LC_CTYPE' in win));
 });
+
+test('an agent whose commands are scrubbed inherits no keys or tokens, but keeps its own sign in', () => {
+  // Value: protects=Research's shell, which reaches the internet, has no GitHub token or SSH agent to send out; fails_when=only Claude Code's own list is scrubbed (live probe 2026-10-13: GITHUB_TOKEN got through); why_new=red team pass 2; seam=none
+  const parent = { GITHUB_TOKEN: 'g', NPM_TOKEN: 'n', SSH_AUTH_SOCK: '/s', DB_PASSWORD: 'p', STRIPE_API_KEY: 'k', ANTHROPIC_API_KEY: 'a', CLAUDE_CODE_OAUTH_TOKEN: 'o', AWS_SECRET_ACCESS_KEY: 'w', HOME: '/h', LANG: 'en_US.UTF-8' };
+  const research = buildPtyEnv(parent, '/bin', { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' }, 'darwin');
+  for (const k of ['GITHUB_TOKEN', 'NPM_TOKEN', 'SSH_AUTH_SOCK', 'DB_PASSWORD', 'STRIPE_API_KEY']) assert.equal(research[k], undefined, k);
+  for (const k of ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'HOME', 'LANG']) assert.equal(research[k], parent[k], k);
+  assert.equal(buildPtyEnv(parent, '/bin', {}, 'darwin').GITHUB_TOKEN, 'g', 'other agents are unchanged');
+});

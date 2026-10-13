@@ -168,7 +168,11 @@ export function TasksKanban() {
           placeholder={t('kanban.search')}
           aria-label={t('kanban.search')}
           className="cth-input"
-          style={{ borderRadius: 'var(--cth-r-md)', flex: '0 1 260px', minWidth: 140, height: 30, padding: '0 10px', fontSize: 12.5 }}
+          style={{
+            borderRadius: 'var(--cth-r-md)', flex: '0 1 260px', minWidth: 140, height: 30, padding: '0 10px',
+            background: 'var(--cth-card)', color: 'var(--cth-ink)', border: 'none', outline: 'none',
+            fontFamily: 'var(--cth-font-ui)', fontSize: 12.5
+          }}
         />
         <select
           value={member}

@@ -124,6 +124,13 @@ test('the running hook keeps Research out of the office\'s files and everyone el
   for (const id of ['pam', 'god']) {
     assert.ok(denied(call(id, 'Write', path.join(researchDir, 'inbox', 'sneak.json'))), `${id} must not write Research's inbox`);
     assert.ok(denied(call(id, 'Write', path.join(o.desk, 'x.md'))), `${id} must not write Research's desk`);
+    // Its folders are its alone: nobody else reads its raw web text (owner, 2026-10-13).
+    for (const file of [path.join(o.desk, 'notes.md'), path.join(researchDir, 'outbox', 'a.json'), path.join(researchDir, 'memory', 'inbox.md')]) {
+      const r = call(id, 'Read', file);
+      assert.ok(denied(r), `${id} must not read ${path.relative(o.base, file)}`);
+      assert.match(reason(r), /only Research reads it/);
+    }
+    assert.ok(!denied(call(id, 'Read', path.join(o.hive.root(), 'tasks.json'))), `${id} still reads the hive`);
   }
 
   // An office with no business folder has no hive write guard: the Research
@@ -171,8 +178,14 @@ test('the settings written at spawn take the internet from a member\'s shell and
   assert.deepEqual([...research.permissions.additionalDirectories].sort(), [researchDir, o.desk].sort());
   // The home folder is walled for reads, and its riskiest places for edits (D2.5, D2.6).
   assert.ok(research.sandbox.filesystem.denyRead.includes(o.base));
-  assert.ok(research.permissions.deny.some((r) => r.startsWith('Edit(') && r.includes('/.claude/**')));
-  assert.ok(research.permissions.deny.some((r) => r.endsWith('/.zshrc)')));
+  assert.ok(research.permissions.deny.includes(`Edit(/${path.join(o.base, '.claude')}/**)`), 'an absolute rule, not settings relative');
+  assert.ok(research.permissions.deny.includes(`Edit(/${path.join(o.base, '.zshrc')})`));
+  // Every other agent is walled from Research's folders for reads too.
+  const pam = F.withResearchWall(F.folderPolicy({ isGod: false, cwd: o.pamDir }, { business: o.business, teamFolders: [o.pamDir] }, true), [researchDir, o.desk]);
+  for (const d of [researchDir, o.desk]) {
+    assert.ok(pam.sandbox.denyRead.includes(d) && pam.sandbox.denyWrite.includes(d), d);
+    assert.ok(pam.deny.includes(`Read(/${d}/**)`) && pam.deny.includes(`Edit(/${d}/**)`), d);
+  }
 });
 
 test('a message the app delivered to Research survives an app restart; the stamp key stays out of the hive', async (t) => {
@@ -213,4 +226,40 @@ test('Research is never handed the company profile or company knowledge; a teamm
     assert.doesNotMatch(r, /Dana Lee|COMPANY PROFILE/, `Research ${event}`);
     assert.doesNotMatch(r, /COMPANY KNOWLEDGE/i, `Research ${event}: knowledge`);
   }
+});
+
+test('Research can\'t search from a folder above a wall, nor follow a link out of its desk', async (t) => {
+  // Value: protects=a Grep on "/" or a parent folder, or a link in the desk, can't read the office's files; fails_when=the wall checks only targets inside it, or the real path check is dropped; why_new=red team and testing review pass 2; seam=none; no_claim=ripgrep's own traversal
+  const o = await office(t);
+  const hook = hookFor(o);
+  const call = (tool, input) => hook(R.RESEARCH_ID, 'PreToolUse', { tool_name: tool, tool_input: input });
+  assert.ok(denied(call('Grep', { pattern: 'owes', path: '/' })), 'Grep on /');
+  assert.ok(denied(call('Grep', { pattern: 'owes', path: o.base })), 'Grep on a folder holding the business folder');
+  assert.ok(denied(call('Glob', { pattern: `${o.base}/**` })), 'Glob from above');
+  assert.ok(!denied(call('Grep', { pattern: 'flour', path: o.desk })), 'its own desk is fine');
+  if (process.platform !== 'win32') {
+    fs.writeFileSync(path.join(o.business, 'ledger.csv'), 'x');
+    fs.symlinkSync(path.join(o.business, 'ledger.csv'), path.join(o.desk, 'link.csv'));
+    for (const tool of ['Read', 'Write']) {
+      assert.ok(denied(call(tool, { file_path: path.join(o.desk, 'link.csv'), content: 'y' })), `${tool} through a link`);
+    }
+  }
+});
+
+test('Research\'s file tools open no temporary folder, and no office agent keeps its session files in /tmp', posixOnly('temporary folder paths'), async (t) => {
+  // Value: protects=teammates' command output and scratch files never reach the agent that talks to the internet; fails_when=temp folders leave Research's walls, or an agent's session files go back to the shared /tmp; why_new=ship review D6.1 (owner chose A after a live check 2026-10-13); seam=none; no_claim=Claude Code honoring CLAUDE_CODE_TMPDIR (checked live)
+  const o = await office(t);
+  const hook = hookFor(o);
+  const read = (file) => hook(R.RESEARCH_ID, 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: file } });
+  assert.ok(denied(read(`/private/tmp/claude-${process.getuid()}/-Users-pam-Sales/s1/tasks/x.output`)), 'another session\'s output');
+  assert.ok(denied(read(path.join(os.tmpdir(), 'other-app.txt'))), 'the per user temp folder');
+  assert.ok(!denied(read(path.join(o.desk, F.RESEARCH_TMP_DIR, 'scratch.txt'))), 'its own session files, in its desk');
+  // The shell keeps /tmp (Claude Code's own working files) and is walled from the rest.
+  const shell = F.shellTempWalls('darwin', '/var/folders/ab/T');
+  assert.ok(!shell.includes('/tmp') && !shell.includes('/private/tmp'));
+  assert.ok(shell.includes('/private/var/folders') && shell.includes('/var/folders/ab/T'));
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  assert.match(main, /const dir = isResearch \? join\(opts\.cwd, RESEARCH_TMP_DIR\) : harness \? join\(expandTilde\(harness\), AGENT_TMP_DIR, opts\.hive\.id\) : '';/);
+  assert.match(main, /if \(sessionTmp\) opts\.env = \{ \.\.\.opts\.env, CLAUDE_CODE_TMPDIR: sessionTmp \};/);
+  assert.match(main, /extraWritableDirs: \[memory\.env\(\)\.MEMPALACE_PALACE_PATH, sessionTmp\]/);
 });

@@ -43,6 +43,20 @@ const CLAUDE_CONFIG_KEEP = new Set([
   'CLAUDE_CODE_USE_VERTEX'
 ]);
 
+/**
+ * Names that look like a key, token or password. An agent whose shell reaches
+ * the internet (Research, issue #230) inherits none of these: a web page could
+ * ask it to print and send them. The provider's own sign in (Anthropic,
+ * Claude, a cloud the CLI runs on) is kept, because the CLI needs it and its
+ * subprocess scrub removes those from every command it runs.
+ */
+const SECRET_NAME_RE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|PASS|API_?KEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIALS?|AUTH)(?:_|$)/i;
+const PROVIDER_AUTH_RE = /^(?:ANTHROPIC_|CLAUDE_|AWS_|GOOGLE_|CLOUDSDK_|AZURE_)/;
+
+export function isInheritedSecret(name: string): boolean {
+  return SECRET_NAME_RE.test(name) && !PROVIDER_AUTH_RE.test(name);
+}
+
 export function buildPtyEnv(
   parentEnv: NodeJS.ProcessEnv,
   userPath: string,
@@ -54,9 +68,12 @@ export function buildPtyEnv(
   // so per-agent environment overrides (and future per-agent env features)
   // cannot be silently wiped by the strip.
   const inherited: Record<string, string> = {};
+  // Set for Research (index.ts): commands it runs get no keys or tokens.
+  const scrub = agentEnv?.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB === '1';
   for (const [k, v] of Object.entries(parentEnv)) {
     if (v === undefined) continue;
     if (CLAUDE_MARKER_RE.test(k) && !CLAUDE_CONFIG_KEEP.has(k)) continue;
+    if (scrub && isInheritedSecret(k)) continue;
     // Windows names it "Path", and names ignore case there: kept beside the
     // PATH below, the child reads the inherited one and never sees ours.
     if (platform === 'win32' && k.toUpperCase() === 'PATH') continue;

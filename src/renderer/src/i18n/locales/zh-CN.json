@@ -686,7 +686,8 @@
     "provider": "提供方",
     "model": "模型",
     "modelCurrent": "{{model}}（当前）",
-    "engineNote": "新的引擎或模型会在该成员下次启动时生效。"
+    "engineNote": "新的引擎或模型会在该成员下次启动时生效。",
+    "researchEngine": "Research 只在 Claude 上运行，它的防护只在那里有效。"
   },
   "onboarding": {
     "damagedConfig": "无法读取你保存的设置，因此需要重新设置。旧文件保存在",

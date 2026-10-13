@@ -164,6 +164,33 @@ export function folderDecision(
 }
 
 /**
+ * The computer's temporary folders (ship review D6.1): Claude Code keeps a
+ * session's scratch files and command output there unless told otherwise, so
+ * Research's file tools open none of them. Its own session files live in its
+ * desk (RESEARCH_TMP_DIR) and every other office agent's in its own folder
+ * under the app's home (AGENT_TMP_DIR), both set with CLAUDE_CODE_TMPDIR.
+ */
+export function tempFolders(platform: string, tmpdir: string): string[] {
+  const posix = platform === 'darwin'
+    ? ['/tmp', '/private/tmp', '/var/tmp', '/private/var/tmp', '/var/folders', '/private/var/folders']
+    : ['/tmp', '/var/tmp'];
+  return Array.from(new Set([...(platform === 'win32' ? [] : posix), tmpdir].filter((f) => !!f && isAbsolute(f))));
+}
+
+/** The temporary folders Research's shell is walled from: all but /tmp, where
+ *  Claude Code's shell keeps its own working files whatever the settings say
+ *  (live check 2026-10-13: with /tmp walled, every command fails). */
+export function shellTempWalls(platform: string, tmpdir: string): string[] {
+  return tempFolders(platform, tmpdir).filter((f) => f !== '/tmp' && f !== '/private/tmp');
+}
+
+/** Where an office agent's Claude session keeps its scratch files: under the
+ *  app's home, outside the hive, one folder per agent. */
+export const AGENT_TMP_DIR = 'agent-tmp';
+/** Research's, inside its desk. */
+export const RESEARCH_TMP_DIR = '.tmp';
+
+/**
  * Research's walls (issue #230, eng review R1): it uses the internet, so it
  * opens nothing of the office. `walled` are the folders it may not open (the
  * app's home with the hive, the business folder, team folders, the shared
@@ -187,7 +214,7 @@ export function researchFolderPolicy(walled: string[], own: string[], home?: str
 
 /** One file tool call by Research: it writes only its own folders (an
  *  allowlist, ship review D2.6), and reads its own folders or anything outside
- *  every wall (the home folder is walled, D2.5). */
+ *  and above no wall (the home folder is walled, D2.5). */
 export function researchFolderDecision(walled: string[], own: string[], tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
   const writes = FOLDER_WRITE_TOOLS.has(tool);
   if (!writes && !FOLDER_READ_TOOLS.has(tool)) return { deny: false };
@@ -196,29 +223,46 @@ export function researchFolderDecision(walled: string[], own: string[], tool: st
   if (writes) {
     return { deny: true, reason: 'You save files only in your own desk and notes folder. Put what you write there.' };
   }
-  if (walled.some((f) => f && inside(f, target))) {
+  // A search from a folder above a wall (Grep on "/" or "/Users") reads what
+  // the wall holds, so it is refused too.
+  if (walled.some((f) => f && (inside(f, target) || inside(target, f)))) {
     return { deny: true, reason: 'You work only from the internet and your own folder: the office\'s files, task board and memory are kept from you on purpose. Everything you need is in the message you were sent.' };
   }
   return { deny: false };
 }
 
-/** Every other agent's guard on Research's folders (eng review R2): nobody
- *  writes into them, so nothing reaches Research without the privacy check. */
+/** Every other agent's guard on Research's folders (eng review R2, owner
+ *  2026-10-13): they are Research's alone. Nobody else writes into them, so
+ *  nothing reaches Research without the trust layer, and nobody else reads
+ *  them, so nothing leaves Research without it either. */
 export function withResearchWall(policy: AgentFolderPolicy, researchFolders: string[]): AgentFolderPolicy {
   const dirs = Array.from(new Set(researchFolders.filter((f) => !!f && isAbsolute(f)).map((f) => resolve(f))));
   return {
     ...policy,
-    sandbox: { ...policy.sandbox, denyWrite: Array.from(new Set([...policy.sandbox.denyWrite, ...dirs])) },
-    deny: Array.from(new Set([...policy.deny, ...dirs.map((d) => rule('Edit', d))]))
+    sandbox: {
+      ...policy.sandbox,
+      denyWrite: Array.from(new Set([...policy.sandbox.denyWrite, ...dirs])),
+      denyRead: Array.from(new Set([...policy.sandbox.denyRead, ...dirs]))
+    },
+    deny: Array.from(new Set([...policy.deny, ...dirs.flatMap((d) => [rule('Edit', d), rule('Read', d)])]))
   };
 }
 
-/** A file tool writing into Research's folders, by anyone but Research. */
+/** A file tool reaching into Research's folders, by anyone but Research. */
 export function researchWallDecision(researchFolders: string[], tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
-  if (!FOLDER_WRITE_TOOLS.has(tool)) return { deny: false };
+  const writes = FOLDER_WRITE_TOOLS.has(tool);
+  if (!writes && !FOLDER_READ_TOOLS.has(tool)) return { deny: false };
   const inside = insideFn(caseInsensitive);
+  // A search over a folder that holds Research's (the hive, the app's home)
+  // stays open: the Read deny rules withResearchWall writes keep its files
+  // out of the results.
   if (researchFolders.some((f) => f && inside(f, target))) {
-    return { deny: true, reason: 'That is Research\'s folder. To ask Research something, write a message to "research" in your own outbox; the app checks it and delivers it.' };
+    return {
+      deny: true,
+      reason: writes
+        ? 'That is Research\'s folder. To ask Research something, write a message to "research" in your own outbox; the app checks it and delivers it.'
+        : 'That is Research\'s folder, and only Research reads it. What Research finds reaches you in its messages, after the app checks them.'
+    };
   }
   return { deny: false };
 }

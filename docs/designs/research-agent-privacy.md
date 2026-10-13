@@ -97,6 +97,44 @@ as gatekeeper, in both directions, ahead of the guard described in the next sect
 - **Known limit** (D4): members on other engines (Codex, OpenCode, Crush) keep their own web
   tools and shell; Settings names them, and a P1 TODO tracks gating them.
 
+### Review pass 2 (owner, 2026-10-13)
+
+Decisions, one risk at a time:
+
+- **D6.1 temp folders (A, then A after a live check):** Claude Code keeps a session's
+  scratch files and command output in the shared `/tmp/claude-<uid>`, and its shell needs
+  `/tmp` itself (walled, every command fails). So every office agent's Claude session keeps
+  its files in its own folder (`CLAUDE_CODE_TMPDIR`: `<home>/agent-tmp/<id>`, Research's
+  `<desk>/.tmp`); Research's file tools open no temporary folder, and its shell is walled
+  from every one but `/tmp`. Known limit: the owner's own Claude sessions outside the app
+  still use `/tmp`.
+- **D6.2 engine (A):** Research runs only on Claude, where its walls work. Edit agent offers
+  it Claude engines only and locks the picker once it is on Claude; a spawn on any other
+  engine is refused and the switch goes off.
+- **D6.3 steers (A):** a steer to Research (control strip, voice assistant, closing time)
+  reaches it as a message from the owner through the trust layer, never in its next turn.
+- **D6.4 Work style (A):** Research's Work style and scheduled jobs reach it as the trust
+  layer passed them; until a version is checked, or when it is refused, Research works from
+  its built in job text.
+- **D6.5 its folders (owner: already decided):** Research's folders are its alone. Nobody
+  else reads or writes them (sandbox, permission rules and hook), and its raw sent and
+  refused originals go to the app's private folder (`research-outbox`).
+- **D6.7 check limits (B):** no cap on waiting checks.
+
+Applied under the rule that everything into or out of Research passes the trust layer:
+Research loads none of the owner's own Claude settings (`--setting-sources project,local`:
+no owner hooks, skills or CLAUDE.md); resumes only its own conversation (never one copied
+from another project); its commands get no keys or tokens (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`
+plus the app dropping secret named variables); a search from a folder above a wall is
+refused. Fixes: a question with no subject passed as written (it was reported as cleaned);
+a check that ends after Research is off is not delivered; running checks are never pruned
+(no second paid check); the clean copy gets an app made thread and Research's answer is
+routed back into the sender's thread; a teammate's request reaches Research as a query
+(not rerouted to Michael); the inbox stamp covers the whole message and its file name; the
+web gate fails closed when the app can't answer; a member's shell network follows the
+office setting, not whether the business folder opened; patterns read text after Unicode
+normalization (no zero width or fullwidth disguise).
+
 ## The guard (superseded by the trust layer above)
 
 Every message addressed to the Research agent is checked before delivery.

@@ -186,6 +186,11 @@ test('the hook shim refuses MCP calls when it cannot reach the app, and leaves o
     const bash = run('Bash', env);
     assert.equal(bash.status, 0);
     assert.equal(bash.stdout, '', 'built-in tools go on as before');
+    // Web pages and search fail closed too, for everyone but Research (issue #230, ship review pass 2).
+    for (const tool of ['WebFetch', 'WebSearch']) {
+      assert.equal(JSON.parse(run(tool, env).stdout).hookSpecificOutput.permissionDecision, 'deny', `${tool} ${JSON.stringify(env)}`);
+      assert.equal(run(tool, { ...env, AGENT_ID: 'research' }).stdout, '', `Research ${tool}`);
+    }
   }
 });
 
@@ -437,7 +442,7 @@ test('a Task subagent is checked as its team member, and its finish is not the a
 test('an agent whose hive settings could not be written starts with no connectors', () => {
   const main = read('src/main/index.ts');
   assert.match(main, /if \(connectorPlan && !connectorsApplied\) \{[\s\S]{0,300}'--strict-mcp-config'[\s\S]{0,120}ENABLE_CLAUDEAI_MCP_SERVERS: 'false'/);
-  assert.match(main, /opts\.args = \[\.\.\.\(opts\.args \?\? \[\]\), \.\.\.inj\.args\];\s*connectorsApplied = true;/, 'only a completed injection counts as applied');
+  assert.match(main, /opts\.args = \[\.\.\.\(opts\.args \?\? \[\]\), \.\.\.inj\.args\];(?:\s*\/\/[^\n]*)*\s*if \(isResearch\) opts\.args = \[\.\.\.opts\.args, '--setting-sources', 'project,local'\];\s*connectorsApplied = true;/, 'only a completed injection counts as applied');
 });
 
 // Value: protects=connector deny rules sit beside the folder privacy rules in one permissions.deny list; fails_when=hookSettings writes deny: connectorDeny (or only the folder rules) and one set silently disappears; why_new=folder and connector rules were only tested apart; seam=none

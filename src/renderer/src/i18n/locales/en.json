@@ -686,7 +686,8 @@
     "provider": "Provider",
     "model": "Model",
     "modelCurrent": "{{model}} (current)",
-    "engineNote": "A new engine or model takes effect the next time this team member starts."
+    "engineNote": "A new engine or model takes effect the next time this team member starts.",
+    "researchEngine": "Research runs only on Claude, where its walls work."
   },
   "onboarding": {
     "damagedConfig": "Your saved settings could not be read, so setup starts again. The old file is kept at",

@@ -156,7 +156,7 @@ export function parseOutbound(answer: string): { decision: 'pass'; flag: boolean
   if (!o || typeof o.decision !== 'string' || typeof o.flag !== 'boolean') return null;
   const d = o.decision.toUpperCase();
   if (d === 'PASS') return { decision: 'pass', flag: o.flag };
-  if (d === 'CLEAN' && typeof o.subject === 'string' && typeof o.body === 'string') return { decision: 'clean', subject: o.subject, body: o.body, flag: o.flag };
+  if (d === 'CLEAN' && typeof o.subject === 'string' && typeof o.body === 'string' && (o.subject.trim() || o.body.trim())) return { decision: 'clean', subject: o.subject, body: o.body, flag: o.flag };
   return null;
 }
 
@@ -231,7 +231,10 @@ export function makeTrustLayer(deps: TrustLayerDeps): TrustLayer {
       deps.log?.({ kind: 'trust-layer', way: 'in', decision: 'deny', by: 'recheck', class: cls });
       return { decision: 'deny', reason: refusalForClass(cls) };
     }
-    if (v.decision === 'pass' && (typeof msg.subject !== 'string' || typeof msg.body !== 'string') && (msg.subject !== undefined || msg.body !== undefined)) {
+    // A missing subject or body is plain text too (the house rule's example
+    // has no subject); only a list or an object is not text as written.
+    const notText = (x: unknown): boolean => x !== undefined && x !== null && typeof x !== 'string';
+    if (v.decision === 'pass' && (notText(msg.subject) || notText(msg.body))) {
       // Not text as written: what goes out is its text form, already checked.
       deps.log?.({ kind: 'trust-layer', way: 'in', decision: 'clean', by: 'text-form' });
       return { decision: 'clean', subject: out.subject, body: out.body, removed: [] };

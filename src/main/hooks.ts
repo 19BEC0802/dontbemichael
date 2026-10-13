@@ -13,7 +13,7 @@
 import { createServer, type Server } from 'node:net';
 import { existsSync, realpathSync, rmSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { Notification, type WebContents } from 'electron';
 import { redactSecrets, type HiveManager } from './hive';
 import type { HarnessConfig } from './config';
@@ -70,7 +70,7 @@ export const ASK_TOOL_REFUSAL =
   "Don't ask the owner here: nobody answers your terminal. File it as one new file in the hive's triage folder (your questions as one \"ask\", what you were doing in \"description\"). Michael checks it and puts it on the owner's ASK ME board.";
 
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
-import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, researchFolderDecision, researchWallDecision } from '../shared/folderAccess';
+import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, researchFolderDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
 import { RESEARCH_DESK_DIR, RESEARCH_ID } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
@@ -283,8 +283,14 @@ export class HookServer {
         try { payload = JSON.parse(frame); } catch { /* ignore */ }
         let res: unknown = {};
         // A gate that throws allows a built-in tool as before, but never an MCP
-        // call: connectors fail closed (D8).
-        try { res = this.handle(payload); } catch { res = payload.hook_event_name === 'PreToolUse' && isMcpCall(payload.tool_name) ? mcpDeny(CONNECTOR_UNDECIDED) : {}; }
+        // call (connectors fail closed, D8) and never a web tool for anyone
+        // but Research (issue #230).
+        try { res = this.handle(payload); } catch {
+          const pre = payload.hook_event_name === 'PreToolUse';
+          res = pre && isMcpCall(payload.tool_name) ? mcpDeny(CONNECTOR_UNDECIDED)
+            : pre && WEB_TOOLS.has(payload.tool_name ?? '') && payload.agent_id !== RESEARCH_ID ? mcpDeny(WEB_SETTINGS_UNREADABLE)
+            : {};
+        }
         conn.end(JSON.stringify(res ?? {}));
       });
       conn.on('error', () => { /* shim hung up — ignore */ });
@@ -690,6 +696,12 @@ export class HookServer {
     // would take it and end with it.
     if ((event === 'UserPromptSubmit' || event === 'PostToolUse') && agentId && !subagent && this.control) {
       steer = this.control.takeSteer(agentId) ?? null;
+      // Never straight into Research's turn: a steer queued for it goes
+      // through its trust layer as a message instead (ship review D6.3).
+      if (steer && agentId === RESEARCH_ID) {
+        this.hive.rememberOwnerNote(RESEARCH_ID, steer);
+        steer = null;
+      }
     }
 
     // Keep god's roster CURRENT. fleet.json is always fresh on disk, but god's
@@ -947,7 +959,9 @@ export class HookServer {
     if (agentId === RESEARCH_ID) {
       const walled = [homedir(), home ?? '', cfg.businessFolder ?? '', this.getKnowledge?.().root ?? '',
         ...(cfg.businessTeam ?? []).map((m) => m.folder),
-        ...Object.values(reg.agents).filter((a) => a.id !== agentId && a.cwd).map((a) => a.cwd)].filter(Boolean);
+        ...Object.values(reg.agents).filter((a) => a.id !== agentId && a.cwd).map((a) => a.cwd),
+        // Every temporary folder; its own session files are in its desk (D6.1).
+        ...tempFolders(process.platform, tmpdir())].filter(Boolean);
       for (const t of both) {
         const r = researchFolderDecision(walled, researchOwn, tool, t, ci);
         if (r.deny) return r;

@@ -18,17 +18,13 @@
  *
  * Everything here runs in the Electron main process.
  */
-import type { SandboxNetwork } from '../shared/webAccess';
+import { WEB_SETTINGS_UNREADABLE, WEB_TOOLS, type SandboxNetwork } from '../shared/webAccess';
 import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
   PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
   SENT_AS_SUBJECT, sentAsBody
 } from '../shared/research';
 
-/** A thread id an agent wrote, kept only when it is a plain token. */
-function safeConversation(v: unknown): v is string {
-  return typeof v === 'string' && /^[\w.:-]{1,120}$/.test(v);
-}
 import { hookShell, shellCommand, type HookShell } from './hookShell';
 import { CLOSING_COMPLETE_RE } from '../shared/closingTime';
 import {
@@ -83,6 +79,11 @@ import {
 import { HOUSE_RULES_CHANGED_SUBJECT, houseRulesNoticeBody, houseRulesToTell } from '../shared/houseRulesNotice';
 import { applyGuardFixes, restoreDone, dueReminders, guardSignature, emptyGuardState, guardCards, type GuardCard, type GuardState } from '../shared/cardGuards';
 import { sleepSync } from './atomicFile';
+
+/** A thread id an agent wrote, kept only when it is a plain token. */
+function safeConversation(v: unknown): v is string {
+  return typeof v === 'string' && /^[\w.:-]{1,120}$/.test(v);
+}
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
  *  Kept as a local shape so hive.ts never imports the foundation-owned config
@@ -2136,6 +2137,13 @@ export class HiveManager {
   static readonly TRUST_CHECK_KEEP_MS = 10 * 60_000;
   /** Ids of clean copies the trust layer produced; only these reach Research. */
   private researchCleared = new Set<string>();
+  /** The sender's message behind each clean copy, by the copy's id and its
+   *  thread, so Research's answer lands back in the sender's thread while
+   *  Research never sees the sender's thread id (ship review). */
+  private researchThreads = new Map<string, { origId: string; conversation: string }>();
+  static readonly RESEARCH_THREADS_KEEP = 500;
+  /** App and owner messages for Research whose check is under way. */
+  private researchQueued = 0;
   private stampKey: Buffer | null = null;
 
   /** Research while it is on: the reserved id, the owner's switch, a live entry. */
@@ -2165,7 +2173,8 @@ export class HiveManager {
         }
       }
     }
-    const content = JSON.stringify([m.id, m.from, m.to, m.act, m.subject, m.body, m.conversation, m.in_reply_to, m.created_at]);
+    const { stamp: _stamp, ...fields } = m as Partial<HiveMessage> & { stamp?: unknown };
+    const content = JSON.stringify(fields, Object.keys(fields).sort());
     return createHmac('sha256', this.stampKey).update(content).digest('hex');
   }
 
@@ -2183,7 +2192,7 @@ export class HiveManager {
       let m: Partial<HiveMessage> & { stamp?: unknown } = {};
       try {
         m = JSON.parse(readFileSync(full, 'utf8')) as Partial<HiveMessage> & { stamp?: unknown };
-        ok = typeof m.id === 'string' && m.stamp === this.researchStamp(m);
+        ok = typeof m.id === 'string' && f === `${m.id}.json` && m.stamp === this.researchStamp(m);
       } catch {
         if (this.stillBeingWritten(full)) continue;
       }
@@ -2202,7 +2211,7 @@ export class HiveManager {
     this.routeMessage(this.normalize({
       to, act: 'inform', subject, body,
       in_reply_to: aboutId && isSafeMessageId(aboutId) ? aboutId : null,
-      ...(safeConversation(conversation) ? { conversation: conversation as string } : {})
+      ...(safeConversation(conversation) ? { conversation } : {})
     }, PRIVACY_CHECK_SENDER));
   }
 
@@ -2223,7 +2232,9 @@ export class HiveManager {
   }
 
   private pruneTrustChecks(now = Date.now()): void {
-    for (const [k, c] of this.trustChecks) if (now - c.at > HiveManager.TRUST_CHECK_KEEP_MS) this.trustChecks.delete(k);
+    // Only finished checks: one still running or waiting its turn is kept, so
+    // a long queue never starts a second paid check for the same message.
+    for (const [k, c] of this.trustChecks) if (c.done && now - c.at > HiveManager.TRUST_CHECK_KEEP_MS) this.trustChecks.delete(k);
   }
 
   /** A teammate's or Michael's message to Research, from its outbox. Held
@@ -2257,26 +2268,44 @@ export class HiveManager {
       if (fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, this.trustLayer ? REFUSAL_OFF : REFUSAL_UNSURE);
       return;
     }
+    this.researchQueued++;
+    const refuse = (reason: string, why?: string): void => {
+      this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, ...(why ? { reason: why } : {}) });
+      if (fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, reason);
+    };
     this.trustLayer.inbound({ subject: msg.subject, body: msg.body }).then((v) => {
-      if (v.decision === 'deny') {
-        this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id });
-        if (fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, v.reason);
-        return;
-      }
-      this.deliverToResearch(msg.from, msg, v.subject, v.body);
-      if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body));
-      this.commit('hive: trust layer delivered to research');
-    }, () => { this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, reason: 'failed' }); });
+      this.researchQueued--;
+      try {
+        if (v.decision === 'deny') return refuse(v.reason);
+        // Research may have been turned off while the check ran.
+        if (!this.researchOn()) return refuse(REFUSAL_OFF, 'research-off');
+        this.deliverToResearch(msg.from, msg, v.subject, v.body);
+        if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body));
+        this.commit('hive: trust layer delivered to research');
+      } catch (e) { console.error('[research] delivering a checked message', e); }
+    }, () => {
+      this.researchQueued--;
+      try { refuse(REFUSAL_UNSURE, 'failed'); } catch { /* logged above */ }
+    });
   }
 
   /** The clean copy Research receives: built only from what the trust layer
    *  returned, with an id, time and thread the app chose. */
   private deliverToResearch(fromId: string, orig: HiveMessage, subject: string, body: string): void {
-    const act: MessageAct = orig.act === 'request' || orig.act === 'inform' ? orig.act : 'query';
-    const clean = this.normalize({
-      to: RESEARCH_ID, act, subject, body,
-      ...(safeConversation(orig.conversation) ? { conversation: orig.conversation } : {})
-    }, fromId);
+    // Research answers questions; it is never assigned work, so a request
+    // reaches it as a query (a request would go to Michael as a teammate's
+    // job hand off). The thread is the app's own: the sender's thread id is
+    // agent written text the trust layer never read.
+    const act: MessageAct = orig.act === 'inform' ? 'inform' : 'query';
+    const clean = this.normalize({ to: RESEARCH_ID, act, subject, body }, fromId);
+    const back = { origId: orig.id, conversation: orig.conversation };
+    this.researchThreads.set(clean.id, back);
+    this.researchThreads.set(clean.conversation, back);
+    while (this.researchThreads.size > HiveManager.RESEARCH_THREADS_KEEP * 2) {
+      const first = this.researchThreads.keys().next().value;
+      if (first === undefined) break;
+      this.researchThreads.delete(first);
+    }
     this.researchCleared.add(clean.id);
     try { this.routeMessage(clean); } finally { this.researchCleared.delete(clean.id); }
   }
@@ -2302,6 +2331,12 @@ export class HiveManager {
     if (v.decision === 'deny') return deny();
     msg.subject = v.subject;
     msg.body = `${RESEARCH_REPLY_LABEL}\n\n${v.body}`;
+    // Back into the sender's own thread.
+    const back = (msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined) ?? this.researchThreads.get(msg.conversation);
+    if (back) {
+      if (msg.in_reply_to && this.researchThreads.has(msg.in_reply_to)) msg.in_reply_to = back.origId;
+      msg.conversation = back.conversation;
+    }
     const flagged = ('flagged' in v && v.flagged) || looksLikeInjection(`${v.subject}\n${v.body}`);
     this.routeMessage(msg);
     if (flagged) {
@@ -2320,7 +2355,7 @@ export class HiveManager {
   /** Asks waiting for Research: delivered and not yet read, plus those in a
    *  check. Turning Research off sends these back (design review D7). */
   researchWaiting(): number {
-    let n = 0;
+    let n = this.researchQueued;
     for (const [k, c] of this.trustChecks) if (k.startsWith('in:') && !c.done) n++;
     const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
     try { n += readdirSync(inbox).filter((f) => f.endsWith('.json')).length; } catch { /* none */ }
@@ -2736,8 +2771,15 @@ export class HiveManager {
             const gate = toResearch ? this.researchInboundGate(id, msg, partial, raw, researchOn) : this.researchOutboundGate(msg, partial, raw);
             if (gate === 'hold') continue;
             // A denied original is kept apart from .sent, so nothing reads it as sent.
-            const dest = join(outbox, gate === 'denied' ? '.refused' : '.sent');
+            // Research's raw originals are web text the outbound check has not
+            // cleaned: they go to the app's private folder, out of every
+            // agent's reach (owner, 2026-10-13: its folders are its alone).
+            const home = id === RESEARCH_ID ? this.getHome() : null;
+            const dest = home
+              ? join(privateRoot(home), 'research-outbox', gate === 'denied' ? 'refused' : 'sent')
+              : join(outbox, gate === 'denied' ? '.refused' : '.sent');
             mkdirSync(dest, { recursive: true });
+            if (repairedText !== null) writeFileSync(full, repairedText);
             this.archiveOutboxFile(full, dest, f);
             routed++;
             continue;
@@ -5076,9 +5118,11 @@ process.stdin.on('end', () => {
     return;
   }
   // Claude connectors fail closed (docs/designs/claude-connectors.md, D8): when
-  // the app cannot answer, an MCP call is refused; every other tool goes on.
+  // the app cannot answer, an MCP call is refused, and so are web pages and
+  // web search for everyone but Research (issue #230); every other tool goes on.
   const tool = String(payload.tool_name || '');
   const mcp = payload.hook_event_name === 'PreToolUse' && (tool.indexOf('mcp__') === 0 || ${JSON.stringify([...MCP_RESOURCE_TOOLS])}.indexOf(tool) >= 0);
+  const web = payload.hook_event_name === 'PreToolUse' && ${JSON.stringify([...WEB_TOOLS])}.indexOf(tool) >= 0 && me !== ${JSON.stringify(RESEARCH_ID)};
   // An MCP call too big for one hook frame (a long document to write) is sent
   // with only its short input fields: the connector, mail and QuickBooks gates
   // decide on the tool name, server and mailbox, never the body (owner, 2026-10-02).
@@ -5095,12 +5139,12 @@ process.stdin.on('end', () => {
     line = JSON.stringify(payload);
   }
   const fail = () => {
-    if (mcp) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: ${JSON.stringify(CONNECTOR_UNDECIDED)} } }));
+    if (mcp || web) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: mcp ? ${JSON.stringify(CONNECTOR_UNDECIDED)} : ${JSON.stringify(WEB_SETTINGS_UNREADABLE)} } }));
     process.exit(0);
   };
   if (!sock) { fail(); return; }
   let resp = '';
-  const done = () => { if (!resp && mcp) { fail(); return; } if (resp) process.stdout.write(resp); process.exit(0); };
+  const done = () => { if (!resp && (mcp || web)) { fail(); return; } if (resp) process.stdout.write(resp); process.exit(0); };
   const c = net.createConnection(sock, () => c.write(line + '\\n'));
   c.setEncoding('utf8');
   c.on('data', (d) => { resp += d; });

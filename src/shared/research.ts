@@ -4,7 +4,7 @@
  * on in Settings (Research & privacy) or picks it in the onboarding Team step.
  * Every other agent, Michael included, has no web pages, no web search and,
  * on a Mac, no internet from the shell; they ask Research, and every message
- * to Research passes the privacy check (main/privacyGuard.ts).
+ * to and from Research passes the trust layer (main/trustLayer.ts).
  *
  * Pure: the ids, words and rules the main process, the hook and the renderer
  * share.

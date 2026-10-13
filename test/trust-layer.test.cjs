@@ -121,3 +121,30 @@ test('the message sits inside a random delimiter, and at most N checks run at on
   await Promise.all(Array.from({ length: 6 }, (_, i) => l.inbound({ subject: 'x', body: `question ${i}` })));
   assert.equal(peak, 2);
 });
+
+test('a question with no subject passes as written', async () => {
+  // Value: protects=the sender is not told private details were removed when nothing was; fails_when=a missing subject turns a pass into a clean; why_new=ship review pass 2 (reproduced: house rule 9's example has no subject); seam=fake runner
+  const { l } = layer(json({ decision: 'PASS' }));
+  assert.equal((await l.inbound({ body: 'Pizza trends in Austin' })).decision, 'pass');
+  assert.equal((await l.inbound({ subject: null, body: 'Pizza trends in Austin' })).decision, 'pass');
+});
+
+test('unreadable or overlong outbound answers deny, and so do unreadable settings', async () => {
+  // Value: protects=Research's text never goes out on a half answer; fails_when=parseOutbound defaults a missing flag or accepts an empty clean; why_new=testing review pass 2; seam=fake runner
+  for (const a of [json({ decision: 'PASS' }), json({ decision: 'CLEAN', flag: false }), json({ decision: 'CLEAN', subject: ' ', body: '', flag: false }), 'maybe', null]) {
+    assert.deepEqual(await layer(a).l.outbound({ subject: 's', body: 'b' }), { decision: 'deny', reason: R.REFUSAL_UNSURE }, String(a));
+  }
+  assert.deepEqual(await layer(json({ decision: 'PASS', flag: false })).l.outbound({ subject: 's', body: 'w '.repeat(T.TRUST_MAX_CHARS) }), { decision: 'deny', reason: R.REFUSAL_TOO_LONG });
+  const bad = T.makeTrustLayer({ run: async () => json({ decision: 'PASS' }), settings: () => { throw new Error('mid write'); } });
+  assert.equal((await bad.inbound({ subject: 'x', body: 'y' })).decision, 'deny');
+});
+
+test('zero width and fullwidth characters do not hide a key or an email', async () => {
+  // Value: protects=passwords and keys never reach a model even when disguised; fails_when=patterns run on the raw text; why_new=red team pass 2; seam=fake runner
+  const { l, prompts } = layer(json({ decision: 'PASS' }));
+  const key = 'sk-' + 'abcd​efgh​ijkl​mnop​qrst';
+  assert.deepEqual(await l.inbound({ subject: 'k', body: `use ${key}` }), { decision: 'deny', reason: R.refusalForClass('secrets') });
+  assert.equal(prompts.length, 0, 'never sent to the model');
+  const v = await l.inbound({ subject: 'x', body: 'Write to ｊａｎｅ＠northwind.example' });
+  assert.equal(v.decision, 'deny');
+});

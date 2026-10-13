@@ -35,7 +35,9 @@ test('every team member of a business office gets an empty strict network list',
   assert.deepEqual(W.sandboxNetwork(false), { allowedDomains: [], strictAllowlist: true });
   assert.equal(W.sandboxNetwork(true), undefined, 'Michael runs outside the sandbox');
   const main = read('src/main/index.ts');
-  assert.match(main, /network: businessFolder \? sandboxNetwork\(!!opts\.hive\.isGod\) : undefined/);
+  assert.match(main, /network: isBusinessOffice\(\) \? sandboxNetwork\(!!opts\.hive\.isGod\) : undefined/);
+  // Research's commands get no keys or tokens (red team pass 2).
+  assert.match(main, /if \(isResearch\) opts\.env = \{ \.\.\.\(opts\.env \?\? \{\}\), CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' \};/);
 });
 
 test('the hook gate covers Michael and decides Research by the app, not a file', () => {
@@ -64,15 +66,17 @@ test('Research opens nothing of the office, and its own folders reopen', () => {
   assert.equal(F.researchFolderDecision(walled, own, 'Bash', P('/w/home/hive/tasks.json'), true).deny, false, 'not a file tool');
 });
 
-test('nobody else writes into Research\'s folders', () => {
-  // Value: protects=no member drops a message into Research's inbox past the check; fails_when=the deny rule or the hook decision is missing; why_new=eng review R2; seam=none
+test('nobody else writes into or reads Research\'s folders', () => {
+  // Value: protects=no member drops a message into Research's inbox past the check, or reads its raw web text; fails_when=the deny rule or the hook decision is missing; why_new=eng review R2, owner 2026-10-13 (its folders are its alone); seam=none
   const folders = [P('/w/home/hive/agents/research'), P('/w/home/research-desk')];
   const base = { sandbox: { denyWrite: ['/x'], denyRead: [], allowRead: [] }, deny: [], sandboxOnly: true };
   const pol = F.withResearchWall(base, folders);
   assert.deepEqual(pol.sandbox.denyWrite, ['/x', ...folders]);
   assert.ok(pol.deny.some((r) => r.startsWith('Edit(') && r.includes('/hive/agents/research')));
   assert.equal(F.researchWallDecision(folders, 'Write', P('/w/home/hive/agents/research/inbox/x.json'), true).deny, true);
-  assert.equal(F.researchWallDecision(folders, 'Read', P('/w/home/hive/agents/research/inbox/x.json'), true).deny, false);
+  assert.deepEqual(pol.sandbox.denyRead, folders);
+  assert.equal(F.researchWallDecision(folders, 'Read', P('/w/home/hive/agents/research/inbox/x.json'), true).deny, true);
+  assert.equal(F.researchWallDecision(folders, 'Grep', P('/w/home/hive'), true).deny, false, 'a search over the hive stays open; Read rules filter it');
   assert.equal(F.researchWallDecision(folders, 'Write', P('/w/home/hive/agents/pam/outbox/x.json'), true).deny, false);
 });
 
@@ -94,4 +98,31 @@ test('Research\'s notes reach the shared memory only as a cleaned copy', () => {
   assert.match(main, /const v = await trustLayer\.outbound\(\{ subject: 'Research notes', body: text \}\);\n  if \(v\.decision === 'deny'\) return null;/);
   const mem = read('src/main/memory.ts');
   assert.match(mem, /if \(dir === null\) continue;\n        await this\.mineAgent\(dir, id\);/);
+});
+
+test('Research runs only on Claude, where its walls work', () => {
+  // Value: protects=an engine change can't start Research without its walls; fails_when=the spawn skips the engine check or Edit agent offers other engines for Research; why_new=security review pass 2, ship review D6.2; seam=none
+  const main = read('src/main/index.ts');
+  assert.match(main, /if \(isResearch && !claudeProvider\) \{[\s\S]{0,400}on: false \} \}\);\s*return \{ ok: false, error: 'Research runs only on Claude\./);
+  const modal = read('src/renderer/src/components/EditAgentModal.tsx');
+  assert.match(modal, /const isResearch = agent\.id === RESEARCH_ID;/);
+  assert.match(modal, /BUILD_ENGINES\.includes\(p\.id\) && \(!isResearch \|\| isClaudeProvider\(p\.id\)\)/);
+  assert.match(modal, /disabled=\{researchLocked\}/);
+  for (const loc of ['en', 'ar', 'zh-CN']) assert.ok(JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`)).editAgent.researchEngine, loc);
+});
+
+test('Research\'s Work style and jobs reach it only as the trust layer passed them', () => {
+  // Value: protects=owner edited job text can't carry names to Research unchecked; fails_when=standingGoalFor returns Research's raw text, or an unchecked version is used while the check runs; why_new=security review pass 2, ship review D6.4; seam=none
+  const main = read('src/main/index.ts');
+  assert.match(main, /return agentId === RESEARCH_ID \? researchGoal\(text\) : text;/);
+  assert.match(main, /researchGoalChecks\.set\(raw, 'pending'\);\s*trustLayer\.inbound\(\{ subject: 'Your Work style', body: raw \}\)/);
+  assert.match(main, /researchGoalChecks\.set\(raw, v\.decision === 'deny' \? null : v\.body\);/);
+  assert.match(main, /return typeof seen === 'string' && seen !== 'pending' && seen\.trim\(\) \? seen : RESEARCH_WORK_STYLE;/);
+});
+
+test('Research loads none of the owner\'s own Claude settings, and resumes only its own conversation', () => {
+  // Value: protects=the owner's hooks, skills and CLAUDE.md never reach Research, and a registry edit can't resume it into another agent's conversation; fails_when=the flag is dropped or Research seeds a transcript from another project; why_new=red team pass 2 (verified live 2026-10-13: without the flag Research saw the owner's skills); seam=none
+  const main = read('src/main/index.ts');
+  assert.match(main, /if \(isResearch\) opts\.args = \[\.\.\.opts\.args, '--setting-sources', 'project,local'\];/);
+  assert.match(main, /const resumable = isResearch\s*\? \/\^\[\\w-\]\{1,128\}\$\/\.test\(sid\) && existsSync\(join\(projectDir\(opts\.cwd\), `\$\{sid\}\.jsonl`\)\)\s*: seedSessionTranscript\(opts\.cwd, sid\);/);
 });

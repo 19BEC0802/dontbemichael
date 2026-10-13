@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { request as httpsRequest } from 'node:https';
 import { PtyManager, type ProcessLaunch, type SpawnOptions } from './pty';
 import { resolveCommand as resolveCliCommand, isSafeCommandName, userShellPath } from './shellEnv';
@@ -23,7 +23,7 @@ import {
 import { runHiddenClaude, setHiddenClaudeAuthEnv } from './hiddenClaude';
 import { makeTrustLayer, TRUST_MODEL, TRUST_TIMEOUT_MS } from './trustLayer';
 import { dataClassSettings } from '../shared/dataClasses';
-import { RESEARCH_DESK_DIR, RESEARCH_ID } from '../shared/research';
+import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_WORK_STYLE } from '../shared/research';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
@@ -68,7 +68,7 @@ import { checkDistinct, readJobProfile } from './hireCheck';
 import { checkFocusArea, convertWorkStyle, readConvertRequest, readFocusCheckRequest, readSuggestRequest, suggestWorkStyle } from './workStyleConvert';
 import { SafeClearer, type SafeClearDeps } from './safeClearer';
 import { PersistStore } from './db';
-import { readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
+import { projectDir, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
 import {
@@ -137,7 +137,7 @@ import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { APP_NAME, APP_DATA_DIR, APP_URL_SCHEME } from '../shared/appName';
 import { copyOfficeData, homeFolderStatus, homeReadyAtLaunch } from './homeFolder';
 import { backfillOfficeRecord, findOffice, folderLayoutFor, isUsableTeamFolder, syncOfficeRecord } from './officeFile';
-import { folderPolicy, researchFolderPolicy, withResearchWall, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
+import { folderPolicy, AGENT_TMP_DIR, researchFolderPolicy, RESEARCH_TMP_DIR, shellTempWalls, withResearchWall, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
 import { sandboxNetwork } from '../shared/webAccess';
 import { MCP_CATALOG } from '../shared/mcpCatalog';
 import { legacyBusinessFolder, touchesOffice } from '../shared/officeRecord';
@@ -339,6 +339,13 @@ const hive = new HiveManager(
 // #7C — operator control state (pause/gate/steer/halt), read by the HookServer
 // when deciding hook returns.
 const control = new ControlRegistry();
+// A steer to Research, typed or from the voice assistant, reaches it as a
+// message from the owner through its trust layer (ship review D6.3).
+control.setSteerDivert((id, text) => {
+  if (id !== RESEARCH_ID) return false;
+  hive.rememberOwnerNote(RESEARCH_ID, text);
+  return true;
+});
 // Stage 7A — the live observability tap. Receives Claude Code's first-party OTel
 // over loopback OTLP/JSON and exposes the locked usage-provider seam. resolveCwd
 // lets the transcript fallback find an agent's cwd from the hive registry.
@@ -412,7 +419,27 @@ function standingGoalFor(agentId: string): string | null {
   let jobs: string | null = null;
   try { jobs = scheduledJobsBlock(readConfig().missions ?? [], agentId, godId); } catch { /* no config yet */ }
   const parts = [own, jobs].filter((x): x is string => !!x);
-  return parts.length ? parts.join('\n\n') : null;
+  const text = parts.length ? parts.join('\n\n') : null;
+  return agentId === RESEARCH_ID ? researchGoal(text) : text;
+}
+/** Research's job text, as the trust layer passed it (ship review D6.4): the
+ *  owner's Work style and its scheduled jobs are checked like any message,
+ *  and until a version is checked (or when it is refused) Research works from
+ *  its built in job text. Only the latest text is remembered. */
+const researchGoalChecks = new Map<string, string | null | 'pending'>();
+function researchGoal(raw: string | null): string {
+  if (!raw || raw.trim() === RESEARCH_WORK_STYLE) return RESEARCH_WORK_STYLE;
+  const seen = researchGoalChecks.get(raw);
+  if (seen === undefined) {
+    researchGoalChecks.clear();
+    researchGoalChecks.set(raw, 'pending');
+    trustLayer.inbound({ subject: 'Your Work style', body: raw }).then((v) => {
+      if (v.decision === 'deny') console.warn('[research] its Work style was not passed by the trust layer; it keeps its built in job text');
+      researchGoalChecks.set(raw, v.decision === 'deny' ? null : v.body);
+    }, () => { researchGoalChecks.set(raw, null); });
+    return RESEARCH_WORK_STYLE;
+  }
+  return typeof seen === 'string' && seen !== 'pending' && seen.trim() ? seen : RESEARCH_WORK_STYLE;
 }
 // Worker inbox-wake watchdog (#151): finds idle workers with undrained inbox mail
 // and types the same guarded nudge the renderer would have (so a throttled
@@ -3745,6 +3772,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   if (opts.hive?.id === RESEARCH_ID && !isResearch) {
     return { ok: false, error: 'Research is off. Turn it on in Settings.' };
   }
+  // Research's walls are Claude Code's: on any other engine it does not
+  // start, and its switch goes back off (ship review D6.2).
+  if (isResearch && !claudeProvider) {
+    console.error(`[research] engine ${provider} has none of Research's walls; Research did not start`);
+    writeConfig({ research: { ...(readConfig().research ?? { on: false }), on: false } });
+    return { ok: false, error: 'Research runs only on Claude. Set its engine back to Claude in Edit agent, then turn it on again.' };
+  }
   // Research starts only inside its walls (ship review D2.8).
   let researchWalled = false;
   if (isResearch) {
@@ -3755,6 +3789,17 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     if (opts.hive) opts.hive = { ...opts.hive, cwd: desk };
   }
   const connectorPlan = opts.hive && claudeProvider && !isResearch ? connectorStart(readConfig(), opts.hive.id) : undefined;
+  // An office agent's Claude session keeps its scratch files and command
+  // output in its own folder, never in the shared /tmp that Research's shell
+  // can read (ship review D6.1): Research's in its desk, everyone else's under
+  // the app's home, outside the hive.
+  const sessionTmp = (() => {
+    if (!opts.hive || !claudeProvider || !/^[\w-]{1,64}$/.test(opts.hive.id)) return undefined;
+    const harness = readConfig().harnessHome;
+    const dir = isResearch ? join(opts.cwd, RESEARCH_TMP_DIR) : harness ? join(expandTilde(harness), AGENT_TMP_DIR, opts.hive.id) : '';
+    if (!dir) return undefined;
+    try { mkdirSync(dir, { recursive: true }); return dir; } catch { return undefined; }
+  })();
   let connectorsApplied = false;
   if (opts.hive && hive.enabled()) {
     try {
@@ -3785,8 +3830,11 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
             return { name: cfg.businessName, city: cfg.businessCity, typeName: pack.displayName };
           })(),
           // The whole home folder is walled; only its own folders open (D2.5).
+          // So is every temporary folder but /tmp, which Claude Code's shell
+          // needs; no office agent keeps its session files there (D6.1).
           folderPolicy: researchFolderPolicy(
-            [homedir(), home, businessFolder ?? '', knowledge.env().KG_ROOT ?? '', memory.env().MEMPALACE_PALACE_PATH ?? '', ...teamFolders],
+            [homedir(), home, businessFolder ?? '', knowledge.env().KG_ROOT ?? '', memory.env().MEMPALACE_PALACE_PATH ?? '', ...teamFolders,
+              ...shellTempWalls(process.platform, tmpdir())],
             researchFolders(),
             homedir()
           )
@@ -3806,7 +3854,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
-          extraWritableDirs: [memory.env().MEMPALACE_PALACE_PATH].filter((p): p is string => !!p),
+          extraWritableDirs: [memory.env().MEMPALACE_PALACE_PATH, sessionTmp].filter((p): p is string => !!p),
           businessFolder,
           business: (() => {
             const cfg = readConfig();
@@ -3825,10 +3873,17 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // In a business office only Research uses the internet
           // (shared/webAccess.ts): every other team member's shell reaches no
           // host. Michael runs unsandboxed. Other offices keep it (D3).
-          network: businessFolder ? sandboxNetwork(!!opts.hive.isGod) : undefined
+          // Judged on the office setting, not the folder, so a folder that
+          // can't be opened never leaves the team on the internet.
+          network: isBusinessOffice() ? sandboxNetwork(!!opts.hive.isGod) : undefined
         }
       );
       opts.args = [...(opts.args ?? []), ...inj.args];
+      // Research loads none of the owner's own Claude settings (their hooks,
+      // which run outside the sandbox, skills and CLAUDE.md): everything that
+      // reaches it passes the trust layer (owner, 2026-10-13). The app's own
+      // settings come with --settings, which always loads.
+      if (isResearch) opts.args = [...opts.args, '--setting-sources', 'project,local'];
       connectorsApplied = true;
       researchWalled = isResearch;
       seedPrompt = inj.seedPrompt;
@@ -3839,6 +3894,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       // Point the agent's mempalace CLI at the shared palace + the `kg` CLI at the
       // enterprise knowledge store (both no-ops / empty when their flags are off).
       opts.env = isResearch ? { ...(opts.env ?? {}), ...inj.env } : { ...(opts.env ?? {}), ...inj.env, ...memory.env(), ...knowledge.env() };
+      if (sessionTmp) opts.env = { ...opts.env, CLAUDE_CODE_TMPDIR: sessionTmp };
     } catch (e) {
       // Hive provisioning is best-effort; never block a spawn on it.
       console.error('[hive] ensureAgent failed:', e);
@@ -3943,7 +3999,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const explicitSid = typeof opts.resumeSessionId === 'string' ? opts.resumeSessionId.trim() : '';
     const sid = explicitSid || (opts.resume === true ? hive.lastSession(opts.hive.id) : undefined);
     if (sid && !args.includes('--resume')) {
-      if (seedSessionTranscript(opts.cwd, sid)) {
+      // Research resumes only its own conversation, never one copied from
+      // another project: the session id is in a file agents can write, and
+      // another agent's conversation holds office data (ship review).
+      const resumable = isResearch
+        ? /^[\w-]{1,128}$/.test(sid) && existsSync(join(projectDir(opts.cwd), `${sid}.jsonl`))
+        : seedSessionTranscript(opts.cwd, sid);
+      if (resumable) {
         args.push('--resume', sid);
         didResume = true;
       } else if (explicitSid) {
@@ -4029,6 +4091,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const authEnv = claudeAuthEnv();
     try { ensureClaudePermissionsAccepted(opts.cwd, { approveKey: authEnv.ANTHROPIC_API_KEY }); } catch { /* never block spawn */ }
     if (authEnv.ANTHROPIC_API_KEY) opts.env = { ...(opts.env ?? {}), ...authEnv };
+    // Research's shell reaches the internet, so the commands it runs get no
+    // keys or tokens: Claude Code removes them from every command's
+    // environment (ship review: a web page could ask it to print them).
+    if (isResearch) opts.env = { ...(opts.env ?? {}), CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' };
   }
   // Suppress first-run interactive prompts for providers that need it (e.g. Codex
   // directory-trust gate via CODEX_NON_INTERACTIVE). Merges into any env already
