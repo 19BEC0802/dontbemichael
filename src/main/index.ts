@@ -55,7 +55,7 @@ import { OfficeBreak, type OfficeBreakState } from './officeBreak';
 import { heldByBreak, type OfficeStopReason } from '../shared/officeBreak';
 import { loadBundledPacks, packsResourceDir } from './packs';
 import { businessFolderRoot, ensureFolder, safeFolderName } from './agentFolders';
-import { CircuitBreaker, type BreakerInput } from './breaker';
+import { CircuitBreaker, breakerMessages, type BreakerInput } from './breaker';
 import type { UsageProvider } from './usage';
 import { MemoryManager } from './memory';
 import { KnowledgeManager } from './knowledge';
@@ -2012,14 +2012,11 @@ function runBreakerBeat(progressWindowMs: number): void {
     if (d.action === 'none') continue;
     const name = reg.agents[d.state.agentId]?.name ?? d.state.agentId;
     const reason = d.state.reason;
-    if (d.action === 'steer') {
-      hive.send({ to: d.state.agentId, act: 'request', subject: 'Circuit breaker: steer',
-        body: `The app noticed a problem with this task (${reason}). If you are repeating yourself or stuck, stop, and send Michael a short summary of what you tried and what you need.` }, 'breaker');
-    } else if (d.action === 'constrain') {
-      hive.send({ to: d.state.agentId, act: 'request', subject: 'Circuit breaker: constrain',
-        body: `The app paused this task (${reason}). Before running more tools, send Michael a short plan of your next step and wait for his go ahead.` }, 'breaker');
+    if (d.action === 'steer' || d.action === 'constrain') {
+      // The member hears it; on a constrain Michael does too (breakerMessages).
       // No toast: a constrain is a soft pause Michael handles (only Michael
       // notifies, docs/designs/michael-only-notifications.md).
+      for (const m of breakerMessages(d, name, reg.godId ?? 'god')) hive.send(m, 'breaker');
     } else if (d.action === 'stop') {
       const ptyId = ptyForAgent(d.state.agentId);
       if (ptyId) { try { ptyManager.kill(ptyId); } catch { /* already gone */ } teardownPty(ptyId); }
