@@ -95,7 +95,8 @@ test('Research\'s notes reach the shared memory only as a cleaned copy', () => {
   const main = read('src/main/index.ts');
   assert.match(main, /memory\.setNotesFilter\(researchNotesForPalace\);/);
   assert.match(main, /if \(id !== RESEARCH_ID\) return undefined;/);
-  assert.match(main, /const v = await trustLayer\.outbound\(\{ subject: 'Research notes', body: text \}\);\n  if \(v\.decision === 'deny'\) return null;/);
+  assert.match(main, /const text = readResearchNotes\(agentDir\);/);
+  assert.match(main, /const v = await trustLayer\.outbound\(\{ subject: 'Research notes', body: text \}\);\n  if \(v\.decision === 'deny'\) return clear\(\);/, 'a refused set is mined from nothing, not last time\'s copy');
   const mem = read('src/main/memory.ts');
   assert.match(mem, /if \(dir === null\) continue;\n        await this\.mineAgent\(dir, id\);/);
 });
@@ -162,4 +163,11 @@ test('Research leaves closing time alone, turning it off returns its asks, and a
   assert.equal((main.match(/turnResearchOff\(\);/g) || []).length, 2, 'both spawn guards');
   assert.match(main, /function turnResearchOff\(\): number \{\s*writeConfig\(\{ research: [^\n]*on: false \} \}\);\s*try \{ return hive\.returnResearchInbox\(\);/);
   assert.match(main, /pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);/);
+});
+
+test('the trust check always runs on Claude, with none of the owner\'s hooks', () => {
+  // Value: protects=checks work when the office's default engine is not Claude, and no owner hook sees or adds to what a check reads; fails_when=the runner uses another engine's command or loads hooks; why_new=Codex adversarial review (verified live: disableAllHooks from --settings stops settings file hooks); seam=none
+  const main = read('src/main/index.ts');
+  assert.match(main, /command: cmd && isClaudeProvider\(inferAgentProvider\(cmd\)\) \? cmd : 'claude',\s*noTools: true,\s*settingSources: 'user',\s*settingsJson: JSON\.stringify\(\{ disableAllHooks: true \}\),/);
+  assert.match(read('src/main/hiddenClaude.ts'), /if \(opts\.settingsJson\) args\.push\('--settings', opts\.settingsJson\);/);
 });

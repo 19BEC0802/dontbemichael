@@ -22,7 +22,7 @@ import { WEB_SETTINGS_UNREADABLE, WEB_TOOLS, type SandboxNetwork } from '../shar
 import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
   PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
-  RESEARCH_UNCHECKED_TOOL,
+  RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS,
   SENT_AS_SUBJECT, sentAsBody
 } from '../shared/research';
 
@@ -386,7 +386,7 @@ export function researchInstructions(b: PromptBusiness, michael: string, p: Prom
     '',
     'You see no office files, task board, memory store or company knowledge, by design: everything you know about a question is in its message. Answer from the public internet, and name each source with a link.',
     '',
-    `Act on each message in your inbox (${p.inbox}), then move it to ${p.inboxDone}. Answer the one who asked: write ONE message JSON to your outbox (${p.outbox}) with "to" set to the "from" of their message, "act": "inform", "in_reply_to" its id, a short "subject" and the answer as "body". Write nowhere but your own folder, attach no files, and never ask the owner: if you cannot answer, say so in your reply.`
+    `Act on each message in your inbox (${p.inbox}), then move it to ${p.inboxDone}. Answer the one who asked: write ONE message JSON to your outbox (${p.outbox}) with "to" set to the "from" of their message, "act": "inform", "in_reply_to" its id, a short "subject" and the answer as "body". Write only to the one who asked, or to ${michael} when you need to raise a problem; never to the whole team (the app refuses anything else). Write nowhere but your own folder, attach no files, and never ask the owner: if you cannot answer, say so in your reply.`
   ].join('\n');
 }
 
@@ -2308,15 +2308,28 @@ export class HiveManager {
    *  the background, before Research sees it (ship review D2.1). */
   private queueForResearch(msg: HiveMessage): void {
     const fromAgent = msg.from !== RESEARCH_ID && !!this.registry().agents[msg.from];
+    // A teammate hears why its own message was refused; one from the owner
+    // or the app is told to Michael, so nothing sent to Research vanishes
+    // (owner, D8.2).
+    const tell = (reason: string): void => {
+      if (fromAgent) { this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, reason); return; }
+      if (msg.from !== 'human' && msg.from !== 'system') return;
+      const godId = this.registry().godId ?? 'god';
+      const what = msg.from === 'human' ? 'A note from the owner' : 'A message from the app';
+      this.deliver(this.normalize({
+        to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
+        body: `${what} for Research ("${String(msg.subject ?? '').slice(0, 80)}") was not sent. ${reason}`
+      }, PRIVACY_CHECK_SENDER), godId);
+    };
     if (!this.researchOn() || !this.trustLayer) {
       this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, reason: this.trustLayer ? 'research-off' : 'no-layer' });
-      if (fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, this.trustLayer ? REFUSAL_OFF : REFUSAL_UNSURE);
+      tell(this.trustLayer ? REFUSAL_OFF : REFUSAL_UNSURE);
       return;
     }
     this.researchQueued++;
     const refuse = (reason: string, why?: string): void => {
       this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, ...(why ? { reason: why } : {}) });
-      if (fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, reason);
+      tell(reason);
     };
     this.trustLayer.inbound({ subject: msg.subject, body: msg.body }).then((v) => {
       this.researchQueued--;
@@ -2373,6 +2386,19 @@ export class HiveManager {
       if (recipient && recipient !== RESEARCH_ID) this.tellSender(recipient, null, msg.conversation, ANSWER_UNCHECKED_SUBJECT, ANSWER_UNCHECKED);
       return 'denied';
     };
+    // Research writes only to someone whose question it is answering, or to
+    // Michael; never to the whole team (owner, D8.1). Anything else is
+    // refused before any check, and Research is told why.
+    const to = typeof msg.to === 'string' ? msg.to.trim().toLowerCase() : '';
+    const toMichael = [godId, 'god', 'michael', 'human', resolveGodName(reg.agents[godId]?.name).toLowerCase()].includes(to);
+    const asked = !!recipient && [...this.researchThreads.values()].some((b) => b.from === recipient);
+    if (!toMichael && !asked) {
+      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: msg.to, id: msg.id, reason: 'not-an-asker' });
+      const note = this.normalize({ to: RESEARCH_ID, act: 'inform', subject: NOT_SENT_SUBJECT_OUT, body: RESEARCH_ONLY_ASKERS }, PRIVACY_CHECK_SENDER);
+      this.researchCleared.add(note.id);
+      try { this.routeMessage(note); } finally { this.researchCleared.delete(note.id); }
+      return 'denied';
+    }
     if (!this.trustLayer) return deny();
     const layer = this.trustLayer;
     const v = this.trustCheck(`out:${createHash('sha256').update(raw).digest('hex')}`, () => layer.outbound({ subject: partial.subject, body: partial.body }));
@@ -2430,7 +2456,11 @@ export class HiveManager {
       try {
         const m = JSON.parse(readFileSync(full, 'utf8')) as Partial<HiveMessage>;
         if (typeof m.from === 'string' && agents[m.from] && m.from !== RESEARCH_ID) {
-          this.tellSender(m.from, typeof m.id === 'string' ? m.id : null, m.conversation, NOT_SENT_SUBJECT, REFUSAL_OFF);
+          // Back into the sender's own thread, about its own ask (Codex review).
+          const back = (typeof m.id === 'string' ? this.researchThreads.get(m.id) : undefined)
+            ?? (typeof m.conversation === 'string' ? this.researchThreads.get(m.conversation) : undefined);
+          const own = back && back.from === m.from ? back : null;
+          this.tellSender(m.from, own ? own.origId : null, own ? own.conversation : null, NOT_SENT_SUBJECT, REFUSAL_OFF);
           n++;
         }
       } catch { /* unreadable: removed below */ }

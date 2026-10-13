@@ -163,6 +163,22 @@ cloud and catches bare `_KEY`, `_PAT`, DSN, connection strings and passwords in 
 patterns ignore every default ignorable character. Known limit: Research notes committed to
 a hive before this release stay in that hive's history.
 
+### Codex adversarial review (owner, 2026-10-13)
+
+- **D8.1 who Research writes to (A):** only a teammate whose question it is answering, or
+  Michael; never the whole team. Anything else is refused before any check, and Research is
+  told the rule (its instructions say it too).
+- **D8.2 refused notes (A):** when a note from the owner (an answer, a steer) or from the app
+  is refused on its way to Research, Michael gets a short note saying what was not sent and
+  why; a teammate still hears about its own.
+- Queue limits stay off (D6.7).
+
+Fixed: Research's notes are read for the shared memory only from plain files inside its own
+folder (a link it made could have pulled an office file in through the app), and a set the
+layer refuses clears the last copy; the trust check always runs on Claude, whatever engine
+the office uses, and none of the owner's hooks run in it (`disableAllHooks`, verified live);
+turning Research off answers each waiting ask in its sender's own thread.
+
 ## The guard (superseded by the trust layer above)
 
 Every message addressed to the Research agent is checked before delivery.

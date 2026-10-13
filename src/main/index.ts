@@ -69,6 +69,7 @@ import { checkFocusArea, convertWorkStyle, readConvertRequest, readFocusCheckReq
 import { SafeClearer, type SafeClearDeps } from './safeClearer';
 import { PersistStore } from './db';
 import { makeResearchGoal } from './researchGoal';
+import { readResearchNotes } from './researchNotes';
 import { projectDir, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
@@ -634,12 +635,18 @@ const trustLayer = makeTrustLayer({
     const dir = join(app.getPath('userData'), 'standing-check');
     mkdirSync(dir, { recursive: true });
     try { ensureClaudePermissionsAccepted(dir); } catch { /* the check fails closed */ }
+    // Always Claude, whatever engine the office runs on: the check uses
+    // Claude's flags (Codex review). No hook of the owner's runs in it, so
+    // nothing outside the app sees or adds to what it reads (verified live:
+    // disableAllHooks from --settings stops hooks from settings files).
+    const cmd = readConfig().defaultCommand;
     const r = await runHiddenClaude(prompt, {
       model: TRUST_MODEL,
       cwd: dir,
-      command: readConfig().defaultCommand ?? 'claude',
+      command: cmd && isClaudeProvider(inferAgentProvider(cmd)) ? cmd : 'claude',
       noTools: true,
       settingSources: 'user',
+      settingsJson: JSON.stringify({ disableAllHooks: true }),
       thinking: false,
       timeoutMs: TRUST_TIMEOUT_MS
     });
@@ -656,18 +663,13 @@ async function researchNotesForPalace(id: string, agentDir: string): Promise<str
   if (id !== RESEARCH_ID) return undefined;
   const home = readConfig().harnessHome;
   if (!home) return null;
-  const parts: string[] = [];
-  try { parts.push(readFileSync(join(agentDir, 'memory.md'), 'utf8')); } catch { /* none */ }
-  try {
-    for (const f of readdirSync(join(agentDir, 'memory'))) {
-      if (f.endsWith('.md') && f !== 'inbox.md') parts.push(readFileSync(join(agentDir, 'memory', f), 'utf8'));
-    }
-  } catch { /* none */ }
-  const text = parts.join('\n\n').trim();
-  if (!text) return null;
-  const v = await trustLayer.outbound({ subject: 'Research notes', body: text });
-  if (v.decision === 'deny') return null;
   const dir = join(privateRoot(expandTilde(home)), 'research-mined');
+  const text = readResearchNotes(agentDir);
+  // A copy the layer did not pass this time is not kept from last time.
+  const clear = (): null => { try { rmSync(join(dir, 'memory.md'), { force: true }); } catch { /* next time */ } return null; };
+  if (!text) return clear();
+  const v = await trustLayer.outbound({ subject: 'Research notes', body: text });
+  if (v.decision === 'deny') return clear();
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'memory.md'), `${v.body}\n`, 'utf8');
   return dir;

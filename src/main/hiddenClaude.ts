@@ -45,6 +45,9 @@ export interface HiddenClaudeOptions {
   /** Setting sources to load (--setting-sources), e.g. "user" so a project's
    *  settings and hooks in the folder can't change a check. */
   settingSources?: string;
+  /** Settings passed with --settings (a JSON string): with no setting sources,
+   *  the consent a bypass session needs comes from here. */
+  settingsJson?: string;
   /** Directories added via --add-dir (for context gathering). */
   addDirs?: string[];
   /** Hard cap ms before forcing prompt send regardless of boot activity. Default 7000. */
@@ -124,6 +127,7 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
       ...(opts.noTools ? ['--tools', '', '--strict-mcp-config'] : ['--strict-mcp-config', '--disallowedTools', ...disallowed]),
     ];
     if (opts.settingSources) args.push('--setting-sources', opts.settingSources);
+    if (opts.settingsJson) args.push('--settings', opts.settingsJson);
     for (const d of addDirs) { args.push('--add-dir', d); }
 
     const bootCapMs = opts.bootCapMs ?? 7000;
