@@ -51,7 +51,8 @@ const CLAUDE_CONFIG_KEEP = new Set([
  * removes those from every command it runs.
  */
 const SECRET_NAME_RE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|PASS|PAT|KEY|CREDENTIALS?|AUTH|DSN|WEBHOOK)(?:_|$)|CONNECTION_STRING|DATABASE_URL/i;
-/** A value holding a password in an address, like postgres://user:pw@host. */
+/** A value holding a password in an address: a scheme, then user, colon,
+ *  password and @ before the host. */
 const URL_PASSWORD_RE = /[a-z][\w+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i;
 
 /** The sign in Claude Code itself needs, kept only for the backend in use:
