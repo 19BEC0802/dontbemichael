@@ -20,6 +20,7 @@ import { execFile } from 'node:child_process';
 import { extname } from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { macOcr, MAX_OCR_PAGES } from './macOcr';
+import { ownValue } from '../shared/ownValue';
 
 export type DocExtraction =
   /** Converted here; index this text. */
@@ -81,7 +82,8 @@ export async function extractDocumentText(srcPath: string): Promise<DocExtractio
     return { kind: 'unreadable', reason: 'This file is larger than 100 MB, which is too big to read.' };
   }
 
-  if (EXPORT_ADVICE[ext]) return { kind: 'unreadable', reason: EXPORT_ADVICE[ext] };
+  const advice = ownValue(EXPORT_ADVICE, ext);
+  if (advice) return { kind: 'unreadable', reason: advice };
   if (WORD.has(ext)) return fromOoxml(srcPath, 'docx', readWord);
   if (SLIDES.has(ext)) return fromOoxml(srcPath, 'pptx', readSlides);
   if (SHEETS.has(ext)) return fromOoxml(srcPath, 'xlsx', readSheets);
@@ -380,7 +382,7 @@ async function readWithTextutil(srcPath: string, ext: string): Promise<DocExtrac
   }
   const text = tidy(out);
   if (!text) return { kind: 'unreadable', reason: 'This file has no text in it to read.' };
-  return { kind: 'text', text, extractor: 'textutil@1', modality: 'doc', mime: MIME[ext] ?? 'text/plain' };
+  return { kind: 'text', text, extractor: 'textutil@1', modality: 'doc', mime: ownValue(MIME, ext) ?? 'text/plain' };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
