@@ -197,14 +197,24 @@ export function sharedTempWriteDecision(temps: string[], ownTmp: string, ownCwd:
   return { deny: true, reason: `While ${RESEARCH_NAME} is on, the shared temporary folders are closed for saving. Save it in your own scratch folder, ${ownTmp}, and carry on from there.` };
 }
 
-/** A save aimed at the shared temporary folders, judged on the path as
- *  written: the fail closed checks use it when the app's own check can't run
- *  (the hook program has the same pattern). */
-export function isSharedTempSave(tool: string, input: unknown): boolean {
-  if (!FOLDER_WRITE_TOOLS.has(tool) || !input || typeof input !== 'object') return false;
-  const i = input as { file_path?: unknown; notebook_path?: unknown };
-  const target = typeof i.file_path === 'string' ? i.file_path : typeof i.notebook_path === 'string' ? i.notebook_path : '';
+/** A save aimed at the shared temporary folders, judged on the file it names
+ *  (`//tmp`, `/./tmp` and `..` resolve first): the fail closed checks use it
+ *  when the app's own check can't run (the hook program has the same pattern). */
+export function isSharedTempSave(tool: string, input: unknown, cwd?: string): boolean {
+  if (!FOLDER_WRITE_TOOLS.has(tool)) return false;
+  const target = folderToolTarget(tool, input, cwd) ?? '';
   return /^(?:\/private)?\/(?:tmp|var\/tmp|var\/folders)(?:\/|$)/i.test(target);
+}
+
+/** Another agent's session scratch folder (`<home>/agent-tmp/<id>`, D6.1):
+ *  its command output and scratch files are its own, like its team folder
+ *  (ship review pass 2). Michael reads everything, as with team folders. */
+export function agentTmpDecision(home: string, agentId: string, isGod: boolean, tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
+  if (isGod || (!FOLDER_WRITE_TOOLS.has(tool) && !FOLDER_READ_TOOLS.has(tool))) return { deny: false };
+  const inside = insideFn(caseInsensitive);
+  const all = join(home, AGENT_TMP_DIR);
+  if (!inside(all, target) || inside(join(all, agentId), target)) return { deny: false };
+  return { deny: true, reason: 'That is another team member\'s scratch folder, and only they can open it. Use your own.' };
 }
 
 /** Where an office agent's Claude session keeps its scratch files: under the
@@ -268,6 +278,22 @@ export function withResearchWall(policy: AgentFolderPolicy, researchFolders: str
       denyRead: Array.from(new Set([...policy.sandbox.denyRead, ...dirs]))
     },
     deny: Array.from(new Set([...policy.deny, ...dirs.flatMap((d) => [rule('Edit', d), rule('Read', d)])]))
+  };
+}
+
+/** A team member's shell reads no other agent's session scratch folder
+ *  (ship review pass 2); its own stays open, since allowRead wins over
+ *  denyRead in Claude's sandbox. Michael's shell reads them, as team folders. */
+export function withAgentTmpWall(policy: AgentFolderPolicy, home: string, agentId: string, isGod: boolean): AgentFolderPolicy {
+  if (isGod || !home || !isAbsolute(home)) return policy;
+  const all = resolve(home, AGENT_TMP_DIR);
+  return {
+    ...policy,
+    sandbox: {
+      ...policy.sandbox,
+      denyRead: Array.from(new Set([...policy.sandbox.denyRead, all])),
+      allowRead: Array.from(new Set([...policy.sandbox.allowRead, join(all, agentId)]))
+    }
   };
 }
 

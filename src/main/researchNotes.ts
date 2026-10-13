@@ -4,12 +4,14 @@
  * rights, so a link Research made would reach what Research can't (Codex
  * review). Anything else is skipped.
  */
-import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
 /** The most one note file may hold; a bigger one is skipped, not read whole
  *  into the app's memory. */
 export const MAX_NOTE_BYTES = 256 * 1024;
+/** All of Research's notes together, per copy. */
+export const MAX_NOTES_TOTAL = 1024 * 1024;
 
 export function readResearchNotes(agentDir: string): string {
   let root = '';
@@ -38,19 +40,31 @@ export function readResearchNotes(agentDir: string): string {
       if (!real.startsWith(root + sep)) return null;
       const now = statSync(real);
       if (now.ino !== st.ino || now.dev !== st.dev) return null;
-      return readFileSync(fd, 'utf8');
+      // Read to the cap from this open file: one that grows after the check
+      // is not read past it (ship review pass 2).
+      const buf = Buffer.alloc(MAX_NOTE_BYTES + 1);
+      let n = 0;
+      for (let r = 1; r > 0 && n < buf.length; n += r) r = readSync(fd, buf, n, buf.length - n, null);
+      return n > MAX_NOTE_BYTES ? null : buf.subarray(0, n).toString('utf8');
     } catch { return null; } finally {
       if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }
     }
   };
   const parts: string[] = [];
-  const top = readOwn(join(agentDir, 'memory.md'));
-  if (top) parts.push(top);
+  let total = 0;
+  const add = (t: string | null): boolean => {
+    if (!t) return true;
+    if (total + t.length > MAX_NOTES_TOTAL) return false;
+    total += t.length;
+    parts.push(t);
+    return true;
+  };
+  add(readOwn(join(agentDir, 'memory.md')));
   try {
-    for (const f of readdirSync(join(agentDir, 'memory'))) {
+    for (const f of readdirSync(join(agentDir, 'memory')).sort()) {
       if (!f.endsWith('.md') || f === 'inbox.md') continue;
-      const t = readOwn(join(agentDir, 'memory', f));
-      if (t) parts.push(t);
+      // Past the total the rest are not copied (ship review pass 2).
+      if (!add(readOwn(join(agentDir, 'memory', f)))) break;
     }
   } catch { /* none */ }
   return parts.join('\n\n').trim();

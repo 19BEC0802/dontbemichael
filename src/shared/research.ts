@@ -71,19 +71,35 @@ export const RESEARCH_UNCHECKED_TOOL = 'The app could not check this step, so it
 export const REFUSAL_WEB_TOOL = `Only ${RESEARCH_NAME} uses the internet. Send ${RESEARCH_NAME} a message ("to": "${RESEARCH_ID}", "act": "query") with a plain question, leaving out names, contact details, money and anything from the owner's files or email.`;
 export const REFUSAL_WEB_TOOL_OFF = `Only ${RESEARCH_NAME} uses the internet, and ${RESEARCH_NAME} is off, so nobody in the office can look this up. Work without it and say what you could not check.`;
 
+/** A name as the team reads it: width and compatibility forms folded,
+ *  invisible characters dropped and letters that look Latin read as Latin, so
+ *  "Pete" with a Cyrillic "е" or a zero width space is still "pete". */
+const LOOKALIKE: Record<string, string> = {
+  'а': 'a', 'с': 'c', 'ԁ': 'd', 'е': 'e', 'ё': 'e', 'һ': 'h', 'і': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h',
+  'о': 'o', 'р': 'p', 'ѕ': 's', 'т': 't', 'у': 'y', 'х': 'x', 'ε': 'e', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o',
+  'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x'
+};
+export function nameKey(name: string): string {
+  return Array.from(name.normalize('NFKC').replace(/[\p{Cf}\p{Mn}]/gu, '').trim().toLowerCase())
+    .map((c) => LOOKALIKE[c] ?? c).join('');
+}
+
 /** Does this message go to Research. `to` as the sender wrote it. His name
- *  counts too, unless an older hire already has it as an id (`agentIds`). */
-export function addressedToResearch(to: unknown, agentIds?: Record<string, unknown>): boolean {
+ *  counts too, unless another agent already has it as an id or a name
+ *  (Michael renamed Pete, or an older hire): then only his id does. */
+export function addressedToResearch(to: unknown, agents?: Record<string, unknown>): boolean {
   if (typeof to !== 'string') return false;
   const t = to.trim().toLowerCase();
   if (t === RESEARCH_ID) return true;
-  return !!agentIds && t === RESEARCH_NAME.toLowerCase() && !(t in agentIds);
+  if (!agents || nameKey(to) !== nameKey(RESEARCH_NAME)) return false;
+  return !Object.entries(agents).some(([id, a]) => id !== RESEARCH_ID && (nameKey(id) === nameKey(RESEARCH_NAME)
+    || (!!a && typeof a === 'object' && typeof (a as { name?: unknown }).name === 'string' && nameKey((a as { name: string }).name) === nameKey(RESEARCH_NAME))));
 }
 
-/** Research's name is his alone: no one else is hired or renamed to it
- *  (names are how the team addresses each other). */
+/** Research's name is his alone: no one else is hired or renamed to it, or
+ *  to a name that reads the same (names are how the team addresses each other). */
 export function isReservedName(name: string, id?: string): boolean {
-  return id !== RESEARCH_ID && name.trim().toLowerCase() === RESEARCH_NAME.toLowerCase();
+  return id !== RESEARCH_ID && nameKey(name) === nameKey(RESEARCH_NAME);
 }
 
 /** Did the sender attach files. Messages carry no attachment field today, but

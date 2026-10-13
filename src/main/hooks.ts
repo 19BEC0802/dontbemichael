@@ -20,7 +20,7 @@ import type { HarnessConfig } from './config';
 import type { ControlRegistry } from './control';
 import type { CircuitBreaker } from './breaker';
 import { estimateCostUsd } from './pricing';
-import { MAX_HOOK_FRAME_BYTES, TERMINAL_PROMPT_TYPES, isTerminalPrompt, validateHookEvent } from '../shared/hookEvents';
+import { HOOK_PATH_UNCHECKED, MAX_HOOK_FRAME_BYTES, TERMINAL_PROMPT_TYPES, isTerminalPrompt, validateHookEvent } from '../shared/hookEvents';
 export { TERMINAL_PROMPT_TYPES, isTerminalPrompt };
 import { resolveGodName } from '../shared/godIdentity';
 import { APP_NAME } from '../shared/appName';
@@ -70,7 +70,7 @@ export const ASK_TOOL_REFUSAL =
   "Don't ask the owner here: nobody answers your terminal. File it as one new file in the hive's triage folder (your questions as one \"ask\", what you were doing in \"description\"). Michael checks it and puts it on the owner's ASK ME board.";
 
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
-import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, folderDecision, folderToolTarget, AGENT_TMP_DIR, isSharedTempSave, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
+import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, agentTmpDecision, folderDecision, folderToolTarget, AGENT_TMP_DIR, isSharedTempSave, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
 import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
@@ -94,6 +94,10 @@ function mcpDeny(reason: string): unknown {
 }
 
 
+/** File tools that may run with no path at all: Grep searches the folder it
+ *  runs in. */
+const PATH_FREE_TOOLS: ReadonlySet<string> = new Set(['Grep']);
+
 interface HookPayload {
   hook_event_name?: string;
   agent_id?: string | null;
@@ -113,6 +117,8 @@ interface HookPayload {
   cwd?: string;
   tool_name?: string;
   tool_input?: unknown;
+  /** Set by the hook program when it cut a call's long fields to fit a frame. */
+  tool_input_trimmed?: boolean;
   tool_use_id?: string;
   stop_hook_active?: boolean;
   prompt?: string;
@@ -292,7 +298,7 @@ export class HookServer {
             // Research's file tools have the hook as their only wall.
             : pre && payload.agent_id === RESEARCH_ID ? mcpDeny(RESEARCH_UNCHECKED_TOOL)
             // A save into the shared temp folders, as the hook program does.
-            : pre && isSharedTempSave(payload.tool_name ?? '', payload.tool_input) ? mcpDeny(RESEARCH_UNCHECKED_TOOL)
+            : pre && isSharedTempSave(payload.tool_name ?? '', payload.tool_input, payload.cwd) ? mcpDeny(RESEARCH_UNCHECKED_TOOL)
             : {};
         }
         conn.end(JSON.stringify(res ?? {}));
@@ -689,7 +695,10 @@ export class HookServer {
     // can't hide without hiding the folders inside his.
     const toolName = p.tool_name ?? '';
     if (event === 'PreToolUse' && agentId && (FOLDER_READ_TOOLS.has(toolName) || FOLDER_WRITE_TOOLS.has(toolName))) {
-      const d = this.folderCheck(agentId, toolName, p.tool_input, p.cwd);
+      // A call the hook program cut down to fit keeps its path; one that
+      // arrives without it can't be judged, so it doesn't run (ship review).
+      const unjudged = p.tool_input_trimmed === true && !PATH_FREE_TOOLS.has(toolName) && !folderToolTarget(toolName, p.tool_input, p.cwd);
+      const d = unjudged ? { deny: true, reason: HOOK_PATH_UNCHECKED } : this.folderCheck(agentId, toolName, p.tool_input, p.cwd);
       if (d.deny) {
         this.emitRefused(agentId, event, p);
         return {
@@ -1004,6 +1013,13 @@ export class HookServer {
       const ownTmp = join(home, AGENT_TMP_DIR, agentId);
       for (const t of both) {
         const r = sharedTempWriteDecision(temps, ownTmp, me?.cwd, tool, t, ci);
+        if (r.deny) return r;
+      }
+    }
+    // Each agent's session scratch folder is its own (D6.1, ship review).
+    if (home) {
+      for (const t of both) {
+        const r = agentTmpDecision(home, agentId, !!me?.isGod, tool, t, ci);
         if (r.deny) return r;
       }
     }

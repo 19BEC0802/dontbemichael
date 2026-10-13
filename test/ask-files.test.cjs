@@ -15,7 +15,7 @@ const path = require('node:path');
 const loadTs = require('./load-ts.cjs');
 
 const { askFilePaths, isFileSpan, kindOf, fileTitle, OPEN_EXTENSIONS } = loadTs('src/shared/askFiles.ts');
-const { askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder } = loadTs('src/main/fs.ts');
+const { askFileVerdict, askFileRootsFor, resolveAskFileRoots } = loadTs('src/main/fs.ts');
 const read = (p) => fs.readFileSync(path.resolve(__dirname, '..', p), 'utf8');
 
 test('only code spans with a known file ending are files; money, emails and domains never are', () => {
@@ -126,14 +126,10 @@ test('files are looked for in the office, then the raiser, the assignee and the 
   assert.deepEqual(askFileRootsFor(P('/w/office'), {}, undefined), [P('/w/office')]);
 });
 
-test('revealing a directory never opens an app bundle, and the IPC re-checks before opening', () => {
-  // Value: protects=an agent printed Tool.app is shown in Finder, not launched; fails_when=revealPath opens any directory again; why_new=fs:revealPath had no directory rule (eng R4); seam=none
-  assert.equal(opensAsFolder('/Users/x/office/Sales'), true);
-  assert.equal(opensAsFolder('/Users/x/Downloads/Tool.app'), false);
-  assert.equal(opensAsFolder('/Users/x/Report.pages'), false);
-  for (const dotted of ['/Users/x/office/acme.com', '/Users/x/office/Q3.2026', '/Users/x/office/v1.2']) assert.equal(opensAsFolder(dotted), true, dotted);
+test('revealing a path never opens it, and the IPC re-checks an Ask me file before opening', () => {
+  // Value: protects=an agent printed Tool.app is shown in Finder, not launched; fails_when=revealPath opens anything again; why_new=fs:revealPath had no directory rule (eng R4), then never opens (owner D12); seam=none
   const main = read('src/main/index.ts');
-  assert.match(main, /if \(!t\.open\) \{ shell\.showItemInFolder\(t\.path\); return \{ ok: true \}; \}/, 'judged on the real path (test/reveal-target.test.cjs)');
+  assert.match(main, /shell\.showItemInFolder\(st\.path\);\n\s+return \{ ok: true \};/, 'test/reveal-target.test.cjs');
   // Open runs the check again in main; a document that will not open is shown instead.
   assert.match(main, /ipcMain\.handle\('fs:openAskFile'[\s\S]*?const r = await askFileVerdict\(p, askFileRoots\(who\)\);[\s\S]*?if \(r\.verdict === 'open' && !\(await shell\.openPath\(r\.path\)\)\)[\s\S]*?shell\.showItemInFolder\(r\.path\);/);
   assert.match(main, /function askFileRoots\(who: unknown\): string\[\] \{\n\s+const cfg = readConfig\(\);\n\s+const office = cfg\.businessFolder \?\? legacyBusinessFolder\(cfg\.officeFolder\);\n\s+\/\/ gstack-shortcut\(dec-150d1c26[\s\S]*?return askFileRootsFor\(office, agents, who\);/);

@@ -91,7 +91,8 @@ test('strings in every language, no dashes, no literal Michael', () => {
 
 test("every profile can open the agent's work folder, and says so when it can't", () => {
   const src = read('src/renderer/src/components/ProfileTab.tsx');
-  assert.match(src, /window\.cth\.revealPath\(agent\.cwd\)/, 'reuses the reveal that never launches a file');
+  assert.match(src, /window\.cth\.openAgentFolder\(agent\.id\)/, 'by id: main opens the folder it has on record, never a path from the renderer');
+  assert.match(read('src/main/index.ts'), /const cwd = hive\.registry\(\)\.agents\[id\]\?\.cwd;[\s\S]{0,200}?lstatSync\(cwd\)\.isDirectory\(\)/);
   assert.match(src, /onClick=\{openFolder\}>\{t\('profile\.openFolder'\)\}/);
   assert.match(src, /if \(!r\.ok\) setFolderError\(true\);/);
   assert.match(src, /! \{t\('profile\.openFolderFailed'\)\}/);

@@ -84,7 +84,6 @@ export function pathTokenMatcher(): RegExp {
   return new RegExp(PATH_TOKEN_RE.source, 'g');
 }
 
-/** Strip shell/prose wrapping and any trailing `:line` from a raw match. */
 /**
  * The cell columns (1 based, first and last) a match covers on a terminal
  * line, from its string offsets. A wide character (Chinese, Japanese) takes
@@ -111,6 +110,7 @@ export function linkCellRange(
   return { startX: colOf[s], endX: colOf[e - 1] + widthOf[e - 1] - 1 };
 }
 
+/** Strip shell/prose wrapping and any trailing `:line` from a raw match. */
 export function stripPathToken(raw: string): string {
   return raw
     .replace(/^["'`([<]+/, '')

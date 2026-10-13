@@ -32,7 +32,7 @@ import {
   entriesBlock, isProcedureSlug, MAX_PROCEDURE_CHARS, parseIndex, parseInbox, renderIndex, type MemoryEntry
 } from '../shared/memoryIndex';
 import { localDay } from '../shared/messageView';
-import type { AgentFolderPolicy } from '../shared/folderAccess';
+import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, type AgentFolderPolicy } from '../shared/folderAccess';
 import { STOP_FAILURE_MATCHER } from '../shared/officeBreak';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
@@ -67,7 +67,7 @@ import {
 } from '../shared/ownerRequests';
 import { expandTilde } from './fs';
 import { CONNECTOR_UNDECIDED, MCP_RESOURCE_TOOLS, type SpawnConnectorPlan } from '../shared/claudeConnectors';
-import { MAX_HOOK_FRAME_BYTES } from '../shared/hookEvents';
+import { HOOK_PATH_UNCHECKED, MAX_HOOK_FRAME_BYTES } from '../shared/hookEvents';
 import { resolveGodName } from '../shared/godIdentity';
 import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { OFFICE_ROLES } from '../shared/officeRoles';
@@ -1116,7 +1116,7 @@ export class HiveManager {
       // 2026-10-13); an office that already has a member by that name keeps
       // calling Research by its role, so two never share a name.
       ...(meta.id === RESEARCH_ID ? {
-        name: Object.entries(reg.agents).some(([otherId, a]) => otherId !== RESEARCH_ID && a?.name?.trim().toLowerCase() === RESEARCH_NAME.toLowerCase()) ? RESEARCH_ROLE : RESEARCH_NAME
+        name: Object.entries(reg.agents).some(([otherId, a]) => !!a?.name && isReservedName(a.name, otherId)) ? RESEARCH_ROLE : RESEARCH_NAME
       } : {}),
       capabilities: meta.capabilities ?? prev?.capabilities ?? [],
       role,
@@ -5292,7 +5292,12 @@ process.stdin.on('end', () => {
   // A save into the shared temp folders, which Research's shell can read, is
   // refused too when the app can't say whether Research is on (Codex review).
   const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
-  const target = String(input.file_path || input.notebook_path || '');
+  // A path is judged as the file it names: './' or '..' padding and a relative
+  // path resolve first (ship review pass 2).
+  const pathMod = require('path');
+  const pathOf = (v) => pathMod.isAbsolute(v) ? pathMod.normalize(v) : pathMod.resolve(String(payload.cwd || '/'), v);
+  const rawTarget = String(input.file_path || input.notebook_path || '');
+  const target = rawTarget ? pathOf(rawTarget) : '';
   const tempSave = payload.hook_event_name === 'PreToolUse' && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].indexOf(tool) >= 0
     && /^(?:\\/private)?\\/(?:tmp|var\\/tmp|var\\/folders)(?:\\/|$)/i.test(target);
   // An MCP call too big for one hook frame (a long document to write) is sent
@@ -5302,17 +5307,26 @@ process.stdin.on('end', () => {
   // Any save, and any command asked to run outside the sandbox, is sent with
   // only its short fields when it is too big for one frame, so the app still
   // judges where it goes (ship review): a lost answer would let it through.
-  const bigCheck = payload.hook_event_name === 'PreToolUse' && (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].indexOf(tool) >= 0 || (tool === 'Bash' && input.dangerouslyDisableSandbox === true));
+  // Every file tool too: a frame the app drops is a call nobody checked.
+  const fileTool = payload.hook_event_name === 'PreToolUse' && ${JSON.stringify([...FOLDER_READ_TOOLS, ...FOLDER_WRITE_TOOLS])}.indexOf(tool) >= 0;
+  const bigCheck = payload.hook_event_name === 'PreToolUse' && (fileTool || (tool === 'Bash' && input.dangerouslyDisableSandbox === true));
   if ((mcp || research || tempSave || bigCheck) && Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
     const small = {};
-    const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
     for (const k of Object.keys(input)) {
       const v = input[k];
-      if ((typeof v === 'string' && v.length <= 1024) || typeof v === 'number' || typeof v === 'boolean') small[k] = v;
+      // The path always goes, resolved, however it was written.
+      if ((k === 'file_path' || k === 'notebook_path' || k === 'path') && typeof v === 'string') small[k] = pathOf(v);
+      else if (k === 'pattern' && tool === 'Glob' && typeof v === 'string') small[k] = pathMod.isAbsolute(v) ? pathMod.normalize(v) : v;
+      else if ((typeof v === 'string' && v.length <= 1024) || typeof v === 'number' || typeof v === 'boolean') small[k] = v;
     }
     payload.tool_input = small;
     payload.tool_input_trimmed = true;
     line = JSON.stringify(payload);
+    if (Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
+      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: ${JSON.stringify(HOOK_PATH_UNCHECKED)} } }));
+      process.exit(0);
+      return;
+    }
   }
   const fail = () => {
     if (mcp || web || research || tempSave) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: mcp ? ${JSON.stringify(CONNECTOR_UNDECIDED)} : web ? ${JSON.stringify(WEB_SETTINGS_UNREADABLE)} : ${JSON.stringify(RESEARCH_UNCHECKED_TOOL)} } }));

@@ -103,5 +103,5 @@ test('Pete reads as the Research member everywhere the owner sees him', () => {
   assert.match(modal, /<input readOnly value=\{agent\.name\} aria-label=\{t\('editAgent\.name'\)\} style=\{lockedValueStyle\} \/>/);
   assert.match(modal, /<input readOnly value=\{providerLabel\} aria-label=\{t\('editAgent\.provider'\)\} style=\{lockedValueStyle\} \/>/);
   assert.match(read('src/renderer/src/scene/studio/StudioStage.tsx'), /\.filter\(\(p\) => p\.id !== RESEARCH_ID\)/);
-  assert.match(read('src/main/hive.ts'), /const bigCheck = payload\.hook_event_name === 'PreToolUse' && \(\['Write', 'Edit', 'MultiEdit', 'NotebookEdit'\]\.indexOf\(tool\) >= 0 \|\| \(tool === 'Bash' && input\.dangerouslyDisableSandbox === true\)\);/);
+  // The hook program's big call handling is driven for real in test/hook-frame-paths.test.cjs.
 });

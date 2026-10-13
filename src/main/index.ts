@@ -31,7 +31,7 @@ import {
   modelForRole, OPS_STANDUP_MISSION, OPS_STANDUP_BUILT_IN_BODIES, OPS_STANDUP_FOCUS, OPS_STANDUP_BUILT_IN_FOCUSES, HEARTBEAT_MISSION, COMPACT_MAINTENANCE_MISSION, type HarnessConfig, type ScheduledMission
 } from './config';
 import { terminalLaunches } from './terminalAtFolder';
-import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, opensAsFolder, readAskFile, revealTarget, type AskFileAgent } from './fs';
+import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde, askFileVerdict, askFileRootsFor, resolveAskFileRoots, readAskFile, type AskFileAgent } from './fs';
 import { answerMessages, cardConversation, mergeHumanQA, MICHAEL_ID, raiserOf } from '../shared/askMeRouting';
 import { FIRST_TASK_EDITED_MAX, firstTaskCard, firstTaskCardFromText } from '../shared/firstTask';
 import { answerKey, catchUpRequests, ownerWorkOrder } from '../shared/ownerRequests';
@@ -139,7 +139,7 @@ import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { APP_NAME, APP_DATA_DIR, APP_URL_SCHEME } from '../shared/appName';
 import { copyOfficeData, homeFolderStatus, homeReadyAtLaunch } from './homeFolder';
 import { backfillOfficeRecord, findOffice, folderLayoutFor, isUsableTeamFolder, syncOfficeRecord } from './officeFile';
-import { folderPolicy, AGENT_TMP_DIR, researchFolderPolicy, RESEARCH_TMP_DIR, shellTempWalls, withResearchWall, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
+import { folderPolicy, AGENT_TMP_DIR, researchFolderPolicy, withAgentTmpWall, RESEARCH_TMP_DIR, shellTempWalls, withResearchWall, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
 import { sandboxNetwork } from '../shared/webAccess';
 import { MCP_CATALOG } from '../shared/mcpCatalog';
 import { legacyBusinessFolder, touchesOffice } from '../shared/officeRecord';
@@ -3800,7 +3800,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           ? folderPolicy({ isGod: !!opts.hive!.isGod, cwd: opts.cwd }, businessFolderLayout(businessFolder), process.platform !== 'linux')
           : privateOnlyFolderPolicy(!!opts.hive!.isGod, opts.cwd);
         if (!base) return undefined;
-        const walled = withResearchWall(base, researchFolders());
+        const walled = withAgentTmpWall(withResearchWall(base, researchFolders()), home, opts.hive!.id, !!opts.hive!.isGod);
         // In a business office Michael's commands stay in their sandbox too,
         // where his shell reaches no host and Research's folders are walled
         // (owner, D7.1 and D9.1).
@@ -4634,10 +4634,26 @@ ipcMain.handle('fs:revealPath', async (_evt, p: unknown) => {
   if (typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) {
     return { ok: false, error: 'bad request' };
   }
-  const t = await revealTarget(p);
-  if (!t.exists) return { ok: false, error: 'not found' };
-  if (!t.open) { shell.showItemInFolder(t.path); return { ok: true }; }
-  const err = await shell.openPath(t.path);
+  // Shown in its folder, never opened (owner, D12): a path an agent printed
+  // can name an app, or a link to one, or become one between a check and an
+  // open, and opening it would launch it outside every sandbox.
+  const st = await statAbs(p);
+  if (!st.exists) return { ok: false, error: 'not found' };
+  shell.showItemInFolder(st.path);
+  return { ok: true };
+});
+
+/** The Profile tab's Open folder, the owner's own button: the agent's work
+ *  folder as the registry has it, never a path from agent text. Only a real
+ *  folder opens; a link there is shown, not followed (D12). */
+ipcMain.handle('fs:openAgentFolder', async (_evt, id: unknown) => {
+  if (typeof id !== 'string' || !id.length) return { ok: false, error: 'bad request' };
+  const cwd = hive.registry().agents[id]?.cwd;
+  if (!cwd) return { ok: false, error: 'not found' };
+  let dir = false;
+  try { dir = lstatSync(cwd).isDirectory(); } catch { return { ok: false, error: 'not found' }; }
+  if (!dir) { shell.showItemInFolder(cwd); return { ok: true }; }
+  const err = await shell.openPath(cwd);
   return err ? { ok: false, error: err } : { ok: true };
 });
 

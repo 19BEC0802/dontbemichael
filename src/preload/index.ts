@@ -859,6 +859,10 @@ const api = {
    *  agent output. */
   revealPath: (p: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('fs:revealPath', p),
+  /** The Profile tab's Open folder: the agent's work folder as the app has it
+   *  on record, opened. Main looks the folder up itself. */
+  openAgentFolder: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('fs:openAgentFolder', id),
   /** The files an Ask me question names: whether each opens in its default
    *  app, is only shown in Finder, or is missing. Main decides
    *  (docs/designs/ask-me-open-file.md). */
