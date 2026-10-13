@@ -193,6 +193,12 @@ test('the hook shim refuses MCP calls when it cannot reach the app, and leaves o
       const r = JSON.parse(run(tool, { ...env, AGENT_ID: 'research' }).stdout);
       assert.equal(r.hookSpecificOutput.permissionDecisionReason, R.RESEARCH_UNCHECKED_TOOL, `Research ${tool} ${JSON.stringify(env)}`);
     }
+    // A save into the shared temp folders, which Research's shell reads, fails closed too (Codex review).
+    for (const file_path of ['/tmp/draft.md', '/private/var/folders/ab/T/x.md']) {
+      const r = spawnSync(process.execPath, [shim], { input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path } }), env: { PATH: process.env.PATH, AGENT_ID: 'pam', ...env }, encoding: 'utf8', timeout: 10_000 });
+      assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny', file_path);
+    }
+    assert.equal(spawnSync(process.execPath, [shim], { input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: path.join(os.homedir(), 'Office', 'x.md') } }), env: { PATH: process.env.PATH, AGENT_ID: 'pam', ...env }, encoding: 'utf8', timeout: 10_000 }).stdout, '', 'its own folders go on as before');
     // Web pages and search fail closed too, for everyone but Research (issue #230, ship review pass 2).
     for (const tool of ['WebFetch', 'WebSearch']) {
       assert.equal(JSON.parse(run(tool, env).stdout).hookSpecificOutput.permissionDecision, 'deny', `${tool} ${JSON.stringify(env)}`);

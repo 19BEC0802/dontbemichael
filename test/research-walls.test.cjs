@@ -161,7 +161,7 @@ test('the settings written at spawn take the internet from a member\'s shell and
   // A member of an office with no business folder: no folder policy at all.
   const member = settingsOf(await o.hive.ensureAgent(
     { id: 'kelly', name: 'Kelly', provider: 'claude', cwd: o.pamDir },
-    { network: W.sandboxNetwork(false) }
+    { network: W.sandboxNetwork() }
   ));
   assert.deepEqual(member.sandbox.network, { allowedDomains: [], strictAllowlist: true });
   assert.equal(member.sandbox.allowUnsandboxedCommands, false, 'a rerun outside the sandbox would reach the internet');
@@ -272,7 +272,7 @@ test('Research\'s file tools open no temporary folder, and no office agent keeps
   assert.match(main, /extraWritableDirs: \[memory\.env\(\)\.MEMPALACE_PALACE_PATH, sessionTmp\]/);
 });
 
-test('while Research is on, no other agent runs a command outside its sandbox', async (t) => {
+test('in a business office no other agent runs a command outside its sandbox', async (t) => {
   // Value: protects=Michael's automatic rerun outside the sandbox can't open Research's folders; fails_when=the hook lets dangerouslyDisableSandbox through while Research is on, or blocks it when Research is off; why_new=security review pass 3, owner D7.1; seam=none; no_claim=Claude Code honoring allowUnsandboxedCommands
   const o = await office(t);
   const hook = hookFor(o);
@@ -282,9 +282,11 @@ test('while Research is on, no other agent runs a command outside its sandbox', 
     assert.ok(!denied(bash(id, false)), `${id} in its sandbox is the sandbox's call`);
   }
   const off = await office(t, { on: false });
-  assert.ok(!denied(hookFor(off)('god', 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls', dangerouslyDisableSandbox: true } })), 'Research off: Michael as before');
+  assert.equal(reason(hookFor(off)('god', 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'curl https://example.com', dangerouslyDisableSandbox: true } })), R.RESEARCH_SANDBOX_ONLY, 'Research off too: Michael\'s shell reaches no host (owner, D9.1)');
+  off.cfg = { harnessHome: off.home };
+  assert.ok(!denied(hookFor(off)('god', 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls', dangerouslyDisableSandbox: true } })), 'an office with no business folder: as before');
   const main = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
-  assert.match(main, /return readConfig\(\)\.research\?\.on && isBusinessOffice\(\) \? \{ \.\.\.walled, sandboxOnly: true \} : walled;/);
+  assert.match(main, /return isBusinessOffice\(\) \? \{ \.\.\.walled, sandboxOnly: true \} : walled;/);
 });
 
 test('while Research is on, agents save scratch work in their own folder, not the shared temp folders', posixOnly('temporary folder paths'), async (t) => {

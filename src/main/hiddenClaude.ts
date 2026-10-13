@@ -45,8 +45,8 @@ export interface HiddenClaudeOptions {
   /** Setting sources to load (--setting-sources), e.g. "user" so a project's
    *  settings and hooks in the folder can't change a check. */
   settingSources?: string;
-  /** Settings passed with --settings (a JSON string): with no setting sources,
-   *  the consent a bypass session needs comes from here. */
+  /** Settings passed with --settings (a JSON string), laid over the sources
+   *  above, e.g. {"disableAllHooks": true} so no hook runs in the session. */
   settingsJson?: string;
   /** Directories added via --add-dir (for context gathering). */
   addDirs?: string[];

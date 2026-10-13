@@ -350,6 +350,12 @@ export class HookServer {
     return this.contextById.get(agentId);
   }
 
+  /** A business office, where only Research uses the internet. Unreadable
+   *  settings count as one, so the rules hold (fail closed). */
+  private businessOffice(): boolean {
+    try { const c = this.getConfig(); return !!(c.businessFolder || c.officeFolder); } catch { return true; }
+  }
+
   private handle(p: HookPayload): unknown {
     const agentId = p.agent_id ?? undefined;
     const event = p.hook_event_name ?? 'Unknown';
@@ -588,11 +594,12 @@ export class HookServer {
     // only Research uses web pages and web search. Everyone else, Michael
     // included, is refused with how to ask Research, or that it is off. Who
     // Research is comes from the app, never a file agents write (D2.7).
-    // While Research is on, no command runs outside its sandbox, where
-    // Research's folders are walled (owner, D7.1): this holds from the next
-    // command, before an agent's sandbox setting catches up at its restart.
+    // In a business office no command runs outside its sandbox, where the
+    // shell reaches no host and Research's folders are walled (owner, D7.1
+    // and D9.1): this holds from the next command, before an agent's sandbox
+    // setting catches up at its restart.
     if (event === 'PreToolUse' && agentId && agentId !== RESEARCH_ID && p.tool_name === 'Bash'
-      && (p.tool_input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true && this.hive.researchOn()) {
+      && (p.tool_input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true && this.businessOffice()) {
       this.emit(agentId, event, p);
       return {
         hookSpecificOutput: {

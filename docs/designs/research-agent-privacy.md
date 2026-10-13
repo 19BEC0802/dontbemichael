@@ -179,6 +179,23 @@ layer refuses clears the last copy; the trust check always runs on Claude, whate
 the office uses, and none of the owner's hooks run in it (`disableAllHooks`, verified live);
 turning Research off answers each waiting ask in its sender's own thread.
 
+### Codex adversarial pass 2 and its verification (owner, 2026-10-13)
+
+- **D9.1 Michael's shell (A):** in a business office Michael's shell reaches no host, like
+  his teammates', and his commands always stay in the sandbox, whether Research is on or
+  off; only Research uses the internet, with no exception. Applies from his next start; the
+  hook refuses a command outside the sandbox from the next command.
+
+Fixed: Research's answer to a refusal note or to the scheduler is dropped quietly (a loop
+of notes was reproduced); Research may write to a teammate only in reply to that
+teammate's own question (by the reply's id or thread), not to anyone who once asked;
+turning Research off ends its session in the app, and tells Michael about owner or app
+notes still waiting for it; an owner or app note whose check never finished, because the
+app closed, is told to Michael at the next start; when the app can't answer, a save into
+the shared temp folders is refused; Research's notes are opened without following links,
+a file with a second name (a hard link) is skipped, and each is read from the file it
+checked.
+
 ## The guard (superseded by the trust layer above)
 
 Every message addressed to the Research agent is checked before delivery.
@@ -208,7 +225,7 @@ Every message addressed to the Research agent is checked before delivery.
   and `allowUnsandboxedCommands: false`.
 - Windows: no sandbox (#187), so members' shell network is not limited; Settings
   says so on Windows.
-- Michael: the app gate holds his web tools; his shell is not limited.
+- Michael: the app gate holds his web tools; his shell reaches no host in a business office (D9.1, superseding the original plan).
 - Research: no connectors (`--strict-mcp-config`, none granted), no mailboxes, folder
   privacy as any member (own folder only, no business folder).
 
@@ -407,7 +424,7 @@ Approval readiness: PASS (D1 structure, R1 D2, R2 D3, R3 D4, R4 D5, outside voic
 ## NOT in scope
 
 - Windows confinement for Research (#187): Research runs there with a warning (D4).
-- Limiting Michael's shell: he runs outside the sandbox by design.
+- Limiting Michael's shell: he runs outside the sandbox by design. (Superseded at ship by D9.1: in a business office his shell stays in the sandbox and reaches no host.)
 - Credentialed sites through the integration broker: Research holds no credentials.
 - Research schedules and attachments to Research (open questions 3 and 4: proposed no; decide in the design review).
 - Research's model: the owner's choice per the model rule; it starts on the default like any hire.

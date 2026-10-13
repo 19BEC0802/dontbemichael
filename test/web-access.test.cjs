@@ -32,10 +32,11 @@ test('web pages and search are Research\'s alone', () => {
 
 test('every team member of a business office gets an empty strict network list', () => {
   // Value: protects=curl and scripts reach no host from a member's shell on a Mac, while other offices keep the network; fails_when=the list is absent, not strict, or set outside a business office; why_new=new feature, ship review D3; seam=none
-  assert.deepEqual(W.sandboxNetwork(false), { allowedDomains: [], strictAllowlist: true });
-  assert.equal(W.sandboxNetwork(true), undefined, 'Michael runs outside the sandbox');
+  assert.deepEqual(W.sandboxNetwork(), { allowedDomains: [], strictAllowlist: true }, 'Michael included (owner, D9.1)');
   const main = read('src/main/index.ts');
-  assert.match(main, /network: isBusinessOffice\(\) \? sandboxNetwork\(!!opts\.hive\.isGod\) : undefined/);
+  assert.match(main, /network: isBusinessOffice\(\) \? sandboxNetwork\(\) : undefined/);
+  assert.match(main, /return isBusinessOffice\(\) \? \{ \.\.\.walled, sandboxOnly: true \} : walled;/, 'and his commands stay in the sandbox, where the list holds');
+  assert.match(main, /function turnResearchOff\(\): number \{[\s\S]{0,400}const ptyId = ptyForAgent\(RESEARCH_ID\);\s*if \(ptyId\) \{ try \{ ptyManager\.kill\(ptyId\); \}/, 'turning Research off ends its session in main');
   // Research's commands get no keys or tokens (red team pass 2).
   assert.match(main, /if \(isResearch\) opts\.env = \{ \.\.\.\(opts\.env \?\? \{\}\), CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' \};/);
 });
@@ -161,7 +162,7 @@ test('Research leaves closing time alone, turning it off returns its asks, and a
   assert.match(read('src/main/closingTime.ts'), /return id !== this\.godId && id !== RESEARCH_ID && !!a && !a\.isGod;/);
   const main = read('src/main/index.ts');
   assert.equal((main.match(/turnResearchOff\(\);/g) || []).length, 2, 'both spawn guards');
-  assert.match(main, /function turnResearchOff\(\): number \{\s*writeConfig\(\{ research: [^\n]*on: false \} \}\);\s*try \{ return hive\.returnResearchInbox\(\);/);
+  assert.match(main, /function turnResearchOff\(\): number \{\s*writeConfig\(\{ research: [^\n]*on: false \} \}\);[\s\S]{0,500}try \{ return hive\.returnResearchInbox\(\);/);
   assert.match(main, /pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);/);
 });
 

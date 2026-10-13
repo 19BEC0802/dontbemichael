@@ -62,8 +62,8 @@ export const ANSWER_UNCHECKED = 'Research answered, but the trust layer could no
 /** Research's own message to someone it may not write to (owner, D8.1). */
 export const NOT_SENT_SUBJECT_OUT = 'Not sent';
 export const RESEARCH_ONLY_ASKERS = 'Not sent: you write only to a teammate whose question you are answering, or to Michael ("to": "michael"). Never to the whole team.';
-/** A command an agent asked to run outside its sandbox while Research is on. */
-export const RESEARCH_SANDBOX_ONLY = 'While Research is on, commands run only inside your sandbox. Do it another way, or ask the owner.';
+/** A command an agent asked to run outside its sandbox in a business office. */
+export const RESEARCH_SANDBOX_ONLY = 'In this office, commands run only inside your sandbox, which reaches no website. For something from the internet, ask Research; otherwise do it another way.';
 /** When the app could not check one of Research's tool calls. */
 export const RESEARCH_UNCHECKED_TOOL = 'The app could not check this step, so it did not run. Try again shortly.';
 export const REFUSAL_WEB_TOOL = 'Only Research uses the internet. Send Research a message ("to": "research", "act": "query") with a plain question, leaving out names, contact details, money and anything from the owner\'s files or email.';

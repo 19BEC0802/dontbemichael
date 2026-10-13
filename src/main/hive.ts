@@ -2327,12 +2327,16 @@ export class HiveManager {
       return;
     }
     this.researchQueued++;
+    // Kept in the app's private folder while its check runs, so a crash in
+    // between is told to Michael at the next start, not lost (Codex review).
+    if (!fromAgent) this.researchPending(msg, true);
     const refuse = (reason: string, why?: string): void => {
       this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, ...(why ? { reason: why } : {}) });
       tell(reason);
     };
     this.trustLayer.inbound({ subject: msg.subject, body: msg.body }).then((v) => {
       this.researchQueued--;
+      if (!fromAgent) this.researchPending(msg, false);
       try {
         if (v.decision === 'deny') return refuse(v.reason);
         // Research may have been turned off while the check ran.
@@ -2343,9 +2347,47 @@ export class HiveManager {
       } catch (e) { console.error('[research] delivering a checked message', e); }
     }, () => {
       this.researchQueued--;
+      if (!fromAgent) this.researchPending(msg, false);
       try { refuse(REFUSAL_UNSURE, 'failed'); } catch { /* logged above */ }
     });
   }
+
+  /** The owner's and the app's messages for Research whose check is under
+   *  way, by id: what they were and who sent them, nothing more. */
+  private researchPending(msg: HiveMessage, add: boolean): void {
+    // Anything left from before this start is told first, never this run's.
+    this.tellLostResearchPending();
+    const home = this.getHome();
+    if (!home) return;
+    const file = join(privateRoot(home), 'research-pending.json');
+    let rows: Array<{ id: string; from: string; subject: string }> = [];
+    try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) rows = r; } catch { /* none yet */ }
+    rows = rows.filter((r) => r && r.id !== msg.id);
+    if (add) rows.push({ id: msg.id, from: msg.from, subject: String(msg.subject ?? '').slice(0, 80) });
+    try { mkdirSync(privateRoot(home), { recursive: true }); this.atomicWriteJson(file, rows); } catch { /* best effort */ }
+  }
+
+  /** At start: an owner or app message whose check never finished (the app
+   *  closed or crashed) is told to Michael, once (Codex review, D8.2). */
+  private tellLostResearchPending(): void {
+    if (this.researchPendingTold) return;
+    this.researchPendingTold = true;
+    const home = this.getHome();
+    if (!home) return;
+    const file = join(privateRoot(home), 'research-pending.json');
+    let rows: Array<{ id: string; from: string; subject: string }> = [];
+    try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) rows = r; } catch { return; }
+    const godId = this.registry().godId ?? 'god';
+    for (const r of rows) {
+      if (!r || (r.from !== 'human' && r.from !== 'system')) continue;
+      this.deliver(this.normalize({
+        to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
+        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for Research ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
+      }, PRIVACY_CHECK_SENDER), godId);
+    }
+    try { rmSync(file, { force: true }); } catch { /* next start */ }
+  }
+  private researchPendingTold = false;
 
   /** The clean copy Research receives: built only from what the trust layer
    *  returned, with an id, time and thread the app chose. */
@@ -2390,8 +2432,17 @@ export class HiveManager {
     // Michael; never to the whole team (owner, D8.1). Anything else is
     // refused before any check, and Research is told why.
     const to = typeof msg.to === 'string' ? msg.to.trim().toLowerCase() : '';
+    // A reply to the app's own senders is dropped quietly, as for everyone,
+    // so a refusal note never starts a loop of answers.
+    if (['scheduler', 'heartbeat', 'mail', 'system', PRIVACY_CHECK_SENDER].includes(to)) {
+      this.appendLog({ kind: 'drop', reason: 'reply-to-system-sender', from: RESEARCH_ID, to: msg.to, id: msg.id });
+      return 'denied';
+    }
     const toMichael = [godId, 'god', 'michael', 'human', resolveGodName(reg.agents[godId]?.name).toLowerCase()].includes(to);
-    const asked = !!recipient && [...this.researchThreads.values()].some((b) => b.from === recipient);
+    // The question it answers, by the reply's id or its thread, asked by
+    // this very recipient (verification of D8.1).
+    const answering = (msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined) ?? this.researchThreads.get(msg.conversation);
+    const asked = !!recipient && answering?.from === recipient;
     if (!toMichael && !asked) {
       this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: msg.to, id: msg.id, reason: 'not-an-asker' });
       const note = this.normalize({ to: RESEARCH_ID, act: 'inform', subject: NOT_SENT_SUBJECT_OUT, body: RESEARCH_ONLY_ASKERS }, PRIVACY_CHECK_SENDER);
@@ -2461,6 +2512,14 @@ export class HiveManager {
             ?? (typeof m.conversation === 'string' ? this.researchThreads.get(m.conversation) : undefined);
           const own = back && back.from === m.from ? back : null;
           this.tellSender(m.from, own ? own.origId : null, own ? own.conversation : null, NOT_SENT_SUBJECT, REFUSAL_OFF);
+          n++;
+        } else if (m.from === 'human' || m.from === 'system') {
+          // An owner or app note waiting for Research is told to Michael (D8.2).
+          const godId = this.registry().godId ?? 'god';
+          this.deliver(this.normalize({
+            to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
+            body: `${m.from === 'human' ? 'A note from the owner' : 'A message from the app'} for Research ("${String(m.subject ?? '').slice(0, 80)}") was not sent. ${REFUSAL_OFF}`
+          }, PRIVACY_CHECK_SENDER), godId);
           n++;
         }
       } catch { /* unreadable: removed below */ }
@@ -2787,6 +2846,7 @@ export class HiveManager {
     const agentsDir = join(root, 'agents');
     if (!existsSync(agentsDir)) return 0;
     const researchOn = this.researchOn();
+    try { this.tellLostResearchPending(); } catch { /* next start */ }
     try { this.sweepResearchInbox(researchOn); } catch { /* next tick */ }
     this.pruneTrustChecks();
     let routed = 0;
@@ -5221,6 +5281,12 @@ process.stdin.on('end', () => {
   // Research's file tools have the hook as their only wall: every one of its
   // calls fails closed when the app can't answer (ship review pass 3).
   const research = payload.hook_event_name === 'PreToolUse' && me === ${JSON.stringify(RESEARCH_ID)};
+  // A save into the shared temp folders, which Research's shell can read, is
+  // refused too when the app can't say whether Research is on (Codex review).
+  const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
+  const target = String(input.file_path || input.notebook_path || '');
+  const tempSave = payload.hook_event_name === 'PreToolUse' && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].indexOf(tool) >= 0
+    && /^(?:\\/private)?\\/(?:tmp|var\\/tmp|var\\/folders)(?:\\/|$)/.test(target);
   // An MCP call too big for one hook frame (a long document to write) is sent
   // with only its short input fields: the connector, mail and QuickBooks gates
   // decide on the tool name, server and mailbox, never the body (owner, 2026-10-02).
@@ -5237,12 +5303,12 @@ process.stdin.on('end', () => {
     line = JSON.stringify(payload);
   }
   const fail = () => {
-    if (mcp || web || research) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: mcp ? ${JSON.stringify(CONNECTOR_UNDECIDED)} : web ? ${JSON.stringify(WEB_SETTINGS_UNREADABLE)} : ${JSON.stringify(RESEARCH_UNCHECKED_TOOL)} } }));
+    if (mcp || web || research || tempSave) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: mcp ? ${JSON.stringify(CONNECTOR_UNDECIDED)} : web ? ${JSON.stringify(WEB_SETTINGS_UNREADABLE)} : ${JSON.stringify(RESEARCH_UNCHECKED_TOOL)} } }));
     process.exit(0);
   };
   if (!sock) { fail(); return; }
   let resp = '';
-  const done = () => { if (!resp && (mcp || web || research)) { fail(); return; } if (resp) process.stdout.write(resp); process.exit(0); };
+  const done = () => { if (!resp && (mcp || web || research || tempSave)) { fail(); return; } if (resp) process.stdout.write(resp); process.exit(0); };
   const c = net.createConnection(sock, () => c.write(line + '\\n'));
   c.setEncoding('utf8');
   c.on('data', (d) => { resp += d; });

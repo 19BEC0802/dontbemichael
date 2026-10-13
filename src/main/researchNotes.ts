@@ -4,18 +4,30 @@
  * rights, so a link Research made would reach what Research can't (Codex
  * review). Anything else is skipped.
  */
-import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, join, sep } from 'node:path';
 
 export function readResearchNotes(agentDir: string): string {
   let root = '';
   try { root = realpathSync(agentDir); } catch { return ''; }
   const readOwn = (file: string): string | null => {
+    // Its folder, as it really is, must be inside Research's own.
     try {
-      if (!lstatSync(file).isFile()) return null;
-      const real = realpathSync(file);
-      return real.startsWith(root + sep) ? readFileSync(real, 'utf8') : null;
+      const realDir = realpathSync(dirname(file));
+      if (realDir !== root && !realDir.startsWith(root + sep)) return null;
     } catch { return null; }
+    // Opened without following a link, and read from that same open file, so
+    // nothing can be swapped in between; a file with a second name (a hard
+    // link) may be one Research can't read, so it is skipped too.
+    let fd = -1;
+    try {
+      fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+      const st = fstatSync(fd);
+      if (!st.isFile() || st.nlink !== 1) return null;
+      return readFileSync(fd, 'utf8');
+    } catch { return null; } finally {
+      if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }
+    }
   };
   const parts: string[] = [];
   const top = readOwn(join(agentDir, 'memory.md'));

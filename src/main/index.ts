@@ -3801,9 +3801,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           : privateOnlyFolderPolicy(!!opts.hive!.isGod, opts.cwd);
         if (!base) return undefined;
         const walled = withResearchWall(base, researchFolders());
-        // While Research is on, Michael's commands stay in their sandbox too:
-        // a rerun outside it would open Research's folders (owner, D7.1).
-        return readConfig().research?.on && isBusinessOffice() ? { ...walled, sandboxOnly: true } : walled;
+        // In a business office Michael's commands stay in their sandbox too,
+        // where his shell reaches no host and Research's folders are walled
+        // (owner, D7.1 and D9.1).
+        return isBusinessOffice() ? { ...walled, sandboxOnly: true } : walled;
       };
       const inj = await hive.ensureAgent(
         { ...opts.hive, cwd: opts.cwd, provider, isResearch },
@@ -3868,7 +3869,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // host. Michael runs unsandboxed. Other offices keep it (D3).
           // Judged on the office setting, not the folder, so a folder that
           // can't be opened never leaves the team on the internet.
-          network: isBusinessOffice() ? sandboxNetwork(!!opts.hive.isGod) : undefined
+          network: isBusinessOffice() ? sandboxNetwork() : undefined
         }
       );
       opts.args = [...(opts.args ?? []), ...inj.args];
@@ -5159,6 +5160,10 @@ function pruneOldFiles(dir: string, maxAgeMs: number): void {
  *  sender (design review D7), from Settings or when it can't start safely. */
 function turnResearchOff(): number {
   writeConfig({ research: { ...(readConfig().research ?? { on: false }), on: false } });
+  // Its session ends here, not only when the window closes its terminal, so
+  // its shell's internet ends with the switch (Codex review).
+  const ptyId = ptyForAgent(RESEARCH_ID);
+  if (ptyId) { try { ptyManager.kill(ptyId); } catch { /* already gone */ } teardownPty(ptyId); }
   try { return hive.returnResearchInbox(); } catch (e) { console.error('[research] return inbox failed', e); return 0; }
 }
 ipcMain.handle('research:off', () => ({ ok: true, returned: turnResearchOff() }));
