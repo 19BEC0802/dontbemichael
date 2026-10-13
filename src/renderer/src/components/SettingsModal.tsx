@@ -17,7 +17,7 @@ import {
 import { SkillsTab } from './SkillsTab';
 import { clearLocalState, restoreLocalState, snapshotLocalState } from '@/store/localState';
 import { plainReasonKey } from '@/store/plainReason';
-import { ALLOW_TEMP_WORKERS, SHOW_ORG_TRIGGER, COLLECT_USAGE_STATS, SHOW_VOICE, SHOW_SLACK, SHOW_MCP_DEFAULTS, SHOW_SIMPLE_MODE_SWITCH, SHOW_ARABIC_TERMINAL_SWITCH, SHOW_LANGUAGE_PICKER } from '@shared/buildFeatures';
+import { ALLOW_TEMP_WORKERS, SHOW_ORG_TRIGGER, COLLECT_USAGE_STATS, SHOW_VOICE, SHOW_SLACK, SHOW_MAILBOXES, SHOW_MCP_DEFAULTS, SHOW_SIMPLE_MODE_SWITCH, SHOW_ARABIC_TERMINAL_SWITCH, SHOW_LANGUAGE_PICKER } from '@shared/buildFeatures';
 import { WebhookSchemaEditor } from './triggers/WebhookSchemaEditor';
 import { InfoTip } from './InfoTip';
 import { PixelButton } from './PixelButton';
@@ -1636,10 +1636,13 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
 
                       <div style={sectionRule} />
 
-                      {/* The mailboxes added here (docs/designs/multi-mailbox.md). */}
-                      <MailboxesSettings />
+                      {/* The mailboxes added here (docs/designs/multi-mailbox.md).
+                          Hidden with SHOW_MAILBOXES. */}
+                      {SHOW_MAILBOXES && (<>
+                        <MailboxesSettings />
 
-                      <div style={sectionRule} />
+                        <div style={sectionRule} />
+                      </>)}
 
                       {/* Connected-services registry (generic, registry-driven);
                           the hardcoded Slack/Webhook/Free Flow blocks below stay as-is. */}

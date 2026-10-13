@@ -54,7 +54,7 @@ import {
 import { firstTaskSection, roleLabel, plainFallback } from '@shared/workStyleText';
 import { useRtl } from '@/i18n/useDirection';
 import { useResolvedGodName } from '@/hooks/useResolvedGodName';
-import { SHOW_IMPORT_HIRE, SHOW_ENGINE_PICKER } from '@shared/buildFeatures';
+import { SHOW_IMPORT_HIRE, SHOW_ENGINE_PICKER, SHOW_MAILBOXES } from '@shared/buildFeatures';
 import { seedStarterJobs } from '@/shell/seedStarterJobs';
 import { sendTypedFirstTask } from '@/shell/typedFirstTask';
 
@@ -1399,12 +1399,12 @@ function DistinctBox(p: DistinctBoxProps) {
           <span>{t('addAgent.wizard.makeParticular', { name: p.name })}</span>
           {p.verdict?.suggestion && <span style={helperStyle}>{t('addAgent.wizard.suggestion', { text: p.verdict.suggestion })}</span>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => p.setBindMode('mailbox')} style={chip(p.bindMode === 'mailbox', p.freeMailboxes.length === 0)} disabled={p.freeMailboxes.length === 0} title={p.freeMailboxes.length === 0 ? t('addAgent.wizard.noFreeMailbox') : undefined}>{t('addAgent.wizard.bindMailbox')}</button>
+            {SHOW_MAILBOXES && <button type="button" onClick={() => p.setBindMode('mailbox')} style={chip(p.bindMode === 'mailbox', p.freeMailboxes.length === 0)} disabled={p.freeMailboxes.length === 0} title={p.freeMailboxes.length === 0 ? t('addAgent.wizard.noFreeMailbox') : undefined}>{t('addAgent.wizard.bindMailbox')}</button>}
             <button type="button" onClick={() => p.setBindMode('topic')} style={chip(p.bindMode === 'topic')}>{t('addAgent.wizard.bindTopic')}</button>
             <button type="button" onClick={() => p.setBindMode('connection')} style={chip(p.bindMode === 'connection', p.bindConnectors.length === 0)} disabled={p.bindConnectors.length === 0} title={p.bindConnectors.length === 0 ? t('addAgent.wizard.noConnection') : undefined}>{t('addAgent.wizard.bindConnection')}</button>
             <button type="button" onClick={p.onRecheck} style={chip(false)}>{t('addAgent.wizard.checkAgain')}</button>
           </div>
-          {p.bindMode === 'mailbox' && (
+          {SHOW_MAILBOXES && p.bindMode === 'mailbox' && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <select value={p.bindMailbox} onChange={(e) => p.setBindMailbox(e.target.value)} aria-label={t('addAgent.wizard.bindMailbox')} className="cth-input" style={{ ...inputStyle, width: 'auto' }}>
                 <option value="">{t('capabilities.pickMailbox')}</option>
