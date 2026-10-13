@@ -31,7 +31,7 @@ const reason = (r) => r && r.hookSpecificOutput && r.hookSpecificOutput.permissi
 
 /** One office on disk: Michael in the business folder, Pam in a team folder
  *  inside it, and (unless `research` is false) Research at its desk. */
-async function office(t, { research = true } = {}) {
+async function office(t, { research = true, on = research } = {}) {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'md-research-walls-')));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const home = path.join(base, 'HarnessAgents');
@@ -43,6 +43,8 @@ async function office(t, { research = true } = {}) {
   await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: business, isGod: true });
   await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: pamDir });
   if (research) await hive.ensureAgent({ id: R.RESEARCH_ID, name: 'Research', provider: 'claude', cwd: desk, isResearch: true });
+  // Who Research is comes from the app (the owner's switch), not the registry.
+  hive.setResearchEnabled(() => on);
   const cfg = { harnessHome: home, businessFolder: business, businessTeam: [{ agentId: 'pam', folder: pamDir }] };
   return { base, home, business, pamDir, desk, hive, cfg };
 }
@@ -69,16 +71,27 @@ test('the running hook refuses web pages and search to everyone but Research, an
   }
   assert.ok(!denied(web('pam', 'Bash')), 'other tools are not this gate\'s');
 
-  // An agent that calls itself research but was not marked by the app is refused.
-  const fake = await office(t, { research: false });
-  await fake.hive.ensureAgent({ id: R.RESEARCH_ID, name: 'Research', provider: 'claude', cwd: fake.desk });
-  const fakeHook = hookFor(fake);
-  assert.equal(reason(fakeHook(R.RESEARCH_ID, 'PreToolUse', { tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })), R.REFUSAL_WEB_TOOL_OFF);
-  assert.equal(reason(fakeHook('pam', 'PreToolUse', { tool_name: 'WebSearch', tool_input: { query: 'x' } })), R.REFUSAL_WEB_TOOL_OFF, 'Research off says so');
+  // A member that marks itself Research in the registry gets nothing (ship review D2.7).
+  const reg = JSON.parse(fs.readFileSync(path.join(o.hive.root(), 'registry.json'), 'utf8'));
+  reg.agents.pam.isResearch = true;
+  fs.writeFileSync(path.join(o.hive.root(), 'registry.json'), JSON.stringify(reg));
+  assert.equal(reason(web('pam', 'WebFetch')), R.REFUSAL_WEB_TOOL, 'a registry flag does not make Pam Research');
 
-  // The registry cannot be read: refuse, never allow.
-  o.hive.registry = () => { throw new Error('registry.json is mid write'); };
-  assert.equal(reason(web(R.RESEARCH_ID, 'WebFetch')), W.WEB_SETTINGS_UNREADABLE);
+  // With the owner's switch off, the reserved id is refused too, and says so.
+  const off = await office(t, { on: false });
+  const offHook = hookFor(off);
+  assert.equal(reason(offHook(R.RESEARCH_ID, 'PreToolUse', { tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })), R.REFUSAL_WEB_TOOL_OFF);
+  assert.equal(reason(offHook('pam', 'PreToolUse', { tool_name: 'WebSearch', tool_input: { query: 'x' } })), R.REFUSAL_WEB_TOOL_OFF, 'Research off says so');
+
+  // An office with no business folder keeps the internet (ship review D3).
+  const dev = await office(t);
+  dev.cfg = { harnessHome: dev.home };
+  assert.ok(!denied(hookFor(dev)('pam', 'PreToolUse', { tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })));
+
+  // Unreadable settings: refuse, never allow.
+  o.cfg = null;
+  const broken = new HookServer(o.hive, () => null, () => { throw new Error('config mid write'); });
+  assert.equal(reason(broken.handle({ agent_id: R.RESEARCH_ID, session_id: 's1', hook_event_name: 'PreToolUse', cwd: o.desk, tool_name: 'WebFetch', tool_input: { url: 'https://example.com' } })), W.WEB_SETTINGS_UNREADABLE);
 });
 
 test('the running hook keeps Research out of the office\'s files and everyone else out of Research\'s folders', async (t) => {
@@ -99,6 +112,14 @@ test('the running hook keeps Research out of the office\'s files and everyone el
   }
   assert.ok(!denied(call(R.RESEARCH_ID, 'Write', path.join(researchDir, 'outbox', 'a.json'))), 'its own outbox, inside the walled home');
   assert.ok(!denied(call(R.RESEARCH_ID, 'Read', path.join(o.desk, 'notes.md'))), 'its desk');
+  // It writes nowhere else, inside the walls or out (ship review D2.6).
+  for (const file of [path.join(os.homedir(), '.claude', 'settings.json'), path.join(o.base, 'outside', 'x.txt')]) {
+    const r = call(R.RESEARCH_ID, 'Write', file);
+    assert.ok(denied(r), `Research must not write ${file}`);
+    assert.match(reason(r), /only in your own desk/);
+  }
+  // It reads nothing in the home folder outside its own (D2.5).
+  assert.ok(denied(call(R.RESEARCH_ID, 'Read', path.join(os.homedir(), '.claude', 'projects', 'x.jsonl'))));
 
   for (const id of ['pam', 'god']) {
     assert.ok(denied(call(id, 'Write', path.join(researchDir, 'inbox', 'sneak.json'))), `${id} must not write Research's inbox`);
@@ -133,7 +154,7 @@ test('the settings written at spawn take the internet from a member\'s shell and
   // A member of an office with no business folder: no folder policy at all.
   const member = settingsOf(await o.hive.ensureAgent(
     { id: 'kelly', name: 'Kelly', provider: 'claude', cwd: o.pamDir },
-    { network: W.sandboxNetwork(false, false) }
+    { network: W.sandboxNetwork(false) }
   ));
   assert.deepEqual(member.sandbox.network, { allowedDomains: [], strictAllowlist: true });
   assert.equal(member.sandbox.allowUnsandboxedCommands, false, 'a rerun outside the sandbox would reach the internet');
@@ -142,18 +163,22 @@ test('the settings written at spawn take the internet from a member\'s shell and
   const researchDir = path.join(o.hive.root(), 'agents', R.RESEARCH_ID);
   const research = settingsOf(await o.hive.ensureAgent(
     { id: R.RESEARCH_ID, name: 'Research', provider: 'claude', cwd: o.desk, isResearch: true },
-    { folderPolicy: F.researchFolderPolicy([o.home, o.business], [researchDir, o.desk]), extraWritableDirs: [] }
+    { folderPolicy: F.researchFolderPolicy([o.base, o.home, o.business], [researchDir, o.desk], o.base), extraWritableDirs: [] }
   ));
   assert.equal(research.sandbox.network, undefined);
   assert.deepEqual([...research.sandbox.filesystem.allowWrite].sort(), [researchDir, o.desk].sort());
   assert.ok(!research.sandbox.filesystem.allowWrite.includes(o.hive.root()), 'never the hive');
   assert.deepEqual([...research.permissions.additionalDirectories].sort(), [researchDir, o.desk].sort());
+  // The home folder is walled for reads, and its riskiest places for edits (D2.5, D2.6).
+  assert.ok(research.sandbox.filesystem.denyRead.includes(o.base));
+  assert.ok(research.permissions.deny.some((r) => r.startsWith('Edit(') && r.includes('/.claude/**')));
+  assert.ok(research.permissions.deny.some((r) => r.endsWith('/.zshrc)')));
 });
 
 test('a message the app delivered to Research survives an app restart; the stamp key stays out of the hive', async (t) => {
   // Value: protects=asks waiting for Research when the app restarts are not swept as forged, and agents cannot read the key to forge a stamp; fails_when=the stamp key is not saved, is saved in the hive, or changes per run; why_new=research-routing.test.cjs checks the sweep within one HiveManager only; seam=none; no_claim=file mode 0600 on Windows (fake privacy guard stands in for the model check)
   const o = await office(t);
-  o.hive.setResearchGuard(async () => ({ ok: true }));
+  o.hive.setTrustLayer({ inbound: async (m) => ({ decision: 'pass', subject: m.subject, body: m.body }), outbound: async () => ({ decision: 'deny', reason: 'x' }) });
   fs.writeFileSync(path.join(o.hive.root(), 'agents', 'pam', 'outbox', 'm1.json'), JSON.stringify({ to: 'research', act: 'query', subject: 'Flour', body: 'Flour suppliers in Austin' }));
   o.hive.routeOnce();
   await new Promise((r) => setImmediate(r));
@@ -164,6 +189,7 @@ test('a message the app delivered to Research survives an app restart; the stamp
 
   // The app restarts: a new HiveManager over the same home.
   const again = new HiveManager(() => o.home);
+  again.setResearchEnabled(() => true);
   again.routeOnce();
   assert.equal(waiting().length, 1, 'the delivered ask is still waiting');
 

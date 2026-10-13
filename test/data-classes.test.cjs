@@ -51,11 +51,13 @@ test('patterns name the class of what they find', () => {
   assert.ok(cls('ghp_' + 'abcdefghijklmnopqrstuvwxyz0123').includes('secrets'));
   assert.ok(cls('pass' + 'word: ' + 'hunter22x').includes('secrets'));
   assert.ok(cls('customer 123456789012').includes('accounts'));
+  assert.ok(cls('call 5125550142').includes('contact'), 'a bare phone length run counts as contact too');
 });
 
 test('plain research questions trip no pattern', () => {
   // Value: protects=ordinary asks reach Research; fails_when=years, prices or counts read as private; why_new=new feature; seam=none
-  for (const t of ['pizza suppliers in Austin', 'food safety rules for 2026', 'average price of flour per 50 lb bag, around $25', 'how many restaurants opened in Texas in 2025']) {
+  for (const t of ['pizza suppliers in Austin', 'food safety rules for 2026', 'average price of flour per 50 lb bag, around $25', 'how many restaurants opened in Texas in 2025',
+    'Is the exchange open on 2026-10-13 10:30 Eastern?', 'sales tax for 2022 2023 2024', 'ISBN 978-0-13-468599-1', 'compare 1.234.567.890 units']) {
     assert.deepEqual(dc.patternHits(t), [], t);
   }
 });

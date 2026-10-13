@@ -93,7 +93,7 @@ export function classPhrase(id: DataClassId): string {
   return BY_ID.get(id)?.phrase ?? 'private details';
 }
 
-export interface PatternHit { classId: DataClassId; what: string }
+export interface PatternHit { classId: DataClassId }
 
 /** Luhn check for a card number. */
 function luhn(digits: string): boolean {
@@ -133,25 +133,34 @@ const LONG_DIGITS = /\b\d{9,}\b/;
 export function patternHits(text: string): PatternHit[] {
   const hits: PatternHit[] = [];
   const t = typeof text === 'string' ? text : '';
-  if (SECRETS.some((re) => re.test(t))) hits.push({ classId: 'secrets', what: 'a password or key' });
-  if (EMAIL.test(t)) hits.push({ classId: 'contact', what: 'an email address' });
+  if (SECRETS.some((re) => re.test(t))) hits.push({ classId: 'secrets' });
+  if (EMAIL.test(t)) hits.push({ classId: 'contact' });
   for (const m of t.matchAll(CARD)) {
     const digits = m[0].replace(/\D/g, '');
-    if (digits.length >= 13 && digits.length <= 19 && luhn(digits)) { hits.push({ classId: 'money', what: 'a card number' }); break; }
+    if (digits.length >= 13 && digits.length <= 19 && luhn(digits)) { hits.push({ classId: 'money' }); break; }
   }
-  if (IBAN.test(t)) hits.push({ classId: 'accounts', what: 'a bank account number' });
-  if (US_SSN.test(t)) hits.push({ classId: 'accounts', what: 'a government ID' });
-  for (const m of t.matchAll(PHONE)) {
+  if (IBAN.test(t)) hits.push({ classId: 'accounts' });
+  if (US_SSN.test(t)) hits.push({ classId: 'accounts' });
+  // Shapes that look like digits but are not contact details: dates and
+  // times, lists of years, book numbers (ship review: plain questions were
+  // refused as phone numbers).
+  const plain = t
+    .replace(/\b\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?\b/g, ' ')
+    .replace(/\b(?:ISBN(?:-1[03])?:?\s*)?97[89][- ]?\d{1,5}[- ]?\d{1,7}[- ]?\d{1,7}[- ]?[\dX]\b/gi, ' ')
+    .replace(/\b(?:(?:19|20)\d{2}[\s,]+)+(?:19|20)\d{2}\b/g, ' ');
+  for (const m of plain.matchAll(PHONE)) {
     const digits = m[1].replace(/\D/g, '');
     // Years, prices and plain counts are not phone numbers: a phone has 9 to
     // 15 digits and either a + or a separator inside it.
-    if (digits.length >= 9 && digits.length <= 15 && (/^\+/.test(m[1]) || /[\s().-]/.test(m[1]))) {
-      hits.push({ classId: 'contact', what: 'a phone number' });
+    if (digits.length >= 9 && digits.length <= 15 && (/^\+/.test(m[1]) || /[\s().-]/.test(m[1])) && !/\d\.\d{3}\.\d{3}/.test(m[1])) {
+      hits.push({ classId: 'contact' });
       break;
     }
   }
-  if (LONG_DIGITS.test(t) && !hits.some((h) => h.classId === 'money' || h.classId === 'accounts')) {
-    hits.push({ classId: 'accounts', what: 'an account number or ID' });
+  if (LONG_DIGITS.test(plain) && !hits.some((h) => h.classId === 'money' || h.classId === 'accounts')) {
+    hits.push({ classId: 'accounts' });
+    // A bare run of phone length may be a phone number too.
+    if (/\b\d{9,15}\b/.test(plain) && !hits.some((h) => h.classId === 'contact')) hits.push({ classId: 'contact' });
   }
   return hits;
 }

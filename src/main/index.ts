@@ -21,7 +21,7 @@ import {
   shouldStartInstall, type EngineSetupStatus, type KeyCheckFetch
 } from './engineSetup';
 import { runHiddenClaude, setHiddenClaudeAuthEnv } from './hiddenClaude';
-import { makePrivacyGuard } from './privacyGuard';
+import { makeTrustLayer, TRUST_MODEL, TRUST_TIMEOUT_MS } from './trustLayer';
 import { dataClassSettings } from '../shared/dataClasses';
 import { RESEARCH_DESK_DIR, RESEARCH_ID } from '../shared/research';
 import { initAutoUpdater, abortPendingRestart } from './updater';
@@ -616,27 +616,58 @@ const standingFit = standingFitCheck({
   log: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
 });
 
-/** The privacy check on every message to Research (main/privacyGuard.ts):
- *  the standing check's runner, in the same app-only folder, no tools. */
-const researchGuard = makePrivacyGuard({
+/** The trust layer around Research (main/trustLayer.ts): the standing
+ *  check's runner, in the same app-only folder, no tools. */
+const trustLayer = makeTrustLayer({
   run: async (prompt) => {
     const dir = join(app.getPath('userData'), 'standing-check');
     mkdirSync(dir, { recursive: true });
     try { ensureClaudePermissionsAccepted(dir); } catch { /* the check fails closed */ }
     const r = await runHiddenClaude(prompt, {
-      model: 'claude-haiku-4-5',
+      model: TRUST_MODEL,
       cwd: dir,
       command: readConfig().defaultCommand ?? 'claude',
       noTools: true,
       settingSources: 'user',
       thinking: false,
-      timeoutMs: 60_000
+      timeoutMs: TRUST_TIMEOUT_MS
     });
     return r.ok && r.text ? r.text : null;
   },
   settings: () => dataClassSettings(readConfig().dataClasses),
   log: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
 });
+
+/** Research's notes reach the team's shared memory only as a copy the trust
+ *  layer cleaned of instructions aimed at agents (ship review D2.9); a note the
+ *  layer can't check is left out. Every other agent is mined as is. */
+async function researchNotesForPalace(id: string, agentDir: string): Promise<string | null | undefined> {
+  if (id !== RESEARCH_ID) return undefined;
+  const home = readConfig().harnessHome;
+  if (!home) return null;
+  const parts: string[] = [];
+  try { parts.push(readFileSync(join(agentDir, 'memory.md'), 'utf8')); } catch { /* none */ }
+  try {
+    for (const f of readdirSync(join(agentDir, 'memory'))) {
+      if (f.endsWith('.md') && f !== 'inbox.md') parts.push(readFileSync(join(agentDir, 'memory', f), 'utf8'));
+    }
+  } catch { /* none */ }
+  const text = parts.join('\n\n').trim();
+  if (!text) return null;
+  const v = await trustLayer.outbound({ subject: 'Research notes', body: text });
+  if (v.decision === 'deny') return null;
+  const dir = join(privateRoot(expandTilde(home)), 'research-mined');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'memory.md'), `${v.body}\n`, 'utf8');
+  return dir;
+}
+
+/** A business office (one with a business folder): where the Research rule
+ *  applies (ship review D3). Older and developer offices keep the internet. */
+function isBusinessOffice(): boolean {
+  const cfg = readConfig();
+  return !!(cfg.businessFolder || cfg.officeFolder);
+}
 
 /** Research's desk: its own working folder, in the app's home, outside the
  *  hive and the business folder. */
@@ -1849,6 +1880,7 @@ function armOfficeBreak(): void {
   const s = officeBreak.current();
   // A wait for the owner only (a key that stopped working) has no timer.
   if (!s || (s.phase === 'waiting' && s.manual)) return;
+  // setTimeout takes at most 2^31 - 1 ms; a longer delay would fire at once.
   officeBreakTimer = setTimeout(runOfficeBreakTick, Math.min(2_147_483_647, Math.max(1_000, s.due - Date.now())));
   officeBreakTimer.unref?.();
 }
@@ -1967,11 +1999,11 @@ function ownerRetryOffice(): boolean {
 function endOfficeBreak(ended: OfficeBreakState): void {
   if (officeBreakTimer) clearTimeout(officeBreakTimer);
   officeBreakTimer = null;
+  const words = stopWords(ended.reason, null);
   try {
     const reg = hive.registry();
     const godId = reg.godId ?? 'god';
     const cutOff = [...ended.cutOff].sort((a, b) => (a === godId ? -1 : b === godId ? 1 : 0));
-    const words = stopWords(ended.reason, null);
     if (hive.enabled()) {
       for (const id of cutOff) {
         hive.send({ to: id, act: 'inform', subject: words.subject, body: words.carryOn }, 'system');
@@ -1979,7 +2011,7 @@ function endOfficeBreak(ended: OfficeBreakState): void {
     }
     hive.appendLog({ kind: 'office-break', step: 'over', reason: ended.reason, cutOff: cutOff.length });
   } catch (e) { console.error('[office break] end', e); }
-  ownerToast(michaelName(), stopWords(ended.reason, null).over);
+  ownerToast(michaelName(), words.over);
   publishOfficeBreak();
 }
 
@@ -3709,10 +3741,12 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // has applied it, the agent counts as unprotected and is stripped below.
   // Research (shared/research.ts): the reserved id while the owner has it on.
   // It runs in its desk, sees no office data and is the only one on the web.
-  const isResearch = !!opts.hive && opts.hive.id === RESEARCH_ID && !opts.hive.isGod && !!readConfig().research?.on;
+  const isResearch = !!opts.hive && opts.hive.id === RESEARCH_ID && !opts.hive.isGod && !!readConfig().research?.on && isBusinessOffice() && hive.enabled();
   if (opts.hive?.id === RESEARCH_ID && !isResearch) {
     return { ok: false, error: 'Research is off. Turn it on in Settings.' };
   }
+  // Research starts only inside its walls (ship review D2.8).
+  let researchWalled = false;
   if (isResearch) {
     const desk = researchDesk();
     if (!desk) return { ok: false, error: 'No office folder yet' };
@@ -3750,9 +3784,11 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
             const pack = businessPackInfo(cfg.businessType);
             return { name: cfg.businessName, city: cfg.businessCity, typeName: pack.displayName };
           })(),
+          // The whole home folder is walled; only its own folders open (D2.5).
           folderPolicy: researchFolderPolicy(
-            [home, businessFolder ?? '', knowledge.env().KG_ROOT ?? '', memory.env().MEMPALACE_PALACE_PATH ?? '', ...teamFolders],
-            researchFolders()
+            [homedir(), home, businessFolder ?? '', knowledge.env().KG_ROOT ?? '', memory.env().MEMPALACE_PALACE_PATH ?? '', ...teamFolders],
+            researchFolders(),
+            homedir()
           )
         } : {
           semanticMemory: memory.active(),
@@ -3786,13 +3822,15 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           folderPolicy: memberPolicy(),
           docTextCliPath: docTextCliPath(),
           connectors: connectorPlan?.plan,
-          // Only Research uses the internet (shared/webAccess.ts): every other
-          // team member's shell reaches no host. Michael runs unsandboxed.
-          network: sandboxNetwork(false, !!opts.hive.isGod)
+          // In a business office only Research uses the internet
+          // (shared/webAccess.ts): every other team member's shell reaches no
+          // host. Michael runs unsandboxed. Other offices keep it (D3).
+          network: businessFolder ? sandboxNetwork(!!opts.hive.isGod) : undefined
         }
       );
       opts.args = [...(opts.args ?? []), ...inj.args];
       connectorsApplied = true;
+      researchWalled = isResearch;
       seedPrompt = inj.seedPrompt;
       // A degraded spawn (proxy bridge never bound) is told to the user the same
       // way breaker escalations are: a native toast, gated on the notifications
@@ -3809,6 +3847,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // No hive injection (it failed, or the hive is off) means no hook and no deny
   // rules: a Claude agent then starts with no connector and none of the owner's
   // own servers, whatever its grants (D8). md-mail still comes via --mcp-config.
+  if (isResearch && !researchWalled) {
+    // A Research without its walls would be a plain Claude with the owner's
+    // accounts and the web: it does not start, and the switch goes back off.
+    console.error('[research] walls not in place; Research did not start');
+    writeConfig({ research: { ...(readConfig().research ?? { on: false }), on: false } });
+    return { ok: false, error: 'Research could not be set up safely, so it did not start. Try again.' };
+  }
   if (connectorPlan && !connectorsApplied) {
     console.warn(`[connectors] ${opts.hive?.id}: no hive settings, starting without connectors`);
     if (!(opts.args ?? []).includes('--strict-mcp-config')) opts.args = [...(opts.args ?? []), '--strict-mcp-config'];
@@ -7274,13 +7319,15 @@ function bootstrapHiveServices(): void {
   // A business office gets the plain PROTOCOL.md and no COMMANDS.md.
   hive.setBusinessOffice(!!(readConfig().businessFolder || readConfig().officeFolder));
   hive.onScheduleRequest(receiveScheduleRequest);
-  hive.setResearchGuard(researchGuard);
-  // The update that took the internet from the team (issue #230): an office
-  // that was already running gets the one time card; a new one decides in
-  // the onboarding Team step instead.
+  hive.setTrustLayer(trustLayer);
+  memory.setNotesFilter(researchNotesForPalace);
+  hive.setResearchEnabled(() => !!readConfig().research?.on && isBusinessOffice());
+  // The update that took the internet from the team (issue #230): a business
+  // office that was already running gets the one time card; a new one decides
+  // in the onboarding Team step instead.
   {
     const cfg = readConfig();
-    if (!cfg.research) writeConfig({ research: { on: false, notice: !!cfg.onboardingComplete } });
+    if (!cfg.research) writeConfig({ research: { on: false, notice: !!cfg.onboardingComplete && isBusinessOffice() } });
   }
   hive.ensureHive();
   try { sweepOrphanAgentMcp(); } catch (e) { console.error('[mail] orphan agent-mcp sweep failed', e); }

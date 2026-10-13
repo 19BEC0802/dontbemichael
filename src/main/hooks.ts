@@ -576,15 +576,17 @@ export class HookServer {
       }
     }
 
-    // The internet (shared/webAccess.ts, issue #230): only Research uses web
-    // pages and web search. Everyone else, Michael included, is refused with
-    // how to ask Research, or that it is off. Read per call.
+    // The internet (shared/webAccess.ts, issue #230): in a business office
+    // only Research uses web pages and web search. Everyone else, Michael
+    // included, is refused with how to ask Research, or that it is off. Who
+    // Research is comes from the app, never a file agents write (D2.7).
     if (event === 'PreToolUse' && agentId && WEB_TOOLS.has(p.tool_name ?? '')) {
-      // An unreadable registry fails closed, like the connector gate (D8).
+      // Unreadable settings fail closed, like the connector gate (D8).
       let d: ReturnType<typeof webAccess>;
       try {
-        const me = this.hive.registry().agents[agentId];
-        d = webAccess(!!me?.isResearch && !me.archived, this.hive.researchOn(), p.tool_name ?? '');
+        const cfg = this.getConfig();
+        const on = this.hive.researchOn();
+        d = cfg.businessFolder || cfg.officeFolder ? webAccess(agentId === RESEARCH_ID && on, on, p.tool_name ?? '') : { ok: true };
       } catch {
         d = { ok: false, reason: WEB_SETTINGS_UNREADABLE };
       }
@@ -607,7 +609,7 @@ export class HookServer {
     // Research's desk sits in the app's home, so its own wall below judges its
     // writes instead: that wall already shuts everything there but its own
     // folders (issue #230).
-    if (event === 'PreToolUse' && agentId && GUARDED_TOOLS.has(p.tool_name ?? '') && !this.safeRegistryAgent(agentId)?.isResearch) {
+    if (event === 'PreToolUse' && agentId && GUARDED_TOOLS.has(p.tool_name ?? '') && agentId !== RESEARCH_ID) {
       const cfg = this.getConfig();
       const hiveRoot = this.hive.root();
       if ((cfg.businessFolder || cfg.officeFolder) && cfg.harnessHome && hiveRoot) {
@@ -756,7 +758,7 @@ export class HookServer {
     // included, works from. Delivered at the start of each session and again
     // when the owner changes it, never repeated unchanged.
     let profile: string | null = null;
-    const isResearchAgent = !!agentId && !!this.safeRegistryAgent(agentId)?.isResearch;
+    const isResearchAgent = agentId === RESEARCH_ID;
     if ((event === 'SessionStart' || event === 'UserPromptSubmit') && agentId && this.getCompanyProfile && !isResearchAgent) {
       const text = this.getCompanyProfile();
       const sessionId = p.session_id ?? null;
@@ -936,17 +938,23 @@ export class HookServer {
     // Research's walls, and everyone else's guard on its folders (issue #230).
     const hiveRoot = this.hive.root();
     const researchOwn = [hiveRoot ? join(hiveRoot, 'agents', RESEARCH_ID) : '', home ? join(home, RESEARCH_DESK_DIR) : ''].filter(Boolean);
-    if (me?.isResearch) {
-      const walled = [home ?? '', cfg.businessFolder ?? '', this.getKnowledge?.().root ?? '',
+    // Judged as asked and as the file it really is; resolved once.
+    const real = realPathOf(target);
+    const both = [target, real].filter((x): x is string => !!x);
+    // Research by its reserved id, whatever any file says (ship review D2.7):
+    // it reads nothing in the home folder or the office but its own folders,
+    // and writes only those (D2.5, D2.6).
+    if (agentId === RESEARCH_ID) {
+      const walled = [homedir(), home ?? '', cfg.businessFolder ?? '', this.getKnowledge?.().root ?? '',
         ...(cfg.businessTeam ?? []).map((m) => m.folder),
         ...Object.values(reg.agents).filter((a) => a.id !== agentId && a.cwd).map((a) => a.cwd)].filter(Boolean);
-      for (const t of [target, realPathOf(target)].filter((x): x is string => !!x)) {
+      for (const t of both) {
         const r = researchFolderDecision(walled, researchOwn, tool, t, ci);
         if (r.deny) return r;
       }
       return { deny: false };
     }
-    for (const t of [target, realPathOf(target)].filter((x): x is string => !!x)) {
+    for (const t of both) {
       const r = researchWallDecision(researchOwn, tool, t, ci);
       if (r.deny) return r;
     }
@@ -964,14 +972,9 @@ export class HookServer {
     // agent's own folder can point anywhere (review, 2026-09-25).
     const asked = folderDecision(agent, layout, tool, target, ci, godName);
     if (asked.deny) return asked;
-    const real = realPathOf(target);
     if (!real || real === target) return asked;
     // The folders in the layout are real paths, so the agent's own is too here.
     return folderDecision({ ...agent, cwd: realPathOf(me.cwd) ?? me.cwd }, layout, tool, real, ci, godName);
-  }
-
-  private safeRegistryAgent(agentId: string): { isResearch?: boolean } | undefined {
-    try { return this.hive.registry().agents[agentId]; } catch { return undefined; }
   }
 
   private displayName(agentId: string | undefined): string {

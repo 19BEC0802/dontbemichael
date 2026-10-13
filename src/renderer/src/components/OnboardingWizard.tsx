@@ -244,7 +244,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
 
   const plan = teamPlan(teamAgents, teamPicked, folderSuggestions, folderOverrides);
   const needed = connectionsNeeded(teamAgents, teamPicked);
-  const pickedCount = teamAgents.filter((a) => teamPicked[a.id]).length;
+  const pickedCount = teamAgents.filter((a) => teamPicked[a.id]).length + (researchPicked ? 1 : 0);
   /** `/Users/me/Documents/Pho` → `~/Documents/Pho`: shorter, and what an owner recognises. */
   const tildePath = (p: string) => {
     const h = folderSuggestions?.home;

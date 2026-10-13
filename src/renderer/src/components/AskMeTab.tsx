@@ -208,7 +208,6 @@ export function AskMeTab() {
     <div ref={rootRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '2px 2px 10px', margin: '-2px -2px 0' }}>
       <OfficeBreakCard />
       <EngineSetupCard status={engineCard ? engineSetup : null} />
-      {researchNotice && <ResearchNoticeCard />}
       <ScheduleRequestCards requests={scheduleRequests} refresh={refreshScheduleRequests} />
       <WorkStyleUpdateCards offers={offers} />
       <MailProposalCards proposals={proposals} refresh={refreshNeedsYou} />
@@ -398,6 +397,8 @@ export function AskMeTab() {
           </section>
         );
       })}
+      {/* A report, after the questions like every Report card (DESIGN.md 7.8). */}
+      {researchNotice && <ResearchNoticeCard />}
     </div>
   );
 }

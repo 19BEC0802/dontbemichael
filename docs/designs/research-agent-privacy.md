@@ -62,7 +62,42 @@ every install, in this fixed order (D4):
 
 Fields only on the page; the examples sit behind an info icon per class.
 
-## The guard
+## Trust layer (owner, 2026-10-13, at ship; replaces the refuse-only guard below)
+
+The /ship review found side doors around the guard. The owner chose an explicit trust layer
+as gatekeeper, in both directions, ahead of the guard described in the next section:
+
+- **Inbound** (D2.0, D2.1, D2.3, D2.4): everything headed for Research passes it first,
+  from a teammate, Michael, the app itself (a card reminder) or an owner answer, of any
+  length or shape (a list or object is read as its text). It decides one of: pass as
+  written; clean it (strip the private parts or generalize the question so the research
+  stays useful); or deny it when the question only makes sense with private data. Fixed
+  patterns mark private spans for the model first, passwords and keys never reach a model,
+  and the patterns check the layer's output again. Unsure, unreadable, slow (60 s) or
+  failing means deny; text over 60,000 characters is denied as too long to check. Research
+  receives only a clean copy the app builds from the layer's output (its own id, time and
+  thread), stamped with an HMAC of its whole content. The sender alone gets "Sent to
+  Research as: ..." when it was cleaned, or "Not sent to Research" naming the private kind.
+  At most 2 checks run at once.
+- **Owner answers** (D2.2): an Ask me answer meant for Research reaches it as a message
+  through the layer, never as a direct memory write.
+- **Outbound** (D2.9): every message Research sends, on or off, passes the layer, which
+  removes instructions aimed at AI agents and keeps the findings and sources; it arrives
+  labelled as information, and one that plainly tries to steer its reader is flagged to
+  Michael only. An answer the layer can't check is not delivered and the recipient is told.
+  Research's notes go into the team's shared memory only as a copy the layer cleaned.
+- **Walls** (D2.5 to D2.8): Research reads nothing in the home folder but its own folders
+  (agent transcripts, app settings and documents included) and writes only its own folders
+  (hook allowlist, plus permission rules on the riskiest home paths). Who Research is comes
+  from the app: the reserved id and the owner's switch, never a registry flag. Research
+  starts only inside its walls, otherwise it shows "Research couldn't start" and the switch
+  goes back off.
+- **Scope** (D3): the rule applies to business offices (a business folder); older and
+  developer offices keep the internet and see no Research section.
+- **Known limit** (D4): members on other engines (Codex, OpenCode, Crush) keep their own web
+  tools and shell; Settings names them, and a P1 TODO tracks gating them.
+
+## The guard (superseded by the trust layer above)
 
 Every message addressed to the Research agent is checked before delivery.
 

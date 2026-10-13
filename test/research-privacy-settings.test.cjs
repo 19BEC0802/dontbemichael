@@ -47,7 +47,8 @@ test('classes are named radio groups in a fixed order; passwords are locked', ()
   assert.match(ui, /DATA_CLASSES\.map\(\(c, i\) =>/);
   assert.match(ui, /<RadioRows\n\s+inline\n\s+label=\{name\}/);
   assert.match(read('src/renderer/src/components/CapabilitiesTab.tsx'), /<div role="radiogroup" aria-label=\{label\} onKeyDown=\{onKey\}/);
-  assert.match(ui, /aria-label=\{t\('research\.lockedLabel', \{ name \}\)\}/);
+  assert.match(ui, /<Icon name="lock" size=\{0\.75\} \/><span>\{t\('research\.alwaysPrivate'\)\}<\/span>/, 'the locked state is spoken as visible text');
+  assert.match(ui, /t\('research\.otherEngines', \{ names: uncovered\.join\(', '\) \}\)/, 'members on other engines are named (D4)');
   for (const id of ['places', 'industry', 'dates', 'general', 'names', 'contact', 'companies', 'money', 'accounts', 'health', 'quoted', 'secrets']) {
     for (const lang of ['en', 'ar', 'zh-CN']) {
       const l = JSON.parse(read(`src/renderer/src/i18n/locales/${lang}.json`));
@@ -66,11 +67,12 @@ test('Windows owners are told Research is not walled off there', () => {
 test('the update card is a quiet report, once, that opens the section', () => {
   // Value: protects=updated owners learn the team lost the internet without a false alarm; fails_when=the card turns coral, repeats, or misses the deep link; why_new=design review D9 and D20; seam=source
   const ask = read('src/renderer/src/components/AskMeTab.tsx');
-  assert.match(ask, /\{researchNotice && <ResearchNoticeCard \/>\}/);
+  assert.match(ask, /\}\)\}\n      \{\/\* A report, after the questions like every Report card \(DESIGN\.md 7\.8\)\. \*\/\}\n      \{researchNotice && <ResearchNoticeCard \/>\}/);
+  assert.match(read('src/renderer/src/components/SettingsModal.tsx'), /sec !== 'Research & privacy' \|\| !!\(config\.businessFolder \|\| config\.officeFolder\)/, 'business offices only (D3)');
   assert.match(ask, /detail: \{ section: 'Research & privacy' \}/);
   assert.match(read('src/renderer/src/shell/useNeedsYou.ts'), /\+ \(merged\.researchNotice \? 1 : 0\)/);
   assert.equal(en.research.noticeTitle, 'Your team no longer uses the internet');
-  assert.match(read('src/main/index.ts'), /if \(!cfg\.research\) writeConfig\(\{ research: \{ on: false, notice: !!cfg\.onboardingComplete \} \}\);/);
+  assert.match(read('src/main/index.ts'), /if \(!cfg\.research\) writeConfig\(\{ research: \{ on: false, notice: !!cfg\.onboardingComplete && isBusinessOffice\(\) \} \}\);/);
 });
 
 test('setup offers Research as one unchecked Team step row', () => {

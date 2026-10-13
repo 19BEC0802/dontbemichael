@@ -7,6 +7,9 @@ import { RadioRows } from './CapabilitiesTab';
 import type { HarnessConfig } from '@/store/config';
 import { allowedCount, DATA_CLASSES, dataClassSettings, type DataClassId, type DataClassSetting } from '../../../shared/dataClasses';
 import { researchOnFloor, startResearch, stopResearch } from '@/shell/research';
+import { useStore } from '@/store/store';
+import { isClaudeProvider } from '@shared/agentProvider';
+import { RESEARCH_ID } from '../../../shared/research';
 
 /**
  * Settings, Research & privacy (issue #230, docs/designs/research-agent-privacy.md,
@@ -22,6 +25,8 @@ const head: CSSProperties = {
   color: 'var(--cth-ink-500)', textTransform: 'uppercase', marginBottom: 10,
   display: 'flex', alignItems: 'center', gap: 6
 };
+/** A sentence, so it is set in sentence case, not as a caps label (DESIGN.md 4.1). */
+const sentenceHead: CSSProperties = { fontSize: 13, lineHeight: '18px', fontWeight: 600, color: 'var(--cth-ink-2)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' };
 const hint: CSSProperties = { fontSize: 12, lineHeight: '17px', color: 'var(--cth-ink-3)' };
 const dot = (color: string): CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 });
 
@@ -71,6 +76,10 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
     requestAnimationFrame(() => stateRow.current?.querySelector<HTMLButtonElement>('button')?.focus());
   };
 
+  // The app fences in Claude agents only: a member on another engine keeps
+  // its own web tools and shell (ship review D4).
+  const agents = useStore((s) => s.agents);
+  const uncovered = agents.filter((a) => a.id !== RESEARCH_ID && !isClaudeProvider(a.provider ?? 'claude')).map((a) => a.name);
   const settings = dataClassSettings(classes);
   const counts = allowedCount(settings);
   const setClass = (id: DataClassId, v: DataClassSetting): void => onClassesChange({ ...(classes ?? {}), [id]: v });
@@ -120,7 +129,7 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
       <div style={{ height: 1, background: 'var(--cth-line)' }} />
 
       <div>
-        <div style={head}>
+        <div style={sentenceHead}>
           {t('research.sendTitle')}
           <InfoTip label={t('research.sendTitle')} text={t('research.sendTip')} />
           <span style={{ fontSize: 11.5, fontWeight: 500, textTransform: 'none', color: 'var(--cth-ink-3)', fontFamily: 'var(--cth-font-ui)' }}>
@@ -137,8 +146,8 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
                   {name}<InfoTip label={name} text={t(`research.class.${c.id}.tip`)} />
                 </span>
                 {c.locked
-                  ? <span aria-label={t('research.lockedLabel', { name })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--cth-ink-3)', paddingInlineEnd: 4, flexShrink: 0 }}>
-                      <Icon name="lock" size={0.75} /><span aria-hidden="true">{t('research.alwaysPrivate')}</span>
+                  ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--cth-ink-3)', paddingInlineEnd: 4, flexShrink: 0 }}>
+                      <Icon name="lock" size={0.75} /><span>{t('research.alwaysPrivate')}</span>
                     </span>
                   : <span style={{ flexShrink: 0 }}>
                       <RadioRows
@@ -153,6 +162,12 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
             );
           })}
         </div>
+        {uncovered.length > 0 && (
+          <div style={{ ...hint, marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {t('research.otherEngines', { names: uncovered.join(', ') })}
+            <InfoTip label={t('research.otherEnginesLabel')} text={t('research.otherEnginesTip')} />
+          </div>
+        )}
       </div>
     </>
   );

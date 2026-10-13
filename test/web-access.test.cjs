@@ -30,21 +30,22 @@ test('web pages and search are Research\'s alone', () => {
   assert.doesNotMatch(R.REFUSAL_WEB_TOOL + R.REFUSAL_WEB_TOOL_OFF, /[–—]/);
 });
 
-test('every team member but Research gets an empty strict network list', () => {
-  // Value: protects=curl and scripts reach no host from a member's shell on a Mac; fails_when=the list is absent or not strict; why_new=new feature; seam=none
-  assert.deepEqual(W.sandboxNetwork(false, false), { allowedDomains: [], strictAllowlist: true });
-  assert.equal(W.sandboxNetwork(true, false), undefined, 'Research');
-  assert.equal(W.sandboxNetwork(false, true), undefined, 'Michael runs outside the sandbox');
+test('every team member of a business office gets an empty strict network list', () => {
+  // Value: protects=curl and scripts reach no host from a member's shell on a Mac, while other offices keep the network; fails_when=the list is absent, not strict, or set outside a business office; why_new=new feature, ship review D3; seam=none
+  assert.deepEqual(W.sandboxNetwork(false), { allowedDomains: [], strictAllowlist: true });
+  assert.equal(W.sandboxNetwork(true), undefined, 'Michael runs outside the sandbox');
   const main = read('src/main/index.ts');
-  assert.match(main, /network: sandboxNetwork\(false, !!opts\.hive\.isGod\)/);
+  assert.match(main, /network: businessFolder \? sandboxNetwork\(!!opts\.hive\.isGod\) : undefined/);
 });
 
-test('the hook gate covers Michael and reads Research from the registry', () => {
-  // Value: protects=Michael is gated too and the gate can't be talked past; fails_when=the gate skips Michael or trusts config alone; why_new=owner answer 2026-10-13 (Michael asks Research too); seam=none
+test('the hook gate covers Michael and decides Research by the app, not a file', () => {
+  // Value: protects=Michael is gated too and no agent-written flag opens the web; fails_when=the gate skips Michael or reads isResearch from the registry; why_new=owner answer 2026-10-13, ship review D2.7; seam=none
   const hooks = read('src/main/hooks.ts');
   assert.match(hooks, /if \(event === 'PreToolUse' && agentId && WEB_TOOLS\.has\(p\.tool_name \?\? ''\)\) \{/);
-  assert.match(hooks, /webAccess\(!!me\?\.isResearch && !me\.archived, this\.hive\.researchOn\(\), p\.tool_name \?\? ''\)/);
+  assert.match(hooks, /webAccess\(agentId === RESEARCH_ID && on, on, p\.tool_name \?\? ''\)/);
+  assert.doesNotMatch(hooks, /\.isResearch\b/, 'no registry flag is trusted');
   assert.match(hooks, /d = \{ ok: false, reason: WEB_SETTINGS_UNREADABLE \}/, 'fails closed');
+  assert.match(read('src/main/index.ts'), /if \(isResearch && !researchWalled\) \{/, 'Research never starts without its walls (D2.8)');
 });
 
 test('Research opens nothing of the office, and its own folders reopen', () => {
@@ -83,4 +84,14 @@ test('Research can hold no mailbox, connector or schedule', () => {
   assert.match(main, /if \(agentId === RESEARCH_ID\) return \{ ok: false \};\n  const quickbooks/, 'QuickBooks');
   assert.match(main, /if \(mission\.to === RESEARCH_ID\) return \{ ok: false, error: 'Research has no schedules' \};/);
   assert.match(main, /if \(actor === RESEARCH_ID\) return 'Research has no schedules/);
+});
+
+test('Research\'s notes reach the shared memory only as a cleaned copy', () => {
+  // Value: protects=web text never enters the team's memory search unchecked; fails_when=the palace mines Research's folder as is, or a note the layer can't check is mined; why_new=ship review D2.9; seam=source (MemoryManager needs mempalace)
+  const main = read('src/main/index.ts');
+  assert.match(main, /memory\.setNotesFilter\(researchNotesForPalace\);/);
+  assert.match(main, /if \(id !== RESEARCH_ID\) return undefined;/);
+  assert.match(main, /const v = await trustLayer\.outbound\(\{ subject: 'Research notes', body: text \}\);\n  if \(v\.decision === 'deny'\) return null;/);
+  const mem = read('src/main/memory.ts');
+  assert.match(mem, /if \(dir === null\) continue;\n        await this\.mineAgent\(dir, id\);/);
 });

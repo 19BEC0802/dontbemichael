@@ -1031,7 +1031,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                   padding: 10,
                   background: 'var(--cth-card-2)'
                 }}>
-                  {VISIBLE_SECTIONS.map((section) => {
+                  {/* Research & privacy is for business offices (ship review D3). */}
+                  {VISIBLE_SECTIONS.filter((sec) => sec !== 'Research & privacy' || !!(config.businessFolder || config.officeFolder)).map((section) => {
                     const active = activeSection === section;
                     return (
                       <button

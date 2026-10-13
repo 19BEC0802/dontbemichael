@@ -20,9 +20,15 @@
  */
 import type { SandboxNetwork } from '../shared/webAccess';
 import {
-  addressedToResearch, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT, PRIVACY_CHECK_SENDER,
-  REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL
+  addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
+  PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
+  SENT_AS_SUBJECT, sentAsBody
 } from '../shared/research';
+
+/** A thread id an agent wrote, kept only when it is a plain token. */
+function safeConversation(v: unknown): v is string {
+  return typeof v === 'string' && /^[\w.:-]{1,120}$/.test(v);
+}
 import { hookShell, shellCommand, type HookShell } from './hookShell';
 import { CLOSING_COMPLETE_RE } from '../shared/closingTime';
 import {
@@ -40,7 +46,7 @@ import { join, dirname, basename, isAbsolute, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, createHash, createHmac } from 'node:crypto';
-import type { GuardVerdict } from './privacyGuard';
+import type { InboundVerdict, OutboundVerdict, TrustLayer } from './trustLayer';
 import type { AgentUsageSample } from './usage';
 import { COMMAND_GROUPS } from '../shared/claudeCommands';
 import {
@@ -237,9 +243,12 @@ export const HOUSE_RULES = [
   '5. Use real people, customers, quotes and messages only. Make up an example only when the owner asks for a sample, and label it as one.',
   '6. When your instructions or a request ask for something your tools cannot do, because no tool does it or a tool refuses, report it instead of skipping it: what you could not do, for which task, and why. A team member tells Michael; Michael tells the owner on the Ask me board. Do not work around a missing or refused tool. Your instructions can describe work you have no tool for, so check before you call that step done. Say what the tool did or refused; offer the owner a setting or a fix only when a tool result or your instructions name it, because a guessed setting sends the owner looking for something that is not there.',
   '7. Write anything the owner reads, reports and files included, in plain business words a busy owner follows on the first read. Leave out tool names, folder and file names, settings files, message ids, time zones and how you went about the work, unless the owner asked how it was done. Name a source the way the owner knows it ("your IT mailbox", "your notes from 9 Oct", "the supplier\'s invoice"), give times in the owner\'s local time, and name a file only so the owner can open it. When you extend or update an earlier file, rewrite its parts that break this rule.',
-  '8. On the task board, "waiting" names who else a card waits on, never the card\'s own person. When a card\'s one off next step is its own person\'s at a set time, such as a send on Monday or a question to ask after the 20th, the card is "todo", with "nextAt" set to that time as an ISO date and time with its offset; the app shows it in the owner\'s local time. A routine that repeats on a schedule needs no card to track it: its runs live in Schedules. What a run produces for the owner still goes on Ask me as a report card. A done card stays done: only the owner reopens one, to correct a card marked done by mistake. Cards carry no running "notes": what you did is already kept in your own conversation and the office log, and what you keep for good goes in your memory.',
-  RESEARCH_HOUSE_RULE
+  '8. On the task board, "waiting" names who else a card waits on, never the card\'s own person. When a card\'s one off next step is its own person\'s at a set time, such as a send on Monday or a question to ask after the 20th, the card is "todo", with "nextAt" set to that time as an ISO date and time with its offset; the app shows it in the owner\'s local time. A routine that repeats on a schedule needs no card to track it: its runs live in Schedules. What a run produces for the owner still goes on Ask me as a report card. A done card stays done: only the owner reopens one, to correct a card marked done by mistake. Cards carry no running "notes": what you did is already kept in your own conversation and the office log, and what you keep for good goes in your memory.'
 ].join('\n');
+
+/** A business office's house rules (one with a business folder): rule 9,
+ *  only Research uses the internet, applies there (ship review D3). */
+export const BUSINESS_HOUSE_RULES = `${HOUSE_RULES}\n${RESEARCH_HOUSE_RULE}`;
 
 /**
  * How every agent is told about company knowledge (owner, 2026-09-25): at
@@ -369,7 +378,9 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
  */
 export function researchInstructions(b: PromptBusiness, michael: string, p: PromptPaths): string {
   return [
-    `You are Research, the one team member at ${where(b)} who uses the internet. Teammates and ${michael} send you questions as messages. The app checked each one for private details before it reached you, and it checks every message the same way, so never ask for names, contact details, money or other private details.`,
+    `You are Research, the one team member at ${where(b)} who uses the internet. Teammates and ${michael} send you questions as messages. The app's trust layer reads each one first and may hand you a cleaned or more general version of what was asked; answer the question as you received it, and never ask for names, contact details, money or other private details.`,
+    '',
+    'Your answers pass the same trust layer on their way back, which removes anything that reads like instructions to the reader. Write findings and sources, never instructions.',
     '',
     'You see no office files, task board, memory store or company knowledge, by design: everything you know about a question is in its message. Answer from the public internet, and name each source with a link.',
     '',
@@ -2002,7 +2013,7 @@ export class HiveManager {
       return [
         researchInstructions(business ?? {}, godNameForPrompt || 'Michael', paths),
         '',
-        HOUSE_RULES,
+        BUSINESS_HOUSE_RULES,
         '',
         `Your memory: the app gives you your memory index at the start of each session; procedure files it names are in ${inDir('memory')}. When you finish a question, add at most three short notes to ${inDir('memory', 'inbox.md')}, only for things you would otherwise look up again: a good source for a kind of question, with the date you checked it. Save nothing a teammate told you about the business.`
       ].join('\n');
@@ -2023,7 +2034,7 @@ export class HiveManager {
           ? michaelInstructions(meta.name, b, paths)
           : teamMemberInstructions(meta.name, roleTitle, godNameForPrompt || 'Michael', b, paths),
         '',
-        HOUSE_RULES,
+        BUSINESS_HOUSE_RULES,
         '',
         folderLine,
         memoryRule(inDir('memory', 'inbox.md'), inDir('memory')),
@@ -2097,37 +2108,49 @@ export class HiveManager {
     if (!isSafeMessageId(msg.id) || !isSafeMessageId(toId)) return false;
     const inbox = join(this.agentDir(toId), 'inbox');
     if (!existsSync(inbox)) return false; // unknown recipient — the caller reports it
-    // Only the app writes Research's inbox: each message it delivers there
-    // carries a stamp, and the sweep removes any file without one (eng R2).
-    const out = toId === RESEARCH_ID ? { ...msg, stamp: this.researchStamp(msg.id) } : msg;
+    // Only the trust layer's clean copies reach Research (ship review D2.1):
+    // anything else is refused here too, and what is delivered carries a
+    // content stamp the sweep checks (eng R2).
+    if (toId === RESEARCH_ID && !this.researchCleared.has(msg.id)) {
+      this.appendLog({ kind: 'drop', reason: 'research-unchecked', from: msg.from, id: msg.id });
+      return true;
+    }
+    const out = toId === RESEARCH_ID ? { ...msg, stamp: this.researchStamp(msg) } : msg;
     this.atomicWriteJson(join(inbox, `${msg.id}.json`), out);
     return true;
   }
 
-  // — Research (shared/research.ts, issue #230) —
+  // — Research and its trust layer (shared/research.ts, main/trustLayer.ts, issue #230) —
 
-  /** The privacy check every message to Research passes (main/privacyGuard.ts). */
-  private researchGuard: ((m: { subject?: string; body?: string }) => Promise<GuardVerdict>) | null = null;
-  setResearchGuard(fn: ((m: { subject?: string; body?: string }) => Promise<GuardVerdict>) | null): void {
-    this.researchGuard = fn;
-  }
+  /** The trust layer every message to and from Research passes. */
+  private trustLayer: TrustLayer | null = null;
+  setTrustLayer(layer: TrustLayer | null): void { this.trustLayer = layer; }
+  /** The owner's Research switch (config). Who Research is comes from the app,
+   *  never from a file agents can write (ship review D2.7). */
+  private researchEnabled: () => boolean = () => false;
+  setResearchEnabled(fn: () => boolean): void { this.researchEnabled = fn; }
   /** Checks under way or finished, by the outbox file's content. A message
-   *  waits in its sender's outbox until its check finishes; an app restart
-   *  checks it again. */
-  private guardChecks = new Map<string, { done: boolean; ok?: boolean; reason?: string }>();
+   *  waits in its outbox until its check finishes; an app restart checks it
+   *  again; an entry nobody claims is forgotten after TRUST_CHECK_KEEP_MS. */
+  private trustChecks = new Map<string, { done: boolean; at: number; verdict?: InboundVerdict | OutboundVerdict }>();
+  static readonly TRUST_CHECK_KEEP_MS = 10 * 60_000;
+  /** Ids of clean copies the trust layer produced; only these reach Research. */
+  private researchCleared = new Set<string>();
   private stampKey: Buffer | null = null;
 
-  /** Research while it is on: the reserved id, marked by the app, not archived. */
+  /** Research while it is on: the reserved id, the owner's switch, a live entry. */
   researchOn(): boolean {
     try {
+      if (!this.researchEnabled()) return false;
       const r = this.registry().agents[RESEARCH_ID];
-      return !!r?.isResearch && !r.archived;
+      return !!r && !r.archived;
     } catch { return false; }
   }
 
-  /** The stamp on a message the app delivered to Research. Its key lives in
+  /** The stamp on a message the app delivered to Research: an HMAC of its
+   *  whole content, so a stamped file can't be edited later. The key lives in
    *  the app's private folder, which no agent opens. */
-  private researchStamp(id: string): string {
+  private researchStamp(m: Partial<HiveMessage>): string {
     if (!this.stampKey) {
       const home = this.getHome();
       const file = home ? join(privateRoot(home), 'research-stamp.key') : null;
@@ -2137,88 +2160,168 @@ export class HiveManager {
       if (!this.stampKey || this.stampKey.length < 16) {
         this.stampKey = randomBytes(32);
         if (file) {
-          try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, this.stampKey.toString('hex'), { mode: 0o600 }); } catch { /* in memory only */ }
+          try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, this.stampKey.toString('hex'), { mode: 0o600 }); }
+          catch (e) { console.error('[research] could not save the stamp key; messages waiting for Research at the next start will be sent back', e); }
         }
       }
     }
-    return createHmac('sha256', this.stampKey).update(id).digest('hex');
+    const content = JSON.stringify([m.id, m.from, m.to, m.act, m.subject, m.body, m.conversation, m.in_reply_to, m.created_at]);
+    return createHmac('sha256', this.stampKey).update(content).digest('hex');
   }
 
   /** Remove every file in Research's inbox the app did not deliver, so a
-   *  message written straight into it never skips the privacy check. */
-  private sweepResearchInbox(): void {
-    if (!this.researchOn()) return;
+   *  message written straight into it never skips the trust layer. Its sender,
+   *  when it is a teammate, is told to ask again. */
+  private sweepResearchInbox(on: boolean): void {
+    if (!on) return;
     const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
     if (!existsSync(inbox)) return;
     for (const f of readdirSync(inbox)) {
       if (!f.endsWith('.json')) continue;
       const full = join(inbox, f);
       let ok = false;
+      let m: Partial<HiveMessage> & { stamp?: unknown } = {};
       try {
-        const m = JSON.parse(readFileSync(full, 'utf8')) as { id?: unknown; stamp?: unknown };
-        ok = typeof m.id === 'string' && m.stamp === this.researchStamp(m.id);
+        m = JSON.parse(readFileSync(full, 'utf8')) as Partial<HiveMessage> & { stamp?: unknown };
+        ok = typeof m.id === 'string' && m.stamp === this.researchStamp(m);
       } catch {
         if (this.stillBeingWritten(full)) continue;
       }
       if (ok) continue;
       try { rmSync(full, { force: true }); } catch { /* next tick */ }
       this.appendLog({ kind: 'drop', reason: 'unstamped-research-inbox', file: f });
+      if (typeof m.from === 'string' && m.from !== RESEARCH_ID && this.registry().agents[m.from]) {
+        this.tellSender(m.from, typeof m.id === 'string' ? m.id : null, m.conversation, NOT_SENT_SUBJECT, REFUSAL_UNSURE);
+      }
     }
   }
 
-  /** What happens to a message to Research: pass it on, hold it while its
-   *  check runs, or refuse it with the reason its sender reads. */
-  private researchGate(msg: HiveMessage, partial: Partial<HiveMessage>, raw: string): 'pass' | 'hold' | { reason: string } {
-    if (!this.researchOn()) return { reason: REFUSAL_OFF };
-    if (hasAttachments(partial)) return { reason: REFUSAL_FILES };
-    if (!this.researchGuard) return { reason: REFUSAL_UNSURE };
-    const key = createHash('sha256').update(raw).digest('hex');
-    const c = this.guardChecks.get(key);
+  /** One trust layer note to a sender only (owner, 2026-10-13), in the
+   *  thread of the message it is about. */
+  private tellSender(to: string, aboutId: string | null, conversation: unknown, subject: string, body: string): void {
+    this.routeMessage(this.normalize({
+      to, act: 'inform', subject, body,
+      in_reply_to: aboutId && isSafeMessageId(aboutId) ? aboutId : null,
+      ...(safeConversation(conversation) ? { conversation: conversation as string } : {})
+    }, PRIVACY_CHECK_SENDER));
+  }
+
+  /** Start a check, or read the one under way. `key` is the content hash. */
+  private trustCheck(key: string, start: () => Promise<InboundVerdict | OutboundVerdict>): InboundVerdict | OutboundVerdict | 'hold' {
+    const c = this.trustChecks.get(key);
     if (!c) {
-      this.guardChecks.set(key, { done: false });
-      this.researchGuard({ subject: msg.subject, body: msg.body }).then(
-        (v) => { this.guardChecks.set(key, v.ok ? { done: true, ok: true } : { done: true, ok: false, reason: v.reason }); },
-        () => { this.guardChecks.set(key, { done: true, ok: false, reason: REFUSAL_UNSURE }); }
+      this.trustChecks.set(key, { done: false, at: Date.now() });
+      start().then(
+        (verdict) => { this.trustChecks.set(key, { done: true, at: Date.now(), verdict }); },
+        () => { this.trustChecks.set(key, { done: true, at: Date.now(), verdict: { decision: 'deny', reason: REFUSAL_UNSURE } }); }
       );
       return 'hold';
     }
-    if (!c.done) return 'hold';
-    this.guardChecks.delete(key);
-    return c.ok ? 'pass' : { reason: c.reason ?? REFUSAL_UNSURE };
+    if (!c.done || !c.verdict) return 'hold';
+    this.trustChecks.delete(key);
+    return c.verdict;
   }
 
-  /** A refused message goes back to its sender only (owner, 2026-10-13). */
-  private refuseResearchMessage(senderId: string, msg: HiveMessage, reason: string): void {
-    this.appendLog({ kind: 'privacy-refused', from: senderId, id: msg.id });
-    this.routeMessage(this.normalize({ to: senderId, act: 'inform', subject: NOT_SENT_SUBJECT, body: reason, in_reply_to: msg.id }, PRIVACY_CHECK_SENDER));
+  private pruneTrustChecks(now = Date.now()): void {
+    for (const [k, c] of this.trustChecks) if (now - c.at > HiveManager.TRUST_CHECK_KEEP_MS) this.trustChecks.delete(k);
   }
 
-  /** Research's answers are outside text (eng A3): each carries a label, and
-   *  one with classic injection markers is flagged to Michael only. */
-  private labelResearchReply(msg: HiveMessage): void {
-    if (typeof msg.body !== 'string') return;
-    const raw = msg.body;
-    msg.body = `${RESEARCH_REPLY_LABEL}\n\n${raw}`;
-    if (!looksLikeInjection(`${msg.subject}\n${raw}`)) return;
-    try {
-      const reg = this.registry();
-      const godId = reg.godId ?? 'god';
+  /** A teammate's or Michael's message to Research, from its outbox. Held
+   *  until the trust layer answers; then the clean copy goes to Research and the
+   *  sender hears what was asked, or the sender alone hears why not. */
+  private researchInboundGate(senderId: string, msg: HiveMessage, partial: Partial<HiveMessage>, raw: string, on: boolean): 'hold' | 'denied' | 'sent' {
+    const deny = (reason: string): 'denied' => {
+      this.appendLog({ kind: 'trust-denied', from: senderId, id: msg.id });
+      this.tellSender(senderId, msg.id, msg.conversation, NOT_SENT_SUBJECT, reason);
+      return 'denied';
+    };
+    if (!on) return deny(REFUSAL_OFF);
+    if (hasAttachments(partial)) return deny(REFUSAL_FILES);
+    if (!this.trustLayer) return deny(REFUSAL_UNSURE);
+    const layer = this.trustLayer;
+    const v = this.trustCheck(`in:${createHash('sha256').update(raw).digest('hex')}`, () => layer.inbound({ subject: partial.subject, body: partial.body }));
+    if (v === 'hold') return 'hold';
+    if (v.decision === 'deny') return deny(v.reason);
+    this.deliverToResearch(senderId, msg, v.subject, v.body);
+    if (v.decision === 'clean') this.tellSender(senderId, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body));
+    return 'sent';
+  }
+
+  /** A message the app itself or the owner sends Research (a card reminder,
+   *  an owner answer, a house rule note): it passes the same trust layer, in
+   *  the background, before Research sees it (ship review D2.1). */
+  private queueForResearch(msg: HiveMessage): void {
+    const fromAgent = msg.from !== RESEARCH_ID && !!this.registry().agents[msg.from];
+    if (!this.researchOn() || !this.trustLayer) {
+      this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, reason: this.trustLayer ? 'research-off' : 'no-layer' });
+      if (fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, this.trustLayer ? REFUSAL_OFF : REFUSAL_UNSURE);
+      return;
+    }
+    this.trustLayer.inbound({ subject: msg.subject, body: msg.body }).then((v) => {
+      if (v.decision === 'deny') {
+        this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id });
+        if (fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, NOT_SENT_SUBJECT, v.reason);
+        return;
+      }
+      this.deliverToResearch(msg.from, msg, v.subject, v.body);
+      if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body));
+      this.commit('hive: trust layer delivered to research');
+    }, () => { this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, reason: 'failed' }); });
+  }
+
+  /** The clean copy Research receives: built only from what the trust layer
+   *  returned, with an id, time and thread the app chose. */
+  private deliverToResearch(fromId: string, orig: HiveMessage, subject: string, body: string): void {
+    const act: MessageAct = orig.act === 'request' || orig.act === 'inform' ? orig.act : 'query';
+    const clean = this.normalize({
+      to: RESEARCH_ID, act, subject, body,
+      ...(safeConversation(orig.conversation) ? { conversation: orig.conversation } : {})
+    }, fromId);
+    this.researchCleared.add(clean.id);
+    try { this.routeMessage(clean); } finally { this.researchCleared.delete(clean.id); }
+  }
+
+  /** Research's own message, from its outbox: the trust layer cleans it of
+   *  instructions aimed at agents before a teammate reads it; it arrives
+   *  labelled, and a reply that plainly tries to steer its reader is flagged to
+   *  Michael only (ship review D2.9, owner rule 2026-10-12). Applies whether or
+   *  not Research is on now, so a late reply is treated the same. */
+  private researchOutboundGate(msg: HiveMessage, partial: Partial<HiveMessage>, raw: string): 'hold' | 'denied' | 'sent' {
+    const reg = this.registry();
+    const godId = reg.godId ?? 'god';
+    const recipient = typeof msg.to === 'string' && reg.agents[msg.to] ? msg.to : null;
+    const deny = (): 'denied' => {
+      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: msg.to, id: msg.id });
+      if (recipient && recipient !== RESEARCH_ID) this.tellSender(recipient, null, msg.conversation, ANSWER_UNCHECKED_SUBJECT, ANSWER_UNCHECKED);
+      return 'denied';
+    };
+    if (!this.trustLayer) return deny();
+    const layer = this.trustLayer;
+    const v = this.trustCheck(`out:${createHash('sha256').update(raw).digest('hex')}`, () => layer.outbound({ subject: partial.subject, body: partial.body }));
+    if (v === 'hold') return 'hold';
+    if (v.decision === 'deny') return deny();
+    msg.subject = v.subject;
+    msg.body = `${RESEARCH_REPLY_LABEL}\n\n${v.body}`;
+    const flagged = ('flagged' in v && v.flagged) || looksLikeInjection(`${v.subject}\n${v.body}`);
+    this.routeMessage(msg);
+    if (flagged) {
       const toName = reg.agents[msg.to]?.name ?? msg.to;
       this.appendLog({ kind: 'research-reply-flagged', to: msg.to, id: msg.id });
       this.deliver(this.normalize({
         to: godId,
         act: 'inform',
         subject: 'Research answer may carry web instructions',
-        body: `Research's answer to ${toName} ("${msg.subject.slice(0, 80)}") holds text that reads like instructions from a web page. It was delivered labelled as information only. Look at it if the work matters.`
+        body: `Research's answer to ${toName} ("${msg.subject.slice(0, 80)}") read like it was trying to steer its reader. The trust layer cleaned it and it was delivered labelled as information only. Look at it if the work matters.`
       }, 'system'), godId);
-    } catch { /* the label still holds */ }
+    }
+    return 'sent';
   }
 
   /** Asks waiting for Research: delivered and not yet read, plus those in a
    *  check. Turning Research off sends these back (design review D7). */
   researchWaiting(): number {
     let n = 0;
-    for (const c of this.guardChecks.values()) if (!c.done) n++;
+    for (const [k, c] of this.trustChecks) if (k.startsWith('in:') && !c.done) n++;
     const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
     try { n += readdirSync(inbox).filter((f) => f.endsWith('.json')).length; } catch { /* none */ }
     return n;
@@ -2237,7 +2340,7 @@ export class HiveManager {
       try {
         const m = JSON.parse(readFileSync(full, 'utf8')) as Partial<HiveMessage>;
         if (typeof m.from === 'string' && agents[m.from] && m.from !== RESEARCH_ID) {
-          this.routeMessage(this.normalize({ to: m.from, act: 'inform', subject: NOT_SENT_SUBJECT, body: REFUSAL_OFF, in_reply_to: typeof m.id === 'string' ? m.id : null }, PRIVACY_CHECK_SENDER));
+          this.tellSender(m.from, typeof m.id === 'string' ? m.id : null, m.conversation, NOT_SENT_SUBJECT, REFUSAL_OFF);
           n++;
         }
       } catch { /* unreadable: removed below */ }
@@ -2257,11 +2360,13 @@ export class HiveManager {
   tellHouseRules(agentId: string, resumed: boolean): string[] {
     const home = this.getHome();
     const agent = this.registry().agents[agentId];
-    if (!home || !this.root() || !agent || agent.isAssistant) return [];
+    // Research reads its rules in its start instructions; a notice would cost
+    // a trust layer check at every start.
+    if (!home || !this.root() || !agent || agent.isAssistant || agentId === RESEARCH_ID) return [];
     const file = join(privateRoot(home), 'house-rules-seen.json');
     let seenAll: Record<string, string[]> = {};
     try { seenAll = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string[]>; } catch { /* first start */ }
-    const { tell, keys } = houseRulesToTell(HOUSE_RULES, Array.isArray(seenAll[agentId]) ? seenAll[agentId] : undefined, resumed);
+    const { tell, keys } = houseRulesToTell(this.businessOffice ? BUSINESS_HOUSE_RULES : HOUSE_RULES, Array.isArray(seenAll[agentId]) ? seenAll[agentId] : undefined, resumed);
     if (tell.length) {
       try {
         const msg = this.send({ to: agentId, act: 'inform', subject: HOUSE_RULES_CHANGED_SUBJECT, body: houseRulesNoticeBody(tell) }, 'human');
@@ -2324,7 +2429,7 @@ export class HiveManager {
     // The scheduler, the heartbeat and the mail app send; they don't read. A
     // reply to one is dropped quietly instead of bouncing back to Michael as
     // undeliverable (an approval's "send it now" would otherwise bounce).
-    if (msg.to === 'scheduler' || msg.to === 'heartbeat' || msg.to === 'mail') {
+    if (msg.to === 'scheduler' || msg.to === 'heartbeat' || msg.to === 'mail' || msg.to === PRIVACY_CHECK_SENDER) {
       this.appendLog({ kind: 'drop', reason: 'reply-to-system-sender', from: msg.from, to: msg.to, id: msg.id });
       return;
     }
@@ -2352,6 +2457,13 @@ export class HiveManager {
     if (toOwner && !msg.in_reply_to && !CLOSING_COMPLETE_RE.test(msg.subject ?? '') && this.ownerQuestionsCache.length) {
       this.appendLog({ kind: 'owner-reply-unmatched', id: msg.id });
       this.deliver(this.normalize({ to: godId, act: 'inform', ...unmatchedReplyNote(this.ownerQuestionsCache) }, 'system'), godId);
+    }
+    // Anything else for Research (an app note, an owner answer, a send()) goes
+    // through the trust layer first, in the background (ship review D2.1).
+    if (addressedToResearch(msg.to) && msg.from !== RESEARCH_ID && !this.researchCleared.has(msg.id)) {
+      this.appendLog({ kind: 'message-held-for-trust-layer', from: msg.from, id: msg.id });
+      this.queueForResearch({ ...msg, to: RESEARCH_ID });
+      return;
     }
     const targets = msg.to === 'broadcast'
       // The roster for fan-out is the ACTIVE registry: skip the send-only prep
@@ -2554,7 +2666,9 @@ export class HiveManager {
     if (!root) return 0;
     const agentsDir = join(root, 'agents');
     if (!existsSync(agentsDir)) return 0;
-    try { this.sweepResearchInbox(); } catch { /* next tick */ }
+    const researchOn = this.researchOn();
+    try { this.sweepResearchInbox(researchOn); } catch { /* next tick */ }
+    this.pruneTrustChecks();
     let routed = 0;
     for (const id of readdirSync(agentsDir)) {
       // agents/human is the owner's folder, written only by the app; a file an
@@ -2616,21 +2730,18 @@ export class HiveManager {
             routed++;
             continue;
           }
-          // A message to Research waits for the privacy check (shared/research.ts).
-          if (id !== RESEARCH_ID && addressedToResearch(partial.to)) {
-            const gate = this.researchGate(msg, partial, raw);
+          // Everything to and from Research passes its trust layer first.
+          const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to);
+          if (toResearch || id === RESEARCH_ID) {
+            const gate = toResearch ? this.researchInboundGate(id, msg, partial, raw, researchOn) : this.researchOutboundGate(msg, partial, raw);
             if (gate === 'hold') continue;
-            if (gate !== 'pass') {
-              this.refuseResearchMessage(id, msg, gate.reason);
-              // Kept apart from .sent, so nothing reads it as sent.
-              mkdirSync(join(outbox, '.refused'), { recursive: true });
-              this.archiveOutboxFile(full, join(outbox, '.refused'), f);
-              routed++;
-              continue;
-            }
-            msg.to = RESEARCH_ID;
+            // A denied original is kept apart from .sent, so nothing reads it as sent.
+            const dest = join(outbox, gate === 'denied' ? '.refused' : '.sent');
+            mkdirSync(dest, { recursive: true });
+            this.archiveOutboxFile(full, dest, f);
+            routed++;
+            continue;
           }
-          if (id === RESEARCH_ID && this.researchOn()) this.labelResearchReply(msg);
           this.routeMessage(msg);
           // Repaired text replaces the original in place, then one rename
           // archives it, so a failed step can never deliver it twice.
@@ -2854,6 +2965,12 @@ export class HiveManager {
    */
   rememberOwnerAnswer(id: string, task: string, q: string, a: string): boolean {
     if (!/^[\w-]+$/.test(id) || !this.root()) return false;
+    // Never written straight into Research's memory: it reaches Research as a
+    // message through the trust layer, like everything else (ship review D2.2).
+    if (id === RESEARCH_ID) {
+      this.send({ to: RESEARCH_ID, act: 'inform', subject: `The owner answered: ${task.slice(0, 120)}`, body: `Q: ${q}\nA: ${a}` }, 'human');
+      return true;
+    }
     const dir = this.agentDir(id);
     if (!existsSync(dir)) return false;
     const line = (v: string) => v.replace(/\s+/g, ' ').trim();
@@ -2873,6 +2990,10 @@ export class HiveManager {
    */
   rememberOwnerNote(id: string, line: string): boolean {
     if (!/^[\w-]+$/.test(id) || !this.root()) return false;
+    if (id === RESEARCH_ID) {
+      this.send({ to: RESEARCH_ID, act: 'inform', subject: 'A note from the owner', body: line }, 'human');
+      return true;
+    }
     const dir = this.agentDir(id);
     if (!existsSync(dir)) return false;
     try {

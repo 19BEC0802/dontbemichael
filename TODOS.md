@@ -497,6 +497,18 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 **Priority:** P2
 **Depends on:** None
 
+### Gate web tools for members on other engines (issue #230 follow-up)
+
+**What:** Members that run on Codex, OpenCode, Crush or another bridged engine keep their own web tools and shell network; the Research rule (only Research uses the internet) reaches Claude members only.
+
+**Why:** An owner who puts a member on another engine may believe that member is fenced in like the rest of a business office.
+
+**Context:** Ship review 2026-10-13, decision D4: Settings, Research & privacy, names those members with an info icon. Fix per engine: map each bridged provider's web tool names into the hook's gate where its bridge posts PreToolUse, and give its shell a network rule where its sandbox allows one; otherwise refuse web for that engine in a business office.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** nothing.
+
 ### Research agent and data privacy guard (issue #230)
 
 **What:** No agent reaches the internet except an optional Research agent (off by default, turned on in Settings). Members ask Research through the hive; a guard checks every message to Research against the owner's data classes (patterns plus a quick no-tools AI check, fails closed) and returns refused ones to the sender only. A Data privacy page in Settings lists the classes, seeded with safe classes Allowed and sensitive ones Private.

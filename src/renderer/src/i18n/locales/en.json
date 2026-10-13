@@ -2268,7 +2268,6 @@
     "allowed": "Allowed",
     "private": "Private",
     "alwaysPrivate": "Always private",
-    "lockedLabel": "{{name}}, always private",
     "teamSummary": "Looks things up on the internet for the team, and sees no office data.",
     "teamTag": "uses the internet",
     "privacyCheck": "Privacy check",
@@ -2324,6 +2323,9 @@
         "name": "Passwords and keys",
         "tip": "Passwords, API keys, tokens. Never sent, whatever you choose."
       }
-    }
+    },
+    "otherEngines": "{{names}} run on another engine, so these rules don't reach them yet.",
+    "otherEnginesLabel": "Members on other engines",
+    "otherEnginesTip": "The app can fence in Claude agents only. A member on another engine keeps its own web tools and shell."
   }
 }

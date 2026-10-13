@@ -1,9 +1,11 @@
 /**
- * The office break (issue 124). On a smaller Claude plan the team reaches its
- * usage limit during the day. Claude Code says so with a StopFailure hook whose
- * `error` is `rate_limit`, and its status line carries when each limit window
- * resets (`rate_limits.<window>.resets_at`, epoch seconds). This class turns
- * those signals into one office state:
+ * The office stop (issue 124, docs/designs/office-stopped-account.md). Claude
+ * Code reports a turn cut off by a StopFailure hook; three of its errors stop
+ * the office, each a reason: `limit` (the plan's usage limit, `rate_limit`),
+ * `credit` (no credit, `billing_error`) and `signin` (a sign in or API key that
+ * no longer works, `authentication_failed`). For the plan limit its status line
+ * carries when each window resets (`rate_limits.<window>.resets_at`, epoch
+ * seconds). This class turns those signals into one office state:
  *
  *  - waiting: the limit is reached. Nothing types into a Claude terminal.
  *    Schedules still run as configured: their jobs wait in the inboxes.
@@ -14,8 +16,10 @@
  *    reached (while checking, any finished turn). Team members who were cut
  *    off are told to carry on, and the waiting inbox mail is delivered as usual.
  *
- * A limit hit while checking goes back to waiting. With no reset time known,
- * the app checks again every RETRY_MS. The state is saved, so a restart during
+ * A limit hit while checking goes back to waiting (`again`). With no reset time
+ * known (credit and sign in have none), the app checks again every RETRY_MS,
+ * except a `manual` wait (an API key that stopped working), which only the
+ * owner's ownerRetry() ends. The state is saved, so a restart during
  * a break still shows it. Pure apart from the injected clock and storage.
  */
 import type { OfficeBreakView, OfficeStopReason } from '../shared/officeBreak';

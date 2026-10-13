@@ -36,10 +36,10 @@ export function webAccess(isResearch: boolean, researchOn: boolean, tool: string
 /** Claude Code's `sandbox.network`. */
 export interface SandboxNetwork { allowedDomains: string[]; strictAllowlist: true }
 
-/** The shell network settings for a spawn: none for Research (it uses the
- *  internet) and for Michael (he runs outside the sandbox); for every other
- *  team member an empty strict list, which refuses every host (verified live). */
-export function sandboxNetwork(isResearch: boolean, isGod: boolean): SandboxNetwork | undefined {
-  if (isResearch || isGod) return undefined;
+/** The shell network settings for a team member in a business office: an
+ *  empty strict list, which refuses every host (verified live). None for
+ *  Michael, who runs outside the sandbox; Research's spawn sets none. */
+export function sandboxNetwork(isGod: boolean): SandboxNetwork | undefined {
+  if (isGod) return undefined;
   return { allowedDomains: [], strictAllowlist: true };
 }

@@ -2268,7 +2268,6 @@
     "allowed": "允许",
     "private": "隐私",
     "alwaysPrivate": "始终隐私",
-    "lockedLabel": "{{name}}，始终隐私",
     "teamSummary": "为团队在互联网上查找信息，看不到任何办公室数据。",
     "teamTag": "使用互联网",
     "privacyCheck": "隐私检查",
@@ -2324,6 +2323,9 @@
         "name": "密码与密钥",
         "tip": "密码、API 密钥、令牌。无论你如何选择，都不会发送。"
       }
-    }
+    },
+    "otherEngines": "{{names}} 使用其他引擎，因此这些规则暂时无法约束他们。",
+    "otherEnginesLabel": "使用其他引擎的成员",
+    "otherEnginesTip": "应用只能约束 Claude 代理。使用其他引擎的成员仍保留自己的网页工具和终端。"
   }
 }

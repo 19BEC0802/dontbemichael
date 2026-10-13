@@ -172,17 +172,30 @@ export function folderDecision(
  * its own folders (hive.sandboxWritableDirs), and the hook judges its file
  * tools (researchFolderDecision), since a deny rule can't be opened again.
  */
-export function researchFolderPolicy(walled: string[], own: string[]): AgentFolderPolicy {
+export function researchFolderPolicy(walled: string[], own: string[], home?: string): AgentFolderPolicy {
   const clean = (l: string[]) => Array.from(new Set(l.filter((f) => !!f && isAbsolute(f)).map((f) => resolve(f))));
-  return { sandbox: { denyWrite: [], denyRead: clean(walled), allowRead: clean(own) }, deny: [], sandboxOnly: true };
+  // A second layer under the hook's write allowlist: permission rules can't
+  // reopen a folder they deny, so they name the riskiest places outside its
+  // own folders instead, where a write would reach other agents or the owner's
+  // shell (ship review D2.6).
+  const risky = home && isAbsolute(home)
+    ? ['.claude', '.config', '.ssh', 'Library'].map((d) => rule('Edit', join(home, d)))
+      .concat(['.zshrc', '.zprofile', '.zshenv', '.bashrc', '.bash_profile', '.profile'].map((f) => `Edit(/${resolve(home, f).replace(/\\/g, '/').replace(/^\/?/, '/')})`))
+    : [];
+  return { sandbox: { denyWrite: [], denyRead: clean(walled), allowRead: clean(own) }, deny: risky, sandboxOnly: true };
 }
 
-/** One file tool call by Research: inside its own folders, or outside every
- *  wall. */
+/** One file tool call by Research: it writes only its own folders (an
+ *  allowlist, ship review D2.6), and reads its own folders or anything outside
+ *  every wall (the home folder is walled, D2.5). */
 export function researchFolderDecision(walled: string[], own: string[], tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
-  if (!FOLDER_WRITE_TOOLS.has(tool) && !FOLDER_READ_TOOLS.has(tool)) return { deny: false };
+  const writes = FOLDER_WRITE_TOOLS.has(tool);
+  if (!writes && !FOLDER_READ_TOOLS.has(tool)) return { deny: false };
   const inside = insideFn(caseInsensitive);
   if (own.some((f) => f && inside(f, target))) return { deny: false };
+  if (writes) {
+    return { deny: true, reason: 'You save files only in your own desk and notes folder. Put what you write there.' };
+  }
   if (walled.some((f) => f && inside(f, target))) {
     return { deny: true, reason: 'You work only from the internet and your own folder: the office\'s files, task board and memory are kept from you on purpose. Everything you need is in the message you were sent.' };
   }

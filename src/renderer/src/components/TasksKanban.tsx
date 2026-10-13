@@ -167,11 +167,8 @@ export function TasksKanban() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('kanban.search')}
           aria-label={t('kanban.search')}
-          style={{
-            borderRadius: 'var(--cth-r-md)', flex: '0 1 260px', minWidth: 140, height: 30, padding: '0 10px',
-            background: 'var(--cth-card)', color: 'var(--cth-ink)', border: 'none',
-            boxShadow: 'inset 0 0 0 1px var(--cth-line-2)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5
-          }}
+          className="cth-input"
+          style={{ borderRadius: 'var(--cth-r-md)', flex: '0 1 260px', minWidth: 140, height: 30, padding: '0 10px', fontSize: 12.5 }}
         />
         <select
           value={member}
@@ -180,7 +177,7 @@ export function TasksKanban() {
           style={{
             borderRadius: 'var(--cth-r-md)', height: 30, padding: '0 8px', maxWidth: 220,
             background: 'var(--cth-card)', color: 'var(--cth-ink)', border: 'none',
-            boxShadow: 'inset 0 0 0 1px var(--cth-line-2)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5, cursor: 'pointer'
+            boxShadow: 'inset 0 0 0 1px var(--cth-line-input)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5, cursor: 'pointer'
           }}
         >
           <option value="">{t('kanban.everyone')}</option>
@@ -188,8 +185,8 @@ export function TasksKanban() {
         </select>
         {filtering && (
           <button type="button" onClick={() => { setQuery(''); setMember(''); }} style={{
-            padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer',
-            fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-3)'
+            minHeight: 28, padding: '0 8px', border: 'none', borderRadius: 'var(--cth-r-md)', background: 'transparent', cursor: 'pointer',
+            fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-2)'
           }}>{t('common.clear')}</button>
         )}
       </div>

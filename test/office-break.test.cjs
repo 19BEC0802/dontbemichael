@@ -359,3 +359,15 @@ test('the office says the real cause to the owner, Michael and the team, and res
     assert.doesNotMatch(JSON.stringify(j.officeStop), /[–—]| - /, `${loc}: no dashes`);
   }
 });
+
+test('a new key that fails again waits for the owner again, with no automatic check', () => {
+  // Value: protects=a key that still does not work never reads as fixed or loops on rechecks; fails_when=the second failure starts an automatic check or clears manual; why_new=testing review (ship 2026-10-13); seam=none; no_claim=the Claude call itself (signals are fed in)
+  const c = clock();
+  const b = new OfficeBreak(memoryStore().store, c.now);
+  assert.equal(b.limitReached('god', 'signin', false), 'started');
+  assert.equal(b.ownerRetry(), true, 'a saved key checks');
+  assert.equal(b.limitReached('god', 'signin', false), 'again');
+  assert.equal(b.current().manual, true);
+  c.t = T0 + 10 * RETRY_MS;
+  assert.equal(b.tick(), null, 'only the owner ends it');
+});

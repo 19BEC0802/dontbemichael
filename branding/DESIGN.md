@@ -891,6 +891,10 @@ a small "Fix" coral pill that opens Settings, Connections, Mailboxes.
   whose owner answer Michael has not closed reads "With Michael" and how long, then
   "Michael hasn't moved this" after one working day of office hours; a Blocked card with
   nothing asked reads "Nothing asked". Done shows the last 5 and "N more".
+- Find a card (issue 158): one row above the columns, a search field (`cth-input`, 30 px,
+  up to 260 px, placeholder "Search tasks") and a team member select ("Everyone" first,
+  `line-input` boundary, 30 px). While either is set, a quiet Clear (28 px target, `ink-2`)
+  follows them, each column counts only matching cards, and Done unfolds in full.
 
 ### 7.21 Task detail (TaskDetailOverlay)
 
@@ -1073,8 +1077,14 @@ hairline and "What your team may send to Research" with an info icon and the com
 allowed, 8 private"); while Research is off, "Used when Research is on." in `ink-3`. Twelve 40 px rows
 in a fixed order, never re-sorted: the class name, an info icon with its examples, and the Sending
 style segmented control [Allowed, Private] (a radio group named by the class); Passwords and keys
-shows a 12 px lock and "Always private" instead. The classes save with the footer Save. Research's
-Access tab shows one `ink-3` line (no mailboxes, connectors or schedules) and a link here.
+shows a 12 px lock and "Always private" instead. The classes save with the footer Save. When a team
+member runs on another engine, one `ink-3` line under the classes names them ("Kelly run on another
+engine, so these rules don't reach them yet.") with an info icon. The send heading is a sentence
+(`t-ui` 600, `ink-2`), not a caps label. The section shows only in a business office (one with a
+business folder): other offices keep the internet. Research's Access tab shows one `ink-3` line (no
+mailboxes, connectors or schedules) and a link here. Every message to Research passes its trust
+layer: a sender whose question was cleaned gets "Sent to Research as" from Privacy check in its
+Messages, showing what Research was asked.
 
 ---
 
