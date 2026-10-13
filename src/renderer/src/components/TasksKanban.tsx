@@ -13,7 +13,7 @@ import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 export { openQuestion, openQuestions, waitsOnHuman, parseTasks, type HiveTask, type HumanQA } from './hiveTasks';
 import { refreshNeedsYou, updateNeedsYouTasks, useNeedsYou } from '@/shell/useNeedsYou';
-import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus, nextAtLabel } from './hiveTasks';
+import { resultHeadline, waitsOnHuman, type HiveTask, type TaskStatus, nextAtLabel, filterActive, taskMatches } from './hiveTasks';
 import { FileText, useAskFileChecks } from './FileChip';
 import { blockedWithNothingAsked, michaelCardState, type WorkHours } from '@shared/ownerRequests';
 import { isAnswered, isWithdrawn } from '@shared/askMeRouting';
@@ -122,6 +122,16 @@ export function TasksKanban() {
       : undefined;
 
   const [showAllDone, setShowAllDone] = useState(false);
+  // Search and one team member (issue 158). While either is set every match
+  // shows, Done included, and the counts are of the matches.
+  const [query, setQuery] = useState('');
+  const [member, setMember] = useState('');
+  const filter = { query, assignee: member };
+  const filtering = filterActive(filter);
+  const shown = filtering ? tasks.filter((x) => taskMatches(x, filter)) : tasks;
+  const members = [...new Set(tasks.map((x) => x.assignee).filter((a): a is string => !!a))]
+    .map((id) => ({ id, name: nameFor(id) ?? id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', padding: '18px 24px 0' }}>
       {/* Header (DESIGN.md 7.20): the board's counts, and why there is no add
@@ -138,7 +148,7 @@ export function TasksKanban() {
           }}>
             <i style={{ width: 6, height: 6, borderRadius: 2, background: col.accent, display: 'block' }} />
             {t(col.labelKey)}
-            <b style={{ fontFamily: 'var(--cth-font-mono)', fontWeight: 600 }}>{tasks.filter((x) => x.status === col.key).length}</b>
+            <b style={{ fontFamily: 'var(--cth-font-mono)', fontWeight: 600 }}>{shown.filter((x) => x.status === col.key).length}</b>
           </span>
         ))}
         <span style={{ marginInlineStart: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--cth-ink-3)' }}>
@@ -149,12 +159,48 @@ export function TasksKanban() {
         </span>
       </div>
 
+      {/* Find a card: search and one team member (issue 158). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('kanban.search')}
+          aria-label={t('kanban.search')}
+          style={{
+            borderRadius: 'var(--cth-r-md)', flex: '0 1 260px', minWidth: 140, height: 30, padding: '0 10px',
+            background: 'var(--cth-card)', color: 'var(--cth-ink)', border: 'none',
+            boxShadow: 'inset 0 0 0 1px var(--cth-line-2)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5
+          }}
+        />
+        <select
+          value={member}
+          onChange={(e) => setMember(e.target.value)}
+          aria-label={t('kanban.member')}
+          style={{
+            borderRadius: 'var(--cth-r-md)', height: 30, padding: '0 8px', maxWidth: 220,
+            background: 'var(--cth-card)', color: 'var(--cth-ink)', border: 'none',
+            boxShadow: 'inset 0 0 0 1px var(--cth-line-2)', fontFamily: 'var(--cth-font-ui)', fontSize: 12.5, cursor: 'pointer'
+          }}
+        >
+          <option value="">{t('kanban.everyone')}</option>
+          {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        {filtering && (
+          <button type="button" onClick={() => { setQuery(''); setMember(''); }} style={{
+            padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer',
+            fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-3)'
+          }}>{t('common.clear')}</button>
+        )}
+      </div>
+
       {/* Columns */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 8 }}>
         {COLUMNS.map((col) => {
-          const all = tasks.filter((x) => x.status === col.key);
+          const all = shown.filter((x) => x.status === col.key);
           // Done reads newest first, folded or not (it is kept in creation order).
-          const cards = col.key === 'done' ? (showAllDone ? [...all].reverse() : all.slice(-DONE_SHOWN).reverse()) : all;
+          // A filter shows every match, so an old Done card can be found.
+          const cards = col.key === 'done' ? (showAllDone || filtering ? [...all].reverse() : all.slice(-DONE_SHOWN).reverse()) : all;
           return (
             <div key={col.key} style={{
               flex: '1 1 0', minWidth: 200, display: 'flex', flexDirection: 'column', borderRadius: 'var(--cth-r-xl)',
@@ -183,7 +229,7 @@ export function TasksKanban() {
                     onDismiss={() => dismissTask(x.id)}
                   />
                 ))}
-                {col.key === 'done' && all.length > DONE_SHOWN && (
+                {col.key === 'done' && !filtering && all.length > DONE_SHOWN && (
                   <button onClick={() => setShowAllDone((v) => !v)} style={{
                     alignSelf: 'flex-start', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer',
                     fontFamily: 'var(--cth-font-ui)', fontSize: 11.5, color: 'var(--cth-ink-3)'

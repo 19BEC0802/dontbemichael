@@ -1480,6 +1480,9 @@
     "edit": "edit"
   },
   "kanban": {
+    "search": "Search tasks",
+    "everyone": "Everyone",
+    "member": "Team member",
     "count": "{{count}} tasks",
     "newWorkHint": "New work goes through {{godName}}",
     "colTodo": "To do",

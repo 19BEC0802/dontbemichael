@@ -1480,6 +1480,9 @@
     "edit": "编辑"
   },
   "kanban": {
+    "search": "搜索任务",
+    "everyone": "所有人",
+    "member": "团队成员",
     "count": "{{count}} 项任务",
     "newWorkHint": "新工作交由 {{godName}} 分派",
     "colTodo": "待办",
