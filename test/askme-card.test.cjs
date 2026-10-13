@@ -186,6 +186,14 @@ test('askTitle never throws on agent-written data, stays fast, and keeps readabl
   assert.equal(askTitle('Review Q3_2026_budget_final export'), 'Review Q3_2026_budget_final export');
   assert.equal(askTitle('Sign the lease (Suite 100)'), 'Sign the lease (Suite 100)');
   assert.equal(askTitle('Refund for Northwind Cafe (#4471, 30 Sep)'), 'Refund for Northwind Cafe');
+  // A word that only starts like a month is part of the name, not a date.
+  assert.equal(askTitle('Approve ad spend (3 marketing campaigns)'), 'Approve ad spend (3 marketing campaigns)');
+  assert.equal(askTitle('Hire help (2 junior designers)'), 'Hire help (2 junior designers)');
+  assert.equal(askTitle('Pick a supplier (Decision 2 of 3)'), 'Pick a supplier (Decision 2 of 3)');
+  // Full and dotted month names are still dates.
+  assert.equal(askTitle('Renew the lease (March 3)'), 'Renew the lease');
+  assert.equal(askTitle('Send the quote (Sept. 30)'), 'Send the quote');
+  assert.equal(askTitle('Pay the invoice (3 Sep.)'), 'Pay the invoice');
   const tab = read('src/renderer/src/components/AskMeTab.tsx');
   assert.match(tab, /const who = nameFor\(typeof t\.assignee === 'string' \? t\.assignee : undefined\);/);
 });
