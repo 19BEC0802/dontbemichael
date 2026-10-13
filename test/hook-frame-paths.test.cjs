@@ -201,6 +201,7 @@ test('every agent gets a scratch folder of its own, a long or odd id included', 
   assert.match(name, /^[\w-]{1,64}$/);
   assert.notEqual(name, F.agentTmpName(long + 'z'));
   for (const odd of ['..', '../god', 'a/b']) assert.match(F.agentTmpName(odd), /^[\w-]+$/, odd);
+  for (const dev of ['con', 'NUL', 'com1']) assert.notEqual(F.agentTmpName(dev), dev, `${dev}: a Windows device name`);
   if (process.platform !== 'win32') {
     const home = '/Users/x/.dbm';
     assert.equal(F.agentTmpDecision(home, long, false, 'Read', `${home}/agent-tmp/${name}/a`, true).deny, false, 'its own');

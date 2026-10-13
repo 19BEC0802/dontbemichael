@@ -2371,7 +2371,7 @@ export class HiveManager {
     let rows: Array<{ id: string; from: string; subject: string }> = [];
     try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) rows = r; } catch { /* none yet */ }
     rows = rows.filter((r) => r && r.id !== msg.id);
-    if (add) rows.push({ id: msg.id, from: msg.from, subject: String(msg.subject ?? '').slice(0, 80) });
+    if (add) { rows.push({ id: msg.id, from: msg.from, subject: String(msg.subject ?? '').slice(0, 80) }); this.researchPendingMine.add(msg.id); }
     try { mkdirSync(privateRoot(home), { recursive: true }); this.atomicWriteJson(file, rows); } catch { /* best effort */ }
   }
 
@@ -2391,28 +2391,42 @@ export class HiveManager {
     if (!this.researchPendingMoved) {
       let earlier: typeof rows = [];
       try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) earlier = r; } catch { /* none */ }
-      // Each note once, by its id, however often a move was cut short.
+      // Each note once, by its id, however often a move was cut short; never
+      // one this run is still checking.
       const seen = new Set(rows.map((r) => r?.id));
-      rows = [...rows, ...earlier.filter((r) => r && !seen.has(r.id))];
+      rows = [...rows, ...earlier.filter((r) => r && !seen.has(r.id) && !this.researchPendingMine.has(r.id))];
+      // Told whether or not the move works; a failed one is tried again.
       try {
         if (rows.length) this.atomicWriteJson(lost, rows);
         rmSync(file, { force: true });
         this.researchPendingMoved = true;
-      } catch { return; }
+      } catch { /* next pass */ }
     }
     const godId = this.registry().godId ?? 'god';
-    const left = rows.filter((r) => r && (r.from === 'human' || r.from === 'system') && !this.deliver(this.normalize({
-      to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-      body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
-    }, PRIVACY_CHECK_SENDER), godId));
-    try {
-      if (left.length) { this.atomicWriteJson(lost, left); return; }
-      rmSync(lost, { force: true });
-    } catch { return; }
+    // Each notice goes once, even if the list can't be rewritten after it
+    // (verification of the Codex fix: a stuck file sent it every pass).
+    const left = rows.filter((r) => {
+      if (!r || (r.from !== 'human' && r.from !== 'system') || this.researchLostTold.has(r.id)) return false;
+      const ok = this.deliver(this.normalize({
+        to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
+        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
+      }, PRIVACY_CHECK_SENDER), godId);
+      if (ok) this.researchLostTold.add(r.id);
+      return !ok;
+    });
+    if (left.length) {
+      // Rewritten only when the list changed.
+      if (left.length !== rows.length) try { this.atomicWriteJson(lost, left); } catch { /* next pass */ }
+      return;
+    }
     this.researchPendingTold = true;
+    try { rmSync(lost, { force: true }); } catch { /* left, the next start tells these again: once more beats never */ }
   }
   private researchPendingTold = false;
   private researchPendingMoved = false;
+  /** This run's own notes under check, and the lost ones already told. */
+  private readonly researchPendingMine = new Set<string>();
+  private readonly researchLostTold = new Set<string>();
 
   /** The clean copy Research receives: built only from what the trust layer
    *  returned, with an id, time and thread the app chose. */

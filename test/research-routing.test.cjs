@@ -663,6 +663,28 @@ test('the notice of a lost owner note waits until Michael\'s inbox takes it', as
   assert.ok(!fs.existsSync(path.join(home, 'private', 'research-pending-lost.json')));
 });
 
+test('a lost note is told to Michael once, even when its list can\'t be cleared', async (t) => {
+  // Value: protects=Michael isn't sent the same notice every routing pass; fails_when=delivery is retried because the lost list could not be rewritten; why_new=verification of the Codex fix (reproduced: 3 notices in 3 passes); seam=read only private folder
+  if (process.platform === 'win32') return t.skip('POSIX folder modes');
+  const layer = fakeLayer({ inbound: () => new Promise(() => {}) });
+  const { hive } = await office(t, { layer });
+  hive.rememberOwnerNote('research', 'Focus on flour');
+  const home = path.dirname(hive.root());
+  const again = new HiveManager(() => home);
+  again.setResearchEnabled(() => true);
+  again.setTrustLayer(fakeLayer());
+  again.routeOnce();
+  fs.writeFileSync(path.join(home, 'private', 'research-pending-lost.json'), JSON.stringify([{ id: 'x1', from: 'human', subject: 'Old note' }]));
+  fs.chmodSync(path.join(home, 'private'), 0o555);
+  try {
+    const third = new HiveManager(() => home);
+    third.setResearchEnabled(() => true);
+    third.setTrustLayer(fakeLayer());
+    for (let i = 0; i < 3; i++) third.routeOnce();
+    assert.equal(msgsIn(third, 'god').filter((m) => /Old note/.test(m.body)).length, 1);
+  } finally { fs.chmodSync(path.join(home, 'private'), 0o755); }
+});
+
 test('Research is called Pete, whatever name a spawn passes, and the app\'s text names him', async (t) => {
   // Value: protects=the floor, the registry and every message agree on Pete, also for an office that saved the old name; fails_when=a restore keeps "Research" or a rename takes; why_new=owner 2026-10-13 (rename to Pete); seam=none
   assert.equal(R.RESEARCH_NAME, 'Pete');

@@ -225,7 +225,8 @@ export const AGENT_TMP_DIR = 'agent-tmp';
  *  plain short name, else a short safe form of it with a checksum, so a hire
  *  with a long name still gets a folder (Codex review, second ship). */
 export function agentTmpName(id: string): string {
-  if (/^[\w-]{1,64}$/.test(id)) return id;
+  // A Windows device name (con, nul, com1) can't be a folder there.
+  if (/^[\w-]{1,64}$/.test(id) && !/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(id)) return id;
   let h = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   return `${id.replace(/[^\w-]/g, '_').slice(0, 40)}-${h.toString(36)}`;
