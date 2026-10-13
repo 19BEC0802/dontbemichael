@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format is based on
 
 Don't Be Michael keeps its own version line, starting at 0.0.1.
 
+## [Unreleased]
+
+### Added
+
+- **Pete, the one team member on the internet.** In a business office, only Pete, the Research team member, opens web pages, searches the web or reaches the internet from his shell; everyone else, Michael included, asks Pete. He is off until you turn him on in Settings, Research & privacy, or pick him in the setup Team step. Pete sees nothing of your office: not your files, the task board, the team's memory or your company's knowledge, and he runs only on Claude.
+- **A trust layer between Pete and your team.** Every message to Pete, from a teammate, Michael, the app or one of your answers, is checked first against the kinds of data you keep private. It goes as written, goes cleaned or made more general so the research still helps, or comes back to its sender saying what private detail it depends on. Pete's answers are checked on the way back too: instructions aimed at AI agents are removed, the answer is labelled as information from the internet, and one that tries to steer its reader is flagged to Michael. When the check can't run, nothing goes through.
+- **Choose what stays private.** In Settings, Research & privacy, mark which kinds of data never go to Pete. Passwords and keys never do.
+- **Links name what they open.** A link in an agent's reply shows the site or app it goes to, with an icon for web and mail links, and the real site beside it when the words name a different one.
+- **The office stops when your Claude account can't work**, out of credit or with a sign in or key that stopped working, and says why, with Add credit, Sign in or Change key. A new key restarts the team where it left off.
+- **Michael hears when the safety brake holds a team member back**, so the work is picked up instead of left waiting.
+- **Search the task board and filter it by team member.**
+
+### Changed
+
+- **Upgrade note:** in a business office, team members and Michael lose web pages, web search and internet from their shell when you update. Turn Pete on in Settings, Research & privacy, to look things up again. Offices without a business folder keep the internet as before.
+- In a business office, Michael's commands stay in their sandbox like everyone else's. While Pete is on, team members save scratch work in their own folder instead of the computer's shared temporary folder.
+- A task's questions show newest first, each with how long ago it was asked.
+
+### Fixed
+
+- A crash in the app window shows a recovery screen instead of a blank window.
+
 ## [0.1.9] (2026-10-11)
 
 ### Added

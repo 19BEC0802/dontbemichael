@@ -194,7 +194,18 @@ notes still waiting for it; an owner or app note whose check never finished, bec
 app closed, is told to Michael at the next start; when the app can't answer, a save into
 the shared temp folders is refused; Research's notes are opened without following links,
 a file with a second name (a hard link) is skipped, and each is read from the file it
-checked.
+checked. Known limits: a damaged config.json reads as an office with no business folder,
+so the hook's sandbox rule falls back to the settings written at each start, which still
+hold; Michael's Slack reply helper posts to the app on 127.0.0.1, which his sandbox can't
+reach in a business office (latent: Slack is off in this build).
+
+### Its name (owner, 2026-10-13)
+
+Research is called **Pete**, from The Office (it was "Research", design review D15). His
+role and the Settings section stay Research (Research & privacy); his id stays `research`,
+so agents still write "to": "research". Every text that names him uses `RESEARCH_NAME`. His
+name is fixed in Edit agent (the app's messages to the team name him), and an office that
+saved the old name shows Pete from its next start.
 
 ## The guard (superseded by the trust layer above)
 

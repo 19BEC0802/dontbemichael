@@ -29,7 +29,7 @@ test('the Research row speaks every state and acts at once', () => {
   assert.match(ui, /<span role="status"/);
   for (const k of ['off', 'on', 'starting', 'stopping', 'failed']) assert.ok(en.research[k], k);
   assert.equal(en.research.off, "Off. Your team can't look things up online.");
-  assert.equal(en.research.on, 'On. Research looks things up for the team.');
+  assert.equal(en.research.on, 'On. Pete looks things up for the team.');
   assert.match(ui, /await startResearch\(config\)/);
 });
 
@@ -55,13 +55,13 @@ test('classes are named radio groups in a fixed order; passwords are locked', ()
       assert.ok(l.research.class[id].name && l.research.class[id].tip, `${lang} ${id}`);
     }
   }
-  assert.equal(en.research.usedWhenOn, 'Used when Research is on.');
+  assert.equal(en.research.usedWhenOn, 'Used when Pete is on.');
 });
 
 test('Windows owners are told Research is not walled off there', () => {
   // Value: protects=an owner on Windows knows the guard does not fully hold; fails_when=the line is missing or softened; why_new=eng D4, design review D21; seam=source
   assert.match(ui, /const win = window\.cth\.platform === 'win32';/);
-  assert.equal(en.research.windows, 'On Windows, Research can still reach your office files.');
+  assert.equal(en.research.windows, 'On Windows, Pete can still reach your office files.');
 });
 
 test('the update card is a quiet report, once, that opens the section', () => {

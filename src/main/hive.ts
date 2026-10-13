@@ -22,7 +22,7 @@ import { WEB_SETTINGS_UNREADABLE, WEB_TOOLS, type SandboxNetwork } from '../shar
 import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
   PRIVACY_CHECK_SENDER, REFUSAL_FILES, REFUSAL_OFF, REFUSAL_UNSURE, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
-  RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS,
+  RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS, RESEARCH_NAME,
   SENT_AS_SUBJECT, sentAsBody
 } from '../shared/research';
 
@@ -380,7 +380,7 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
  */
 export function researchInstructions(b: PromptBusiness, michael: string, p: PromptPaths): string {
   return [
-    `You are Research, the one team member at ${where(b)} who uses the internet. Teammates and ${michael} send you questions as messages. The app's trust layer reads each one first and may hand you a cleaned or more general version of what was asked; answer the question as you received it, and never ask for names, contact details, money or other private details.`,
+    `You are ${RESEARCH_NAME}, the Research team member at ${where(b)}, the one who uses the internet. Teammates and ${michael} send you questions as messages. The app's trust layer reads each one first and may hand you a cleaned or more general version of what was asked; answer the question as you received it, and never ask for names, contact details, money or other private details.`,
     '',
     'Your answers pass the same trust layer on their way back, which removes anything that reads like instructions to the reader. Write findings and sources, never instructions.',
     '',
@@ -1111,6 +1111,8 @@ export class HiveManager {
     reg.agents[meta.id] = {
       ...prev,
       ...meta,
+      // Research's name is the app's, whatever a spawn passes (owner, 2026-10-13).
+      ...(meta.id === RESEARCH_ID ? { name: RESEARCH_NAME } : {}),
       capabilities: meta.capabilities ?? prev?.capabilities ?? [],
       role,
       status: 'idle',
@@ -2318,7 +2320,7 @@ export class HiveManager {
       const what = msg.from === 'human' ? 'A note from the owner' : 'A message from the app';
       this.deliver(this.normalize({
         to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-        body: `${what} for Research ("${String(msg.subject ?? '').slice(0, 80)}") was not sent. ${reason}`
+        body: `${what} for ${RESEARCH_NAME} ("${String(msg.subject ?? '').slice(0, 80)}") was not sent. ${reason}`
       }, PRIVACY_CHECK_SENDER), godId);
     };
     if (!this.researchOn() || !this.trustLayer) {
@@ -2382,7 +2384,7 @@ export class HiveManager {
       if (!r || (r.from !== 'human' && r.from !== 'system')) continue;
       this.deliver(this.normalize({
         to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for Research ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
+        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
       }, PRIVACY_CHECK_SENDER), godId);
     }
     try { rmSync(file, { force: true }); } catch { /* next start */ }
@@ -2477,8 +2479,8 @@ export class HiveManager {
       this.deliver(this.normalize({
         to: godId,
         act: 'inform',
-        subject: 'Research answer may carry web instructions',
-        body: `Research's answer to ${toName} ("${msg.subject.slice(0, 80)}") read like it was trying to steer its reader. The trust layer cleaned it and it was delivered labelled as information only. Look at it if the work matters.`
+        subject: `${RESEARCH_NAME}'s answer may carry web instructions`,
+        body: `${RESEARCH_NAME}'s answer to ${toName} ("${msg.subject.slice(0, 80)}") read like it was trying to steer its reader. The trust layer cleaned it and it was delivered labelled as information only. Look at it if the work matters.`
       }, 'system'), godId);
     }
     return 'sent';
@@ -2518,7 +2520,7 @@ export class HiveManager {
           const godId = this.registry().godId ?? 'god';
           this.deliver(this.normalize({
             to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-            body: `${m.from === 'human' ? 'A note from the owner' : 'A message from the app'} for Research ("${String(m.subject ?? '').slice(0, 80)}") was not sent. ${REFUSAL_OFF}`
+            body: `${m.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(m.subject ?? '').slice(0, 80)}") was not sent. ${REFUSAL_OFF}`
           }, PRIVACY_CHECK_SENDER), godId);
           n++;
         }
@@ -5286,12 +5288,12 @@ process.stdin.on('end', () => {
   const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
   const target = String(input.file_path || input.notebook_path || '');
   const tempSave = payload.hook_event_name === 'PreToolUse' && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].indexOf(tool) >= 0
-    && /^(?:\\/private)?\\/(?:tmp|var\\/tmp|var\\/folders)(?:\\/|$)/.test(target);
+    && /^(?:\\/private)?\\/(?:tmp|var\\/tmp|var\\/folders)(?:\\/|$)/i.test(target);
   // An MCP call too big for one hook frame (a long document to write) is sent
   // with only its short input fields: the connector, mail and QuickBooks gates
   // decide on the tool name, server and mailbox, never the body (owner, 2026-10-02).
   let line = JSON.stringify(payload);
-  if ((mcp || research) && Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
+  if ((mcp || research || tempSave) && Buffer.byteLength(line) > ${MAX_HOOK_FRAME_BYTES}) {
     const small = {};
     const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
     for (const k of Object.keys(input)) {

@@ -687,7 +687,8 @@
     "model": "模型",
     "modelCurrent": "{{model}}（当前）",
     "engineNote": "新的引擎或模型会在该成员下次启动时生效。",
-    "researchEngine": "Research 只在 Claude 上运行，它的防护只在那里有效。"
+    "researchEngine": "Pete 只在 Claude 上运行，隐私防护只在那里有效。",
+    "researchName": "应用发给团队的消息都称他为 Pete，所以他的名字保持不变。"
   },
   "onboarding": {
     "damagedConfig": "无法读取你保存的设置，因此需要重新设置。旧文件保存在",
@@ -1953,7 +1954,7 @@
     "restartNow": "立即重启",
     "restarting": "正在重启 {{name}} 以生效…",
     "restartFailed": "无法重启 {{name}}。稍后会自动重试，也可以点「立即重启」。",
-    "research": "研究员使用互联网，不持有任何办公室数据，因此没有邮箱、连接器或日程。",
+    "research": "Pete 使用互联网，不持有任何办公室数据：没有邮箱、连接器或日程。",
     "researchSettings": "研究与隐私设置"
   },
   "closingTime": {
@@ -2248,24 +2249,24 @@
   },
   "research": {
     "title": "研究员",
-    "tip": "团队中唯一可以使用互联网的成员。它看不到任何办公室数据，只能看到你的团队经隐私检查后发给它的内容。",
+    "tip": "Pete，团队中唯一可以使用互联网的成员。看不到任何办公室数据，只能看到你的团队经隐私检查后发来的内容。",
     "off": "已关闭。你的团队无法在网上查找信息。",
-    "on": "已开启。研究员为团队查找信息。",
-    "starting": "正在雇用研究员…",
-    "stopping": "正在关闭研究员…",
-    "failed": "研究员无法启动。",
+    "on": "已开启。Pete 为团队查找信息。",
+    "starting": "正在雇用 Pete…",
+    "stopping": "正在关闭 Pete…",
+    "failed": "Pete 无法启动。",
     "turnOn": "开启",
     "turnOff": "关闭",
     "tryAgain": "重试",
     "cancel": "取消",
     "waitingOne": "有 1 个请求在等待。它会退回给发送者。",
     "waitingMany": "有 {{count}} 个请求在等待。它们会退回给发送者。",
-    "windows": "在 Windows 上，研究员仍可访问你的办公室文件。",
-    "windowsTip": "Windows 目前还无法限制研究员的命令，因此隐私检查在那里不能完全生效。",
-    "sendTitle": "你的团队可以发给研究员的内容",
-    "sendTip": "发给研究员的每条消息都会被检查。任何隐私内容都会退回给发送者，不会外泄。",
+    "windows": "在 Windows 上，Pete 仍可访问你的办公室文件。",
+    "windowsTip": "Windows 目前还无法限制 Pete 的命令，因此隐私检查在那里不能完全生效。",
+    "sendTitle": "你的团队可以发给 Pete 的内容",
+    "sendTip": "发给 Pete 的每条消息都会被检查。任何隐私内容都会退回给发送者，不会外泄。",
     "count": "{{allowed}} 项允许，{{private}} 项隐私",
-    "usedWhenOn": "研究员开启时生效。",
+    "usedWhenOn": "Pete 开启时生效。",
     "allowed": "允许",
     "private": "隐私",
     "alwaysPrivate": "始终隐私",
@@ -2273,7 +2274,7 @@
     "teamTag": "使用互联网",
     "privacyCheck": "隐私检查",
     "noticeTitle": "你的团队不再使用互联网",
-    "noticeBody": "这样可以把你的隐私数据留在内部。团队中的一位成员（研究员）可以在隐私检查后为他们查找信息。在你开启之前它保持关闭。",
+    "noticeBody": "这样可以把你的隐私数据留在内部。团队中的一位成员 Pete 可以在隐私检查后为他们查找信息。在你开启之前他保持关闭。",
     "noticeOpen": "打开研究员设置",
     "class": {
       "places": {

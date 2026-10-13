@@ -23,7 +23,7 @@ import {
 import { runHiddenClaude, setHiddenClaudeAuthEnv } from './hiddenClaude';
 import { makeTrustLayer, TRUST_MODEL, TRUST_TIMEOUT_MS } from './trustLayer';
 import { dataClassSettings } from '../shared/dataClasses';
-import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_WORK_STYLE } from '../shared/research';
+import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_NAME, RESEARCH_WORK_STYLE } from '../shared/research';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
@@ -3756,14 +3756,14 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // It runs in its desk, sees no office data and is the only one on the web.
   const isResearch = !!opts.hive && opts.hive.id === RESEARCH_ID && !opts.hive.isGod && !!readConfig().research?.on && isBusinessOffice() && hive.enabled();
   if (opts.hive?.id === RESEARCH_ID && !isResearch) {
-    return { ok: false, error: 'Research is off. Turn it on in Settings.' };
+    return { ok: false, error: `${RESEARCH_NAME} is off. Turn him on in Settings, Research & privacy.` };
   }
   // Research's walls are Claude Code's: on any other engine it does not
   // start, and its switch goes back off (ship review D6.2).
   if (isResearch && !claudeProvider) {
     console.error(`[research] engine ${provider} has none of Research's walls; Research did not start`);
     turnResearchOff();
-    return { ok: false, error: 'Research runs only on Claude. Turn it on again in Settings.' };
+    return { ok: false, error: `${RESEARCH_NAME} runs only on Claude. Turn him on again in Settings, Research & privacy.` };
   }
   // Research starts only inside its walls (ship review D2.8).
   let researchWalled = false;
@@ -3866,7 +3866,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           connectors: connectorPlan?.plan,
           // In a business office only Research uses the internet
           // (shared/webAccess.ts): every other team member's shell reaches no
-          // host. Michael runs unsandboxed. Other offices keep it (D3).
+          // host. Michael included (D9.1). Other offices keep it (D3).
           // Judged on the office setting, not the folder, so a folder that
           // can't be opened never leaves the team on the internet.
           network: isBusinessOffice() ? sandboxNetwork() : undefined
@@ -3904,7 +3904,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // accounts and the web: it does not start, and the switch goes back off.
     console.error('[research] walls not in place; Research did not start');
     turnResearchOff();
-    return { ok: false, error: 'Research could not be set up safely, so it did not start. Try again.' };
+    return { ok: false, error: `${RESEARCH_NAME} could not be set up safely, so he did not start. Try again.` };
   }
   if (connectorPlan && !connectorsApplied) {
     console.warn(`[connectors] ${opts.hive?.id}: no hive settings, starting without connectors`);
@@ -4875,6 +4875,8 @@ ipcMain.handle('hive:renameAgent', (_evt, id: unknown, name: unknown) => {
   if (typeof id !== 'string' || typeof name !== 'string') {
     return { ok: false, error: 'Invalid rename request' };
   }
+  // The app's messages to the team name Research, so its name stays (owner, 2026-10-13).
+  if (id === RESEARCH_ID && name.trim() !== RESEARCH_NAME) return { ok: false, error: `${RESEARCH_NAME}'s name stays as it is.` };
   return hive.renameAgent(id, name);
 });
 ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
@@ -6274,7 +6276,7 @@ ipcMain.handle('missions:upsert', (_evt, mission: unknown): MissionOpResult => {
   if (!isMission(mission)) return { ok: false, error: 'invalid schedule' };
   // Research answers asks only; a schedule's text would skip the privacy
   // check (design review D19).
-  if (mission.to === RESEARCH_ID) return { ok: false, error: 'Research has no schedules' };
+  if (mission.to === RESEARCH_ID) return { ok: false, error: `${RESEARCH_NAME} has no schedules` };
   // Several "when" lines are stored canonical, or the save is refused: a bad
   // line would run on a clock nobody set.
   // The focus area is stored clean (FA1); an empty one is no focus.

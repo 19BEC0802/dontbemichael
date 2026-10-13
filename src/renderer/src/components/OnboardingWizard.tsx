@@ -1,3 +1,4 @@
+import { RESEARCH_NAME } from '../../../shared/research';
 import { CompanyProfileFields, localCurrency, localTimeZone } from './CompanyProfileFields';
 import { cityLine, cleanCompanyProfile, missingProfileFields, prefillLegalName, type CompanyProfile, type RequiredProfileField } from '@shared/companyProfile';
 import { useEffect, useRef, useState } from 'react';
@@ -1093,7 +1094,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                   ))}
                   <TeamCard
                     character="ryan"
-                    name={t('research.title')}
+                    name={RESEARCH_NAME}
                     summary={t('research.teamSummary')}
                     chips={[{ tone: 'muted', label: t('research.teamTag') }]}
                     picked={researchPicked}

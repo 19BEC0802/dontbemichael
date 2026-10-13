@@ -1,3 +1,4 @@
+import { RESEARCH_ID, RESEARCH_NAME } from '../../../shared/research';
 import { useEffect, useSyncExternalStore } from 'react';
 import { useStore, type Agent, ACTION_CLOCKING_IN } from '@/store/store';
 import { buildSpawnCommand, inferAgentProvider, tokenizeCommand, type HarnessConfig } from '@/store/config';
@@ -146,12 +147,15 @@ export function useRestoreTeam(config?: HarnessConfig | null): RestoreTeamState 
             // agent id is preserved across restart, so its registry entry,
             // memory.md and inbox reattach by id. No-op without a recorded session.
             resume: true,
-            hive: { id: a.id, name: a.name, provider, cwd, role: roleForHiveSpawn(a) }
+            // Research's name is the app's (owner, 2026-10-13: Pete), also
+            // for an office that saved it under its old name.
+            hive: { id: a.id, name: a.id === RESEARCH_ID ? RESEARCH_NAME : a.name, provider, cwd, role: roleForHiveSpawn(a) }
           });
           if (res.ok) {
             restored++;
             return {
                 ...a,
+                ...(a.id === RESEARCH_ID ? { name: RESEARCH_NAME } : {}),
                 provider,
                 ptyId,
                 archived: false,

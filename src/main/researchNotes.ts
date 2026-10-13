@@ -4,7 +4,7 @@
  * rights, so a link Research made would reach what Research can't (Codex
  * review). Anything else is skipped.
  */
-import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
 export function readResearchNotes(agentDir: string): string {
@@ -24,6 +24,13 @@ export function readResearchNotes(agentDir: string): string {
       fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
       const st = fstatSync(fd);
       if (!st.isFile() || st.nlink !== 1) return null;
+      // The open file must be the one its path names inside the folder now,
+      // so a folder swapped for a link between the check and the open is
+      // caught (verification of the Codex fix).
+      const real = realpathSync(file);
+      if (!real.startsWith(root + sep)) return null;
+      const now = statSync(real);
+      if (now.ino !== st.ino || now.dev !== st.dev) return null;
       return readFileSync(fd, 'utf8');
     } catch { return null; } finally {
       if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }

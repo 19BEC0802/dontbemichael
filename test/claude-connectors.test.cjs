@@ -194,7 +194,7 @@ test('the hook shim refuses MCP calls when it cannot reach the app, and leaves o
       assert.equal(r.hookSpecificOutput.permissionDecisionReason, R.RESEARCH_UNCHECKED_TOOL, `Research ${tool} ${JSON.stringify(env)}`);
     }
     // A save into the shared temp folders, which Research's shell reads, fails closed too (Codex review).
-    for (const file_path of ['/tmp/draft.md', '/private/var/folders/ab/T/x.md']) {
+    for (const file_path of ['/tmp/draft.md', '/private/var/folders/ab/T/x.md', '/TMP/draft.md']) {
       const r = spawnSync(process.execPath, [shim], { input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path } }), env: { PATH: process.env.PATH, AGENT_ID: 'pam', ...env }, encoding: 'utf8', timeout: 10_000 });
       assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny', file_path);
     }

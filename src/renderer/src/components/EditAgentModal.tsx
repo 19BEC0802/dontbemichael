@@ -222,7 +222,12 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
           scheduled jobs under it draw on top of it (owner, 2026-10-10). */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
         <Fields id="name">
-          <Row label={t('editAgent.name')}>
+          {/* Pete's name is in the app's own messages to the team, so it
+              stays as it is, shown as text (owner, 2026-10-13). */}
+          <Row label={t('editAgent.name')} info={isResearch ? t('editAgent.researchName') : undefined}>
+            {isResearch ? (
+              <span style={{ fontSize: 13, color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)' }}>{agent.name}</span>
+            ) : (
             <input
               value={name}
               onChange={(e) => { setName(e.target.value); setNameError(undefined); }}
@@ -232,6 +237,7 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
               style={nameError ? { ...inputStyle, boxShadow: 'inset 0 0 0 1.5px var(--cth-coral)' } : inputStyle}
               autoFocus
             />
+            )}
             {nameError && (
               <span role="alert" style={{ ...helperStyle, color: 'var(--cth-coral-text)' }}>{nameError}</span>
             )}
