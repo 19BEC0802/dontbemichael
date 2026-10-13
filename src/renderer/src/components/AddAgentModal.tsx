@@ -39,6 +39,7 @@ import {
   appendOnce,
   bindingLines,
   cardJobs,
+  hireAgentId,
   hireFolderName,
   hireRole,
   jobFor,
@@ -113,10 +114,6 @@ const joinPath = (root: string, name: string) => `${root.replace(/[\\/]+$/, '')}
  *  becomes "AR-AP Clerk", never a folder inside a folder. */
 function safeFolder(raw: string): string {
   return raw.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/^[.\s-]+/, '').replace(/[.\s]+$/, '').trim().slice(0, 60);
-}
-
-function uniqueId(name: string): string {
-  return `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
 }
 
 const TOPIC_MAX = 120;
@@ -657,7 +654,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
         return;
       }
     }
-    const id = uniqueId(name);
+    const id = hireAgentId(name);
     const ptyId = `pty-${id}`;
     const description = hireRole(title, routing);
     // Give back what a binding granted (a mailbox, a connector) when the hire fails.
