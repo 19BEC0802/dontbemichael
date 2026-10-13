@@ -2167,6 +2167,7 @@
     "claude": "Claude Code",
     "account": "Your Claude account",
     "checking": "Checking…",
+    "checkFailed": "Could not check Claude Code.",
     "installing": "Installing. This takes about a minute.",
     "installed": "Installed",
     "installFailed": "Could not install. Check your internet connection, then try again.",
