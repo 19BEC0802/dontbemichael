@@ -139,7 +139,7 @@ import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { APP_NAME, APP_DATA_DIR, APP_URL_SCHEME } from '../shared/appName';
 import { copyOfficeData, homeFolderStatus, homeReadyAtLaunch } from './homeFolder';
 import { backfillOfficeRecord, findOffice, folderLayoutFor, isUsableTeamFolder, syncOfficeRecord } from './officeFile';
-import { folderPolicy, AGENT_TMP_DIR, researchFolderPolicy, withAgentTmpWall, RESEARCH_TMP_DIR, shellTempWalls, withResearchWall, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
+import { folderPolicy, AGENT_TMP_DIR, agentTmpName, researchFolderPolicy, withAgentTmpWall, RESEARCH_TMP_DIR, shellTempWalls, withResearchWall, type AgentFolderPolicy, type FolderLayout } from '../shared/folderAccess';
 import { sandboxNetwork } from '../shared/webAccess';
 import { MCP_CATALOG } from '../shared/mcpCatalog';
 import { legacyBusinessFolder, touchesOffice } from '../shared/officeRecord';
@@ -3780,9 +3780,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // can read (ship review D6.1): Research's in its desk, everyone else's under
   // the app's home, outside the hive.
   const sessionTmp = (() => {
-    if (!opts.hive || !claudeProvider || !/^[\w-]{1,64}$/.test(opts.hive.id)) return undefined;
+    if (!opts.hive || !claudeProvider || !opts.hive.id) return undefined;
     const harness = readConfig().harnessHome;
-    const dir = isResearch ? join(opts.cwd, RESEARCH_TMP_DIR) : harness ? join(expandTilde(harness), AGENT_TMP_DIR, opts.hive.id) : '';
+    const dir = isResearch ? join(opts.cwd, RESEARCH_TMP_DIR) : harness ? join(expandTilde(harness), AGENT_TMP_DIR, agentTmpName(opts.hive.id)) : '';
     if (!dir) return undefined;
     try { mkdirSync(dir, { recursive: true }); } catch { return undefined; }
     // Outside the system's own temp cleanup, so files over a week old go here.

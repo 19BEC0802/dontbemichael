@@ -4,7 +4,7 @@
  * rights, so a link Research made would reach what Research can't (Codex
  * review). Anything else is skipped.
  */
-import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, opendirSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
 /** The most one note file may hold; a bigger one is skipped, not read whole
@@ -69,9 +69,14 @@ export function readResearchNotes(agentDir: string): string {
     // elsewhere, and only so many names are looked at (Codex review).
     const dir = join(agentDir, 'memory');
     if (!lstatSync(dir).isDirectory() || realpathSync(dir) !== join(root, 'memory')) return parts.join('\n\n').trim();
-    let seen = 0;
-    for (const f of readdirSync(dir).sort()) {
-      if (++seen > MAX_NOTE_ENTRIES) break;
+    // Read one name at a time and stop at the cap, so a huge folder is never
+    // listed whole (Codex review).
+    const names: string[] = [];
+    const d = opendirSync(dir);
+    try {
+      for (let e = d.readSync(); e && names.length < MAX_NOTE_ENTRIES; e = d.readSync()) names.push(e.name);
+    } finally { d.closeSync(); }
+    for (const f of names.sort()) {
       if (!f.endsWith('.md') || f === 'inbox.md') continue;
       // Past the total the rest are not copied (ship review pass 2).
       if (!add(readOwn(join(agentDir, 'memory', f)))) break;

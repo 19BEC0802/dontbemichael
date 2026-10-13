@@ -2389,9 +2389,16 @@ export class HiveManager {
     let rows: Array<{ id: string; from: string; subject: string }> = [];
     try { const r = JSON.parse(readFileSync(lost, 'utf8')); if (Array.isArray(r)) rows = r; } catch { /* none left over */ }
     if (!this.researchPendingMoved) {
-      this.researchPendingMoved = true;
-      try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) rows = [...rows, ...r]; } catch { /* none */ }
-      try { if (rows.length) this.atomicWriteJson(lost, rows); rmSync(file, { force: true }); } catch { /* next pass */ }
+      let earlier: typeof rows = [];
+      try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) earlier = r; } catch { /* none */ }
+      // Each note once, by its id, however often a move was cut short.
+      const seen = new Set(rows.map((r) => r?.id));
+      rows = [...rows, ...earlier.filter((r) => r && !seen.has(r.id))];
+      try {
+        if (rows.length) this.atomicWriteJson(lost, rows);
+        rmSync(file, { force: true });
+        this.researchPendingMoved = true;
+      } catch { return; }
     }
     const godId = this.registry().godId ?? 'god';
     const left = rows.filter((r) => r && (r.from === 'human' || r.from === 'system') && !this.deliver(this.normalize({

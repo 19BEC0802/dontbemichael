@@ -20,7 +20,7 @@
 
 import { existsSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { AGENT_TMP_DIR } from '../shared/folderAccess';
+import { AGENT_TMP_DIR, agentTmpName } from '../shared/folderAccess';
 import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { isSameOrInside } from './pathInside';
 
@@ -49,7 +49,7 @@ export function harnessWriteDecision(i: HarnessWriteInput): { deny: boolean; rea
   if (!isSameOrInside(norm(i.harnessHome), norm(target))) return { deny: false };
   // Its own scratch folder, where its Claude session keeps temp files (ship
   // review D6.1: no longer the shared /tmp).
-  if (isSameOrInside(norm(join(i.harnessHome, AGENT_TMP_DIR, i.agentId)), norm(target))) return { deny: false };
+  if (isSameOrInside(norm(join(i.harnessHome, AGENT_TMP_DIR, agentTmpName(i.agentId))), norm(target))) return { deny: false };
 
   if (isSameOrInside(norm(i.hiveRoot), norm(target))) {
     const rel = relative(norm(resolve(i.hiveRoot)), norm(target)).split(/[\\/]/).join('/');

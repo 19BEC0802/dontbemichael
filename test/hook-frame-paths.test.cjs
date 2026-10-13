@@ -183,11 +183,27 @@ test('Pete\'s notes folder must be his own folder, not a link to a big tree else
   fs.writeFileSync(path.join(dir, 'memory.md'), 'top');
   assert.equal(readResearchNotes(dir), 'top');
   const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/researchNotes.ts'), 'utf8');
-  assert.match(src, /if \(\+\+seen > MAX_NOTE_ENTRIES\) break;/);
+  assert.match(src, /for \(let e = d\.readSync\(\); e && names\.length < MAX_NOTE_ENTRIES; e = d\.readSync\(\)\) names\.push\(e\.name\);/, 'listed one name at a time, to the cap');
+  assert.doesNotMatch(src, /readdirSync/, 'never listed whole');
 });
 
 test('a Claude agent with no scratch folder of its own does not start in a business office', () => {
   // Value: protects=session files never fall back to the shared /tmp Pete's shell reads; fails_when=the spawn carries on without CLAUDE_CODE_TMPDIR; why_new=Codex adversarial review, second ship; seam=source pin, the spawn needs Electron
   const idx = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
   assert.match(idx, /if \(opts\.hive && claudeProvider && !sessionTmp && isBusinessOffice\(\)\) \{[\s\S]{0,200}?return \{ ok: false, error: 'This team member\\'s scratch folder could not be made/);
+});
+
+test('every agent gets a scratch folder of its own, a long or odd id included', () => {
+  // Value: protects=a hire with a long name still starts in a business office, and no id reaches outside agent-tmp; fails_when=ids over 64 characters or with dots get no folder, or two ids share one; why_new=Codex adversarial review, second ship; seam=none
+  assert.equal(F.agentTmpName('pam'), 'pam');
+  const long = 'a-very-long-name-for-a-new-hire-who-does-the-books-and-the-taxes-k9x2';
+  const name = F.agentTmpName(long);
+  assert.match(name, /^[\w-]{1,64}$/);
+  assert.notEqual(name, F.agentTmpName(long + 'z'));
+  for (const odd of ['..', '../god', 'a/b']) assert.match(F.agentTmpName(odd), /^[\w-]+$/, odd);
+  if (process.platform !== 'win32') {
+    const home = '/Users/x/.dbm';
+    assert.equal(F.agentTmpDecision(home, long, false, 'Read', `${home}/agent-tmp/${name}/a`, true).deny, false, 'its own');
+    assert.deepEqual(F.withAgentTmpWall({ sandbox: { denyWrite: [], denyRead: [], allowRead: [] }, deny: [], sandboxOnly: true }, home, long, false).sandbox.allowRead, [`${home}/agent-tmp/${name}`]);
+  }
 });

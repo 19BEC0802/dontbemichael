@@ -267,7 +267,7 @@ test('Research\'s file tools open no temporary folder, and no office agent keeps
   assert.ok(!shell.includes('/tmp') && !shell.includes('/private/tmp'));
   assert.ok(shell.includes('/private/var/folders') && shell.includes('/var/folders/ab/T'));
   const main = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
-  assert.match(main, /const dir = isResearch \? join\(opts\.cwd, RESEARCH_TMP_DIR\) : harness \? join\(expandTilde\(harness\), AGENT_TMP_DIR, opts\.hive\.id\) : '';/);
+  assert.match(main, /const dir = isResearch \? join\(opts\.cwd, RESEARCH_TMP_DIR\) : harness \? join\(expandTilde\(harness\), AGENT_TMP_DIR, agentTmpName\(opts\.hive\.id\)\) : '';/);
   assert.match(main, /if \(sessionTmp\) opts\.env = \{ \.\.\.opts\.env, CLAUDE_CODE_TMPDIR: sessionTmp \};/);
   assert.match(main, /extraWritableDirs: \[memory\.env\(\)\.MEMPALACE_PALACE_PATH, sessionTmp\]/);
 });

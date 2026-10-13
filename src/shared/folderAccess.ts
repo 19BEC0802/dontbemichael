@@ -213,13 +213,23 @@ export function agentTmpDecision(home: string, agentId: string, isGod: boolean, 
   if (isGod || (!FOLDER_WRITE_TOOLS.has(tool) && !FOLDER_READ_TOOLS.has(tool))) return { deny: false };
   const inside = insideFn(caseInsensitive);
   const all = join(home, AGENT_TMP_DIR);
-  if (!inside(all, target) || inside(join(all, agentId), target)) return { deny: false };
+  if (!inside(all, target) || inside(join(all, agentTmpName(agentId)), target)) return { deny: false };
   return { deny: true, reason: 'That is another team member\'s scratch folder, and only they can open it. Use your own.' };
 }
 
 /** Where an office agent's Claude session keeps its scratch files: under the
  *  app's home, outside the hive, one folder per agent. */
 export const AGENT_TMP_DIR = 'agent-tmp';
+
+/** An agent's own folder name inside AGENT_TMP_DIR: its id when that is a
+ *  plain short name, else a short safe form of it with a checksum, so a hire
+ *  with a long name still gets a folder (Codex review, second ship). */
+export function agentTmpName(id: string): string {
+  if (/^[\w-]{1,64}$/.test(id)) return id;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return `${id.replace(/[^\w-]/g, '_').slice(0, 40)}-${h.toString(36)}`;
+}
 /** Research's, inside its desk. */
 export const RESEARCH_TMP_DIR = '.tmp';
 
@@ -292,7 +302,7 @@ export function withAgentTmpWall(policy: AgentFolderPolicy, home: string, agentI
     sandbox: {
       ...policy.sandbox,
       denyRead: Array.from(new Set([...policy.sandbox.denyRead, all])),
-      allowRead: Array.from(new Set([...policy.sandbox.allowRead, join(all, agentId)]))
+      allowRead: Array.from(new Set([...policy.sandbox.allowRead, join(all, agentTmpName(agentId))]))
     }
   };
 }

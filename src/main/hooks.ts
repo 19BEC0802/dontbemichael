@@ -70,7 +70,7 @@ export const ASK_TOOL_REFUSAL =
   "Don't ask the owner here: nobody answers your terminal. File it as one new file in the hive's triage folder (your questions as one \"ask\", what you were doing in \"description\"). Michael checks it and puts it on the owner's ASK ME board.";
 
 import { GUARDED_TOOLS, harnessWriteDecision } from './harnessGuard';
-import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, agentTmpDecision, folderDecision, folderToolTarget, AGENT_TMP_DIR, isSharedTempSave, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
+import { FOLDER_READ_TOOLS, FOLDER_WRITE_TOOLS, agentTmpDecision, agentTmpName, folderDecision, folderToolTarget, AGENT_TMP_DIR, isSharedTempSave, researchFolderDecision, sharedTempWriteDecision, tempFolders, researchWallDecision } from '../shared/folderAccess';
 import { RESEARCH_DESK_DIR, RESEARCH_ID, RESEARCH_SANDBOX_ONLY, RESEARCH_UNCHECKED_TOOL } from '../shared/research';
 import { folderLayoutFor } from './officeFile';
 import { expandTilde } from './fs';
@@ -1017,7 +1017,7 @@ export class HookServer {
     // shell can read; each agent has its own scratch folder (owner, D7.2).
     if (home && this.hive.researchOn()) {
       const temps = tempFolders(process.platform, tmpdir());
-      const ownTmp = join(home, AGENT_TMP_DIR, agentId);
+      const ownTmp = join(home, AGENT_TMP_DIR, agentTmpName(agentId));
       for (const t of both) {
         const r = sharedTempWriteDecision(temps, ownTmp, me?.cwd, tool, t, ci);
         if (r.deny) return r;
