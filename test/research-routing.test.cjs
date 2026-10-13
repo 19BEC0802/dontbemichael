@@ -641,6 +641,28 @@ test('an owner note whose check finished leaves nothing pending', async (t) => {
   assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), []);
 });
 
+test('the notice of a lost owner note waits until Michael\'s inbox takes it', async (t) => {
+  // Value: protects=the only record of a note lost in a crash isn't dropped when Michael's inbox isn't there yet; fails_when=the pending file is deleted after a failed delivery; why_new=Codex adversarial review, second ship; seam=fake layer
+  const layer = fakeLayer({ inbound: () => new Promise(() => {}) });
+  const { hive } = await office(t, { layer });
+  hive.rememberOwnerNote('research', 'Focus on flour');
+  const home = path.dirname(hive.root());
+  const inbox = path.join(hive.root(), 'agents', 'god', 'inbox');
+  fs.renameSync(inbox, inbox + '.away');
+  const again = new HiveManager(() => home);
+  again.setResearchEnabled(() => true);
+  again.setTrustLayer(fakeLayer());
+  again.routeOnce();
+  assert.ok(fs.existsSync(path.join(home, 'private', 'research-pending-lost.json')), 'kept for the next try');
+  again.rememberOwnerNote('research', 'A new note');
+  fs.renameSync(inbox + '.away', inbox);
+  again.routeOnce();
+  const told = msgsIn(again, 'god').filter((m) => m.subject === R.NOT_SENT_SUBJECT);
+  assert.equal(told.length, 1, 'told once it can be, and a note sent this run is not reported lost');
+  assert.match(told[0].body, /the app closed while it was being checked/);
+  assert.ok(!fs.existsSync(path.join(home, 'private', 'research-pending-lost.json')));
+});
+
 test('Research is called Pete, whatever name a spawn passes, and the app\'s text names him', async (t) => {
   // Value: protects=the floor, the registry and every message agree on Pete, also for an office that saved the old name; fails_when=a restore keeps "Research" or a rename takes; why_new=owner 2026-10-13 (rename to Pete); seam=none
   assert.equal(R.RESEARCH_NAME, 'Pete');

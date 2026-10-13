@@ -647,10 +647,13 @@ export class HookServer {
     // writes instead: that wall already shuts everything there but its own
     // folders (issue #230).
     if (event === 'PreToolUse' && agentId && GUARDED_TOOLS.has(p.tool_name ?? '') && agentId !== RESEARCH_ID) {
-      const cfg = this.getConfig();
-      const hiveRoot = this.hive.root();
+      let cfg: ReturnType<typeof this.getConfig>;
+      let hiveRoot: string | null | undefined;
+      try { cfg = this.getConfig(); hiveRoot = this.hive.root(); }
+      catch { this.emitRefused(agentId, event, p); return mcpDeny(RESEARCH_UNCHECKED_TOOL); }
       if ((cfg.businessFolder || cfg.officeFolder) && cfg.harnessHome && hiveRoot) {
-        const d = harnessWriteDecision({
+        let d: { deny: boolean; reason?: string };
+        try { d = harnessWriteDecision({
           tool: p.tool_name ?? '',
           toolInput: p.tool_input,
           cwd: p.cwd,
@@ -659,7 +662,7 @@ export class HookServer {
           harnessHome: cfg.harnessHome,
           hiveRoot,
           caseInsensitive: process.platform !== 'linux'
-        });
+        }); } catch { d = { deny: true, reason: RESEARCH_UNCHECKED_TOOL }; }
         if (d.deny) {
           this.emitRefused(agentId, event, p);
           return {
@@ -698,7 +701,11 @@ export class HookServer {
       // A call the hook program cut down to fit keeps its path; one that
       // arrives without it can't be judged, so it doesn't run (ship review).
       const unjudged = p.tool_input_trimmed === true && !PATH_FREE_TOOLS.has(toolName) && !folderToolTarget(toolName, p.tool_input, p.cwd);
-      const d = unjudged ? { deny: true, reason: HOOK_PATH_UNCHECKED } : this.folderCheck(agentId, toolName, p.tool_input, p.cwd);
+      // A check that fails refuses the call: the folder walls never fall open
+      // on a passing config or disk error (Codex review, second ship).
+      let d: { deny: boolean; reason?: string };
+      try { d = unjudged ? { deny: true, reason: HOOK_PATH_UNCHECKED } : this.folderCheck(agentId, toolName, p.tool_input, p.cwd); }
+      catch { d = { deny: true, reason: RESEARCH_UNCHECKED_TOOL }; }
       if (d.deny) {
         this.emitRefused(agentId, event, p);
         return {

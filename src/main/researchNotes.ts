@@ -4,7 +4,7 @@
  * rights, so a link Research made would reach what Research can't (Codex
  * review). Anything else is skipped.
  */
-import { closeSync, constants, fstatSync, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
 /** The most one note file may hold; a bigger one is skipped, not read whole
@@ -13,6 +13,8 @@ export const MAX_NOTE_BYTES = 256 * 1024;
 /** All of Research's notes together, per copy, in bytes, and in files. */
 export const MAX_NOTES_TOTAL = 1024 * 1024;
 export const MAX_NOTE_FILES = 200;
+/** Names looked at in the notes folder, whatever they are. */
+export const MAX_NOTE_ENTRIES = 2000;
 
 export function readResearchNotes(agentDir: string): string {
   let root = '';
@@ -41,9 +43,8 @@ export function readResearchNotes(agentDir: string): string {
       if (!real.startsWith(root + sep)) return null;
       const now = statSync(real);
       if (now.ino !== st.ino || now.dev !== st.dev) return null;
-      // Read to the cap from this open file: one that grows after the check
-      // is not read past it (ship review pass 2).
-      // A buffer one byte past its size: a file that grew since is skipped.
+      // Read to its size from this open file, into a buffer one byte past it:
+      // a file that grew since the check is skipped (ship review pass 2).
       const buf = Buffer.allocUnsafe(st.size + 1);
       let n = 0;
       for (let r = 1; r > 0 && n < buf.length; n += r) r = readSync(fd, buf, n, buf.length - n, null);
@@ -64,7 +65,13 @@ export function readResearchNotes(agentDir: string): string {
   };
   add(readOwn(join(agentDir, 'memory.md')));
   try {
-    for (const f of readdirSync(join(agentDir, 'memory')).sort()) {
+    // The folder itself must be Research's own, not a link to a big tree
+    // elsewhere, and only so many names are looked at (Codex review).
+    const dir = join(agentDir, 'memory');
+    if (!lstatSync(dir).isDirectory() || realpathSync(dir) !== join(root, 'memory')) return parts.join('\n\n').trim();
+    let seen = 0;
+    for (const f of readdirSync(dir).sort()) {
+      if (++seen > MAX_NOTE_ENTRIES) break;
       if (!f.endsWith('.md') || f === 'inbox.md') continue;
       // Past the total the rest are not copied (ship review pass 2).
       if (!add(readOwn(join(agentDir, 'memory', f)))) break;

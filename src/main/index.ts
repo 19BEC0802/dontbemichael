@@ -3789,6 +3789,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     pruneOldFiles(dir, 7 * 24 * 60 * 60_000);
     return dir;
   })();
+  // Without its own scratch folder a Claude agent's session files would land
+  // in the shared /tmp that Research's shell reads, so in a business office it
+  // does not start (Codex review, second ship).
+  if (opts.hive && claudeProvider && !sessionTmp && isBusinessOffice()) {
+    console.error(`[spawn] no session scratch folder for ${opts.hive.id}; not started`);
+    return { ok: false, error: 'This team member\'s scratch folder could not be made in the app\'s home folder, so they did not start. Check that the app\'s home folder can be written, then try again.' };
+  }
   let connectorsApplied = false;
   if (opts.hive && hive.enabled()) {
     try {

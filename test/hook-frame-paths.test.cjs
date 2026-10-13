@@ -155,3 +155,39 @@ test('a path with spaces around it is judged as Claude Code reads it, trimmed', 
   for (const p of [' ' + home, '\t' + os.homedir(), os.homedir() + ' ']) assert.equal(call('research', path.join(home, 'research-desk'), { pattern: 'token', path: p }), 'deny', `Pete: ${JSON.stringify(p)}`);
   for (const p of [' ' + path.join(home, 'agent-tmp', 'jim'), path.join(home, 'agent-tmp') + ' ']) assert.equal(call('pam', home, { pattern: 'x', path: p }), 'deny', `Pam: ${JSON.stringify(p)}`);
 });
+
+test('a folder check that fails refuses the call; it never falls open', async (t) => {
+  // Value: protects=a passing config or disk error can't reopen the folder walls; fails_when=a throwing guard lets a file tool through; why_new=Codex adversarial review, second ship; seam=throwing config
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-frame-throw-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
+  const server = new HookServer(hive, () => null, () => { throw new Error('config unreadable'); });
+  for (const tool_name of ['Read', 'Write', 'Grep']) {
+    const r = server.handle({ agent_id: 'pam', hook_event_name: 'PreToolUse', cwd: home, tool_name, tool_input: { file_path: path.join(home, 'a.md'), path: home } });
+    assert.equal(r.hookSpecificOutput?.permissionDecision, 'deny', tool_name);
+    assert.equal(r.hookSpecificOutput?.permissionDecisionReason, R.RESEARCH_UNCHECKED_TOOL);
+  }
+});
+
+test('Pete\'s notes folder must be his own folder, not a link to a big tree elsewhere', { skip: process.platform === 'win32' ? 'symlinks' : false }, (t) => {
+  // Value: protects=a link Pete makes can't make the app list a huge folder on the main process; fails_when=readdirSync runs on whatever memory/ points at; why_new=Codex adversarial review, second ship; seam=none
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'md-notes-link-')));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const dir = path.join(base, 'research');
+  const elsewhere = path.join(base, 'elsewhere');
+  fs.mkdirSync(dir);
+  fs.mkdirSync(elsewhere);
+  fs.writeFileSync(path.join(elsewhere, 'a.md'), 'outside');
+  fs.symlinkSync(elsewhere, path.join(dir, 'memory'));
+  fs.writeFileSync(path.join(dir, 'memory.md'), 'top');
+  assert.equal(readResearchNotes(dir), 'top');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/researchNotes.ts'), 'utf8');
+  assert.match(src, /if \(\+\+seen > MAX_NOTE_ENTRIES\) break;/);
+});
+
+test('a Claude agent with no scratch folder of its own does not start in a business office', () => {
+  // Value: protects=session files never fall back to the shared /tmp Pete's shell reads; fails_when=the spawn carries on without CLAUDE_CODE_TMPDIR; why_new=Codex adversarial review, second ship; seam=source pin, the spawn needs Electron
+  const idx = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  assert.match(idx, /if \(opts\.hive && claudeProvider && !sessionTmp && isBusinessOffice\(\)\) \{[\s\S]{0,200}?return \{ ok: false, error: 'This team member\\'s scratch folder could not be made/);
+});

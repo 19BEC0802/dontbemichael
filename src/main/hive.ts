@@ -2376,26 +2376,36 @@ export class HiveManager {
   }
 
   /** At start: an owner or app message whose check never finished (the app
-   *  closed or crashed) is told to Michael, once (Codex review, D8.2). */
+   *  closed or crashed) is told to Michael (Codex review, D8.2). The rows are
+   *  moved aside first, so this run's own checks start a fresh list, and each
+   *  stays until Michael's inbox takes its note: tried again on every routing
+   *  pass, and at the next start if the app closes first (Codex, second ship). */
   private tellLostResearchPending(): void {
     if (this.researchPendingTold) return;
-    this.researchPendingTold = true;
     const home = this.getHome();
     if (!home) return;
     const file = join(privateRoot(home), 'research-pending.json');
+    const lost = join(privateRoot(home), 'research-pending-lost.json');
     let rows: Array<{ id: string; from: string; subject: string }> = [];
-    try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) rows = r; } catch { return; }
-    const godId = this.registry().godId ?? 'god';
-    for (const r of rows) {
-      if (!r || (r.from !== 'human' && r.from !== 'system')) continue;
-      this.deliver(this.normalize({
-        to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
-        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
-      }, PRIVACY_CHECK_SENDER), godId);
+    try { const r = JSON.parse(readFileSync(lost, 'utf8')); if (Array.isArray(r)) rows = r; } catch { /* none left over */ }
+    if (!this.researchPendingMoved) {
+      this.researchPendingMoved = true;
+      try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) rows = [...rows, ...r]; } catch { /* none */ }
+      try { if (rows.length) this.atomicWriteJson(lost, rows); rmSync(file, { force: true }); } catch { /* next pass */ }
     }
-    try { rmSync(file, { force: true }); } catch { /* next start */ }
+    const godId = this.registry().godId ?? 'god';
+    const left = rows.filter((r) => r && (r.from === 'human' || r.from === 'system') && !this.deliver(this.normalize({
+      to: godId, act: 'inform', subject: NOT_SENT_SUBJECT,
+      body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${RESEARCH_NAME} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
+    }, PRIVACY_CHECK_SENDER), godId));
+    try {
+      if (left.length) { this.atomicWriteJson(lost, left); return; }
+      rmSync(lost, { force: true });
+    } catch { return; }
+    this.researchPendingTold = true;
   }
   private researchPendingTold = false;
+  private researchPendingMoved = false;
 
   /** The clean copy Research receives: built only from what the trust layer
    *  returned, with an id, time and thread the app chose. */
