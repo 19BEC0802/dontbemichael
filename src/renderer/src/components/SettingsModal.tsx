@@ -1106,7 +1106,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           </div>
                         )}
                         {changeErr && !changeHome && (
-                          <div style={{ fontSize: 12, lineHeight: '18px', color: '#6E1423', marginTop: 6 }}>{changeErr}</div>
+                          <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--cth-coral-text)', marginTop: 6 }}>{changeErr}</div>
                         )}
                       </div>
 
@@ -1882,7 +1882,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                         )}
 
                         {/* Public surface warning. Loud, not buried. */}
-                        <span style={{ fontSize: 12, lineHeight: '16px', color: '#6E1423' }}>
+                        <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--cth-coral-text)' }}>
                           {t('settings.connections.webhookWarning')}
                         </span>
 
