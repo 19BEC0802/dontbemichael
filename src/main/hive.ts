@@ -1318,6 +1318,16 @@ export class HiveManager {
       mkdirSync(dirname(settingsPath), { recursive: true });
       this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell));
       args.push('--settings', settingsPath);
+      // A `claude` the agent starts from its shell has no hook and no deny
+      // rules, so it would load every connector on the account (TODOS, P1).
+      // Claude Code sources CLAUDE_ENV_FILE before each shell command, so the
+      // agent keeps its connectors and its shell children get none. Bash only;
+      // a PowerShell agent (Windows without Git Bash) is not covered yet.
+      if (shell.shell === 'bash') {
+        const envFile = settingsPath.replace(/\.json$/, '.env.sh');
+        writeFileSync(envFile, 'export ENABLE_CLAUDEAI_MCP_SERVERS=false\n');
+        env.CLAUDE_ENV_FILE = envFile;
+      }
     }
     if (stripConnectors) {
       env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
