@@ -244,7 +244,9 @@ same in both themes: Michael's World's Best Boss mug (on ink in both themes), Pa
 palette, Erin's balloon, Dwight's beet, Jim's tuna can, Stanley's pretzel, Phyllis's
 knitting, Andy's banjo, Ryan's rocket, Oscar's calculator, Angela's cat, Kevin's chili
 pot, Toby's island palm, Kelly's phone, Nick's router, Sadiq's lock, Creed's sprout,
-Meredith's party hat, Darryl's music note (owner, 2026-10-03: the letter added nothing).
+Meredith's party hat, Darryl's music note (owner, 2026-10-03: the letter added nothing),
+and Pete's magnifier over a globe for the Research member, its own face that no hire takes
+(owner, third ship D4).
 Someone with no known character keeps their initial. One component draws them all
 (`PersonAvatar`, `scene/office/props.tsx`).
 
@@ -1009,7 +1011,7 @@ Full window, no app chrome.
   "Works in Harbor & Pine/Finance" line with a "change" link. Unchecked rows at 55%.
   Footer: "N picked, M to connect" and Back (secondary), Next (primary). The footer sticks
   to the window's bottom edge, so Next stays in reach on a long step. Last in the list, one
-  unchecked row for Research (issue #230): Ryan's character, "Pete", "Looks things up on the
+  unchecked row for Research (issue #230): Pete's own character, its current name, "Looks things up on the
   internet for the team, and sees no office data.", a "uses the internet" chip in the "always on"
   style; picked, it starts with the team.
 - **Ready step** (Get Michael ready, docs/designs/get-michael-ready.md): heading with an
@@ -1030,6 +1032,12 @@ Full window, no app chrome.
   each with a small name tag and a check on its screen; an unpicked department shows as a
   dashed outline with a "Name, not picked" tag on its back corner, clear of the pods in
   front of it.
+
+### 7.25a The crash screen (ErrorBoundary)
+
+When a screen throws, the window shows one centered line in `t-ui` 600, "Something went
+wrong on this screen.", and a primary Reload button under it, on the page background, instead
+of a blank window. Nothing else: no stack, no codes (they go to the log).
 
 ### 7.26 Settings and the hire wizard
 
@@ -1451,6 +1459,8 @@ name. Under 400 px the table steps down to 11 / 16. The section never scrolls si
 - `file` (a document) and `sheet` (a spreadsheet or CSV) mark Ask me file rows (§7.8).
 - `external` (opens the browser) and `mail` (opens the mail app) follow a named link in
   agent text, at 12 (§7.8).
+- `lock` marks a choice that cannot be changed, at 12, with visible words beside it
+  ("Always private", §7.26).
 - `help` (a question in a circle) marks a state that could not be checked (§7.25); `info`
   opens an InfoTip explanation. Never swap them.
 - `components/Icon.tsx` draws these outline icons; the v1 pixel set is retired (§17, row 6).
@@ -1650,6 +1660,7 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-10-13 | Research & privacy (issue #230): a Settings section with the Research row and the data classes (§7.26), Research in the onboarding Team step (§7.25), the one time Research report card (§7.8); the Sites group is gone from the Access tab (§7.12). |
 | 2026-10-13 | The Research team member is called Pete (owner): the Settings copy, the Team step row and the report card name him (§7.8, §7.25, §7.26); his name and engine show as plain text in Edit agent. |
 | 2026-10-13 | The Research member is renamable, Pete by default, and the copy takes its current name; Research & privacy shows in every office (owner, ship 2 D16, ship 2 D17). |
+| 2026-10-13 | Research wears Pete, its own character (magnifier over a globe), not Ryan, who stays Marketing's (owner, third ship D4, §3.4, §7.25); the crash screen (§7.25a) and the `lock` icon (§10) are written down. |
 | 2026-10-04 | Banter flies as paper planes only; an envelope on the floor is always a real message (§8.8, §8.12). |
 | 2026-10-04 | Ask me file rows: a question's named files open from the card, or show in Finder (§7.8); `file` and `sheet` icons (§10). |
 | 2026-10-01 | Pre-landing review fixes: dialogs close when closing time starts and its bar sits above them; the compact grid stays clear of the right column; selecting someone dims the rest of the stage to 45% (§7.14); Traces behind a flag (§7.11); setup screens on v2 fields and rows (§7.25); the composer keeps its width and takes pastes (§7.19); Settings and closing time copy in plain words. |

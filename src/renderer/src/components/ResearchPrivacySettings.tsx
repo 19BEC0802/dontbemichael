@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { InfoTip } from './InfoTip';
 import { Icon } from './Icon';
 import { PixelButton } from './PixelButton';
+import { Spinner } from './GetMichaelReady';
 import { RadioRows } from './CapabilitiesTab';
 import type { HarnessConfig } from '@/store/config';
 import { allowedCount, DATA_CLASSES, dataClassSettings, type DataClassId, type DataClassSetting } from '../../../shared/dataClasses';
@@ -54,6 +55,10 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
     }).catch(() => undefined);
     return () => { live = false; };
   }, []);
+  // The row follows the floor: a Research still coming back at launch reads
+  // as on once its terminal is up, not stuck on "couldn't start" (design review).
+  const onFloor = useStore((s) => s.agents.some((a) => a.id === RESEARCH_ID && !!a.ptyId));
+  useEffect(() => { if (onFloor) setPhase((p) => (p === 'failed' ? 'on' : p)); }, [onFloor]);
   // The safe choice is under the keyboard (design review D14).
   useEffect(() => { if (waiting !== null) confirmRow.current?.querySelector<HTMLButtonElement>('button')?.focus(); }, [waiting]);
 
@@ -99,7 +104,7 @@ export function ResearchPrivacySettings({ config, classes, onClassesChange }: {
           <span role="status" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, lineHeight: '20px', color: 'var(--cth-ink-900)' }}>
             {line
               ? <><span aria-hidden="true" style={dot(line.color)} />{line.text}</>
-              : <><span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--cth-line-2)', borderTopColor: 'var(--cth-indigo)', flexShrink: 0, animation: 'cth-spin 0.9s linear infinite' }} />
+              : <><Spinner />
                 {phase === 'starting' ? t('research.starting', { name: researchName }) : t('research.stopping', { name: researchName })}</>}
           </span>
           {phase === 'off' && <PixelButton variant="secondary" size="sm" onClick={() => void turnOn()}>{t('research.turnOn')}</PixelButton>}

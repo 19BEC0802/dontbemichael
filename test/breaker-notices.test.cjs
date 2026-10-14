@@ -89,9 +89,11 @@ test('every trip reason reads in plain words for Michael', () => {
   for (const [raw, plain] of Object.entries(cases)) assert.equal(plainBreakerReason(raw), plain, raw);
   // Every reason the breaker can produce is covered above.
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'breaker.ts'), 'utf8');
-  const prefixes = [...src.matchAll(/return \{ tripping: true, reason: [`'](\w[\w -]*?)[: ]/g)].map((m) => m[1]);
+  // The whole prefix, up to ':' or ' ${': "error storm", "token limit" (testing review, third ship).
+  const prefixes = [...src.matchAll(/return \{ tripping: true, reason: [`']([^:$`']+?)(?::| \$\{)/g)].map((m) => m[1]);
   assert.ok(prefixes.length >= 7, prefixes.join(','));
-  for (const p of prefixes) assert.ok(Object.keys(cases).some((k) => k.startsWith(p)), `no plain words for "${p}"`);
+  assert.ok(prefixes.includes('error storm') && prefixes.includes('token velocity'), prefixes.join(','));
+  for (const p of prefixes) assert.ok(Object.keys(cases).some((k) => k.startsWith(`${p}:`) || k.startsWith(`${p} `)), `no plain words for "${p}"`);
 });
 
 test('the beat sends the breaker messages, not its own copies', () => {

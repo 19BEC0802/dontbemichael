@@ -1,4 +1,4 @@
-import { RESEARCH_NAME } from '../../../shared/research';
+import { useResearchName } from '@/shell/research';
 import { CompanyProfileFields, localCurrency, localTimeZone } from './CompanyProfileFields';
 import { cityLine, cleanCompanyProfile, missingProfileFields, prefillLegalName, type CompanyProfile, type RequiredProfileField } from '@shared/companyProfile';
 import { useEffect, useRef, useState } from 'react';
@@ -207,6 +207,7 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
   const [teamPicked, setTeamPicked] = useState<Record<string, boolean>>({});
   // Research, the one member on the internet: off unless picked (issue #230, D11).
   const [researchPicked, setResearchPicked] = useState(false);
+  const researchName = useResearchName();
   /** Folders the owner pointed somewhere other than the suggestion, keyed by agent id (or OFFICE_KEY). */
   const [folderOverrides, setFolderOverrides] = useState<Record<string, string>>({});
   const [folderSuggestions, setFolderSuggestions] = useState<(FolderSuggestions & { home: string }) | undefined>();
@@ -1093,8 +1094,8 @@ export function OnboardingWizard({ onComplete, preview }: OnboardingWizardProps)
                     />
                   ))}
                   <TeamCard
-                    character="ryan"
-                    name={`${RESEARCH_NAME} · ${t('research.title')}`}
+                    character="pete"
+                    name={`${researchName} · ${t('research.title')}`}
                     summary={t('research.teamSummary')}
                     chips={[{ tone: 'muted', label: t('research.teamTag') }]}
                     picked={researchPicked}

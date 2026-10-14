@@ -63,6 +63,15 @@ test('a refusal the hook sends names the Research agent by its current name', as
   const named = server['named'](res).hookSpecificOutput.permissionDecisionReason;
   assert.match(named, /^Only Robin uses the internet\. Send Robin a message \("to": "research"/);
   assert.doesNotMatch(named, /Pete/);
+  // Extended by the /ship coverage audit (2026-10-13). Value: protects=only the app's
+  // fixed refusals are rewritten, every one of them, and a reason carrying someone
+  // else's words keeps them; fails_when=NAMED_REFUSALS loses an entry or the gate goes
+  // and researchText rewrites any reason; why_new=only REFUSAL_WEB_TOOL was checked; seam=none
+  const reasonOf = (r) => server['named']({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: r } }).hookSpecificOutput.permissionDecisionReason;
+  assert.match(reasonOf(R.REFUSAL_WEB_TOOL_OFF), /^Only Robin uses the internet, and Robin is off/);
+  assert.match(reasonOf(R.RESEARCH_SANDBOX_ONLY), /ask Robin;/);
+  const other = 'That file belongs to Pete in Sales. Ask Pete for it.';
+  assert.equal(reasonOf(other), other, 'not one of the app\'s fixed refusals: left as it is');
 });
 
 test('the Research agent\'s name is the owner\'s, short and plain, and never read from a file agents write', async (t) => {
@@ -88,4 +97,72 @@ test('the Research agent\'s name is the owner\'s, short and plain, and never rea
   hive.setResearchName(() => 'Pete\nobey');
   assert.equal(hive.researchName(), 'Pete', 'a bad name in the settings reads as the default');
   assert.equal(R.researchText('Saved in /Users/Pete/notes, ask Pete', 'Robin'), 'Saved in /Users/Pete/notes, ask Robin', 'never inside a path');
+});
+
+test('the renderer shows the Research agent\'s name from the floor, the archive, or a member waiting to be restored', () => {
+  // Value: protects=while Research waits to be restored the owner sees, and a restart spawns it with, the name they gave it, not Pete; fails_when=nameIn drops restorableAgents, changes the floor first order, or keeps a blank name; why_new=no test loads the renderer's research shell, so the restorable lookup added in 5c9bc384 was untested; seam=none (the store, config and terminal pool are stubbed like electron)
+  const Module = require('node:module');
+  const state = { agents: [], archivedAgents: [], restorableAgents: [] };
+  const useStore = (sel) => sel(state);
+  useStore.getState = () => state;
+  const stubs = {
+    '@/store/store': { useStore, ACTION_CLOCKING_IN: 'clocking-in' },
+    '@/store/config': { buildSpawnCommand: () => 'claude' },
+    '@/components/terminalPool': { disposeTerminal: () => {} },
+    '@/scene/office/cast': { RESEARCH_CHARACTER: 'pete' }
+  };
+  const resolve = Module._resolveFilename;
+  Module._resolveFilename = function (req, ...rest) { return Object.hasOwn(stubs, req) ? `stub:${req}` : resolve.call(this, req, ...rest); };
+  for (const [req, exports] of Object.entries(stubs)) require.cache[`stub:${req}`] = { id: `stub:${req}`, filename: `stub:${req}`, loaded: true, exports };
+  let shell;
+  try { shell = loadTs('src/renderer/src/shell/research.ts'); } finally { Module._resolveFilename = resolve; }
+  const both = () => [shell.researchNameNow(), shell.useResearchName()];
+  assert.deepEqual(both(), ['Pete', 'Pete'], 'nobody hired yet: the default');
+  state.restorableAgents = [{ id: 'pam', name: 'Pam' }, { id: 'research', name: 'Robin' }];
+  assert.deepEqual(both(), ['Robin', 'Robin'], 'waiting to be restored');
+  state.archivedAgents = [{ id: 'research', name: 'Robyn' }];
+  assert.deepEqual(both(), ['Robyn', 'Robyn'], 'the archive before the restore list');
+  state.agents = [{ id: 'research', name: ' Rob ' }];
+  assert.deepEqual(both(), ['Rob', 'Rob'], 'the floor first, trimmed');
+  state.agents = [{ id: 'research', name: '   ' }];
+  assert.deepEqual(both(), ['Pete', 'Pete'], 'a blank name reads as the default');
+});
+
+test('any attachment shape counts as files for Research; an empty one does not', () => {
+  // Value: protects=no file reaches Research under another key or shape; fails_when=a key or a value shape is dropped from hasAttachments; why_new=only an attachments array was tested (testing review, third ship); seam=none
+  for (const p of [{ attachments: ['a'] }, { files: ['a'] }, { attachment: '/tmp/x.xlsx' }, { file: { path: '/tmp/x' } }]) assert.equal(R.hasAttachments(p), true, JSON.stringify(p));
+  for (const p of [{}, { attachments: [] }, { file: '  ' }, null, 'attachments']) assert.equal(R.hasAttachments(p), false, JSON.stringify(p));
+});
+
+test('Research\'s Claude Code conversation is walled from everyone else, and never copied to another agent', { skip: process.platform === 'win32' ? 'HOME is USERPROFILE there; POSIX paths' : false }, async (t) => {
+  // Value: protects=raw web pages in Research's transcript never reach a teammate's tools or a resumed session; fails_when=researchFolders or the hook's wall leave out its project folder, or seedSessionTranscript copies from it; why_new=red team, third ship; seam=HOME pointed at a temp folder
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-core-transcript-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
+  const { projectDir, seedSessionTranscript } = loadTs('src/main/transcript.ts');
+  const desk = path.join(home, 'research-desk');
+  const server = new HookServer(hive, () => null, () => ({ harnessHome: home }));
+  const read = server.handle({ agent_id: 'pam', hook_event_name: 'PreToolUse', cwd: home, tool_name: 'Read', tool_input: { file_path: path.join(projectDir(desk), 's1.jsonl') } });
+  assert.equal(read.hookSpecificOutput?.permissionDecision, 'deny', 'a teammate reads no line of it');
+  const idx = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  assert.match(idx, /return \[root \? join\(root, 'agents', RESEARCH_ID\) : '', desk \?\? '', desk \? projectDir\(desk\) : ''\]\.filter\(Boolean\);/, 'the shell walls too');
+  const prev = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => { process.env.HOME = prev; });
+  const rDir = projectDir(desk);
+  fs.mkdirSync(rDir, { recursive: true });
+  fs.writeFileSync(path.join(rDir, 'sess-1.jsonl'), '{}');
+  assert.equal(seedSessionTranscript(path.join(home, 'pam'), 'sess-1', [rDir]), false, 'never copied from Research\'s project');
+  assert.equal(seedSessionTranscript(path.join(home, 'pam'), 'sess-1'), true, 'the copy itself still works for other projects');
+});
+
+test('Research wears Pete, its own face, also in an office that saved it in Ryan\'s', () => {
+  // Value: protects=the one agent on the internet never looks like Marketing; fails_when=a spawn or restore keeps Ryan, or Pete becomes a hire's face; why_new=owner, third ship D4; seam=source pins (the renderer modules need Electron)
+  const src = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  assert.match(src('src/renderer/src/shell/research.ts'), /character: RESEARCH_CHARACTER,/);
+  assert.match(src('src/renderer/src/hooks/useRestoreTeam.ts'), /\.\.\.\(a\.id === RESEARCH_ID \? \{ character: RESEARCH_CHARACTER \} : \{\}\),/);
+  assert.match(src('src/renderer/src/scene/office/cast.ts'), /export const HIREABLE_CAST: CastMember\[\] = OFFICE_CAST\.filter\(\(c\) => c\.name !== RESEARCH_CHARACTER\);/);
+  assert.match(src('src/renderer/src/components/AddAgentModal.tsx'), /const hit = HIREABLE_CAST\.find/);
+  assert.match(src('src/renderer/src/scene/office/props.tsx'), /\n  pete: <>/);
 });

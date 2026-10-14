@@ -9,7 +9,7 @@ import { ProviderLogo } from './ProviderLogo';
 import { InfoTip } from './InfoTip';
 import { Dialog } from '@/shell/Dialog';
 import { useStore, type Agent, ACTION_CLOCKING_IN } from '@/store/store';
-import { OFFICE_CAST, CAST_BY_NAME, CAST_GROUPS, DEFAULT_CHARACTER, type OfficeCharacterName } from '@/scene/office/cast';
+import { OFFICE_CAST, CAST_BY_NAME, CAST_GROUPS, DEFAULT_CHARACTER, HIREABLE_CAST, type OfficeCharacterName } from '@/scene/office/cast';
 import { type AccentColorName } from '@/design/tokens';
 import type { HireManifest } from '@shared/hire';
 import { hireQueueProgress } from '@shared/hireQueue';
@@ -151,7 +151,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const reviewProgress = hireQueueProgress(hireQueue);
 
   const knownCharacter = (c?: string): OfficeCharacterName =>
-    (OFFICE_CAST.some(m => m.name === c) ? (c as OfficeCharacterName) : DEFAULT_CHARACTER);
+    (HIREABLE_CAST.some(m => m.name === c) ? (c as OfficeCharacterName) : DEFAULT_CHARACTER);
   const knownAccent = (a?: string): AccentColorName | undefined =>
     (ACCENTS.includes(a as AccentColorName) ? (a as AccentColorName) : undefined);
   /** The cast member a typed name refers to, if any (typing "Meredith" picks her
@@ -159,7 +159,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const characterForName = (n: string): OfficeCharacterName | null => {
     const q = n.trim().toLowerCase();
     if (!q) return null;
-    const hit = OFFICE_CAST.find(c => c.displayName.toLowerCase() === q || c.name === q);
+    const hit = HIREABLE_CAST.find(c => c.displayName.toLowerCase() === q || c.name === q);
     return hit ? hit.name : null;
   };
 

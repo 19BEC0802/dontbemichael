@@ -14,6 +14,7 @@ import { tokenizeCommand } from '../../../shared/commandLine';
 import { teamAccent } from '../../../shared/teamPlan';
 import { RESEARCH_ID, RESEARCH_NAME, RESEARCH_ROLE, RESEARCH_WORK_STYLE } from '../../../shared/research';
 import { disposeTerminal } from '@/components/terminalPool';
+import { RESEARCH_CHARACTER } from '@/scene/office/cast';
 
 export const RESEARCH_PTY_ID = `pty-${RESEARCH_ID}`;
 /** Its role line on the floor and in the roster. */
@@ -67,7 +68,7 @@ export async function startResearch(config: HarnessConfig): Promise<{ ok: true }
   store.addAgent({
     id: RESEARCH_ID,
     name,
-    character: 'ryan',
+    character: RESEARCH_CHARACTER,
     accent: teamAccent(store.agents.length),
     description: RESEARCH_DESCRIPTION,
     project: cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd,

@@ -22,7 +22,7 @@
  * owner's ownerRetry() ends. The state is saved, so a restart during
  * a break still shows it. Pure apart from the injected clock and storage.
  */
-import type { OfficeBreakView, OfficeStopReason } from '../shared/officeBreak';
+import { STOP_REASONS, type OfficeBreakView, type OfficeStopReason } from '../shared/officeBreak';
 
 /** Wait after the reset before checking, so Claude Code's own continue (when
  *  the owner turned it on) runs first and is not doubled. */
@@ -56,7 +56,7 @@ export interface OfficeBreakState {
   manual: boolean;
 }
 
-const REASONS: readonly OfficeStopReason[] = ['limit', 'credit', 'signin'];
+const REASONS: readonly OfficeStopReason[] = STOP_REASONS;
 
 type Window = { used_percentage?: unknown; resets_at?: unknown };
 

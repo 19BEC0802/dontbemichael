@@ -304,3 +304,24 @@ test('while Research is on, agents save scratch work in their own folder, not th
   const off = await office(t, { on: false });
   assert.ok(!denied(hookFor(off)('pam', 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: '/tmp/draft.md', content: 'x' } })), 'Research off: as before');
 });
+
+test('after the owner renames Research, the hook\'s folder refusals name the new name', async (t) => {
+  // Value: protects=an agent kept out of Research's folders or the shared temp folders is told the name the owner chose, so it asks the right member; fails_when=hooks.ts stops passing the current name into researchWallDecision or sharedTempWriteDecision (named() does not rewrite these, they are not fixed refusals); why_new=the hook tests run only under the default name, and the pure tests call the decisions without a name; seam=none
+  const o = await office(t);
+  assert.equal(o.hive.renameAgent(R.RESEARCH_ID, 'Robin').ok, true);
+  o.hive.setResearchName(() => 'Robin'); // the app saves it in its settings (index.ts)
+  const hook = hookFor(o);
+  const researchDir = path.join(o.hive.root(), 'agents', R.RESEARCH_ID);
+  const read = hook('pam', 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: path.join(o.desk, 'notes.md') } });
+  assert.ok(denied(read));
+  assert.match(reason(read), /That is Robin's folder, and only Robin reads it/);
+  assert.doesNotMatch(reason(read), /Pete/);
+  o.cfg = { harnessHome: o.home };
+  const write = hook('pam', 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: path.join(researchDir, 'inbox', 'sneak.json'), content: 'x' } });
+  assert.ok(denied(write));
+  assert.match(reason(write), /That is Robin's folder\. To ask Robin something/);
+  if (process.platform === 'win32') return; // the shared temp folder below is a POSIX path
+  const tmp = hook('pam', 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: '/tmp/draft.md', content: 'x' } });
+  assert.ok(denied(tmp));
+  assert.match(reason(tmp), /^While Robin is on, the shared temporary folders are closed for saving/);
+});

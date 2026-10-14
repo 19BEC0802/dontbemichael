@@ -371,3 +371,14 @@ test('a new key that fails again waits for the owner again, with no automatic ch
   c.t = T0 + 10 * RETRY_MS;
   assert.equal(b.tick(), null, 'only the owner ends it');
 });
+
+test('Get Michael ready shows unless a sign in stop already asks the same thing', () => {
+  // Value: protects=the owner is asked to sign in once, by one card; fails_when=setupCardShown counts the setup card during a sign in stop or hides it for credit; why_new=only a source pin covered it (testing review, third ship); seam=none
+  const { setupCardShown } = loadTs('src/renderer/src/shell/useNeedsYou.ts');
+  const need = { applies: true, needed: true };
+  const stop = (reason) => ({ until: null, checking: false, reason, again: false });
+  assert.equal(setupCardShown({ engineSetup: need, stop: null }), true);
+  assert.equal(setupCardShown({ engineSetup: need, stop: stop('signin') }), false);
+  assert.equal(setupCardShown({ engineSetup: need, stop: stop('credit') }), true);
+  assert.equal(setupCardShown({ engineSetup: { applies: true, needed: false }, stop: null }), false);
+});

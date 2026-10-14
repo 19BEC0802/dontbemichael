@@ -405,7 +405,7 @@ const inputStyle: CSSProperties = {
 /** A value that can't be changed here, shown as text but still a labelled,
  *  read only field for screen readers (the Research member's engine). */
 const lockedValueStyle: CSSProperties = {
-  border: 'none', background: 'transparent', padding: 0, outline: 'none',
+  border: 'none', background: 'transparent', padding: 0,
   fontSize: 13, color: 'var(--cth-ink)', fontFamily: 'var(--cth-font-ui)'
 };
 

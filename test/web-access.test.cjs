@@ -155,7 +155,7 @@ test('Research loads no settings or CLAUDE.md but the app\'s, and resumes only i
   // Value: protects=the owner's hooks, skills and CLAUDE.md never reach Research, and a registry edit can't resume it into another agent's conversation; fails_when=the flag is dropped or Research seeds a transcript from another project; why_new=red team pass 2 (verified live 2026-10-13: without the flag Research saw the owner's skills); seam=none
   const main = read('src/main/index.ts');
   assert.match(main, /if \(isResearch\) opts\.args = \[\.\.\.opts\.args, '--setting-sources', ''\];/);
-  assert.match(main, /const resumable = isResearch\s*\? \/\^\[\\w-\]\{1,128\}\$\/\.test\(sid\) && existsSync\(join\(projectDir\(opts\.cwd\), `\$\{sid\}\.jsonl`\)\)\s*: seedSessionTranscript\(opts\.cwd, sid\);/);
+  assert.match(main, /const resumable = isResearch\s*\? \/\^\[\\w-\]\{1,128\}\$\/\.test\(sid\) && existsSync\(join\(projectDir\(opts\.cwd\), `\$\{sid\}\.jsonl`\)\)\s*: seedSessionTranscript\(opts\.cwd, sid, researchDesk\(\) \? \[projectDir\(researchDesk\(\)!\)\] : \[\]\);/);
 });
 
 test('Research leaves closing time alone, turning it off returns its asks, and agent temp files are pruned', () => {
@@ -164,7 +164,7 @@ test('Research leaves closing time alone, turning it off returns its asks, and a
   const main = read('src/main/index.ts');
   assert.equal((main.match(/turnResearchOff\(\);/g) || []).length, 2, 'both spawn guards');
   assert.match(main, /function turnResearchOff\(\): number \{\s*writeConfig\(\{ research: [^\n]*on: false \} \}\);[\s\S]{0,500}try \{ return hive\.returnResearchInbox\(\);/);
-  assert.match(main, /pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);/);
+  assert.match(main, /setTimeout\(\(\) => pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\), 5_000\)\.unref\?\.\(\);/);
 });
 
 test('the trust check always runs on Claude, with none of the owner\'s hooks', () => {

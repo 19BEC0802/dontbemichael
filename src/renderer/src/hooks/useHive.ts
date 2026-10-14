@@ -21,7 +21,7 @@ import { resolveGodName } from '../../../shared/godIdentity';
 import { acquireTerminal, resetTerminal, isTerminalAutomationSafe, hasTerminalDraft } from '@/components/terminalPool';
 import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition } from './queueDelivery';
 import { RunningToolCalls } from './runningToolCalls';
-import { OFFICE_CAST, DEFAULT_CHARACTER, type OfficeCharacterName } from '@/scene/office/cast';
+import { OFFICE_CAST, DEFAULT_CHARACTER, HIREABLE_CAST, type OfficeCharacterName } from '@/scene/office/cast';
 import { teamMemberName, teamMemberRole, teamMemberGoal, teamAccent, teamMemberStart, rewrittenInstructions } from '../../../shared/teamPlan';
 import type { AgentDefinitionV2 } from '../../../shared/agentDefinition';
 import { FIRST_TASK_EDITED_MAX, withoutLegacyFirstTask } from '../../../shared/firstTask';
@@ -381,7 +381,7 @@ async function startBusinessTeam(config: HarnessConfig): Promise<void> {
   const command = buildSpawnCommand(config, model, provider);
   const [exe, ...args] = tokenizeCommand(command.trim());
   const castName = (c?: string): OfficeCharacterName =>
-    OFFICE_CAST.some((m) => m.name === c) ? (c as OfficeCharacterName) : DEFAULT_CHARACTER;
+    HIREABLE_CAST.some((m) => m.name === c) ? (c as OfficeCharacterName) : DEFAULT_CHARACTER;
 
   const failed: string[] = [];
   for (const [index, member] of team.entries()) {
@@ -1269,7 +1269,7 @@ export function useHive(config: HarnessConfig | null): void {
       // particular character. Unknown values fall through to the inference rather
       // than breaking the card.
       const castMember = (q?: string) =>
-        q ? OFFICE_CAST.find((m) => m.name === q || m.displayName.toLowerCase() === q)?.name : undefined;
+        q ? HIREABLE_CAST.find((m) => m.name === q || m.displayName.toLowerCase() === q)?.name : undefined;
       const character =
         castMember(rec.character?.trim().toLowerCase()) ??
         castMember((rec.name || rec.id).toLowerCase()) ??

@@ -14,7 +14,9 @@
  * work can start again: delivery is open then, so that turn can happen.
  * `again` means a check found the same stop still on ("still out").
  */
-export type OfficeStopReason = 'limit' | 'credit' | 'signin';
+/** Every stop reason, once: a saved stop is read back against this list. */
+export const STOP_REASONS = ['limit', 'credit', 'signin'] as const;
+export type OfficeStopReason = typeof STOP_REASONS[number];
 
 export interface OfficeBreakView {
   until: number | null;

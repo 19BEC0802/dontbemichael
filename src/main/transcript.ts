@@ -72,14 +72,18 @@ export function projectDir(cwd: string): string {
  *  crafted id like `../../x` would otherwise traverse out of the project dirs). */
 const VALID_SESSION_ID = /^[A-Za-z0-9_-]+$/;
 
-export function seedSessionTranscript(cwd: string, sessionId: string): boolean {
+export function seedSessionTranscript(cwd: string, sessionId: string, skipDirs: string[] = []): boolean {
   try {
     if (!sessionId || !VALID_SESSION_ID.test(sessionId)) return false;
     const target = path.join(projectDir(cwd), `${sessionId}.jsonl`);
     if (existsSync(target)) return true;
     const projectsRoot = path.join(os.homedir(), '.claude/projects');
     if (!existsSync(projectsRoot)) return false;
+    // A project another agent may never take a conversation from (Research's,
+    // full of raw web text; red team, third ship).
+    const skip = new Set(skipDirs.map((d) => path.resolve(d)));
     for (const dir of readdirSync(projectsRoot)) {
+      if (skip.has(path.resolve(projectsRoot, dir))) continue;
       const candidate = path.join(projectsRoot, dir, `${sessionId}.jsonl`);
       if (existsSync(candidate)) {
         mkdirSync(path.dirname(target), { recursive: true });

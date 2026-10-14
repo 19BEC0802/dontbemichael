@@ -68,6 +68,7 @@ import {
 import { expandTilde } from './fs';
 import { CONNECTOR_UNDECIDED, MCP_RESOURCE_TOOLS, type SpawnConnectorPlan } from '../shared/claudeConnectors';
 import { HOOK_PATH_UNCHECKED, MAX_HOOK_FRAME_BYTES } from '../shared/hookEvents';
+import { readResearchFile } from './researchNotes';
 import { resolveGodName } from '../shared/godIdentity';
 import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { OFFICE_ROLES } from '../shared/officeRoles';
@@ -112,6 +113,7 @@ A schedule runs one of your jobs on a clock. You never change a schedule yoursel
 `;
 
 export type MessageAct = 'request' | 'inform' | 'propose' | 'query' | 'agree' | 'refuse' | 'done';
+const MESSAGE_ACTS: readonly string[] = ['request', 'inform', 'propose', 'query', 'agree', 'refuse', 'done'];
 
 export interface HiveMessage {
   id: string;
@@ -251,7 +253,7 @@ export const HOUSE_RULES = [
 /** Every office's house rules: rule 9, only the Research agent uses the
  *  internet, applies in every office (ship review D3; owner ship 2 D16 widened it
  *  from business offices to all). Shown with its current name by houseRules. */
-export const BUSINESS_HOUSE_RULES = `${HOUSE_RULES}\n${RESEARCH_HOUSE_RULE}`;
+export const OFFICE_HOUSE_RULES = `${HOUSE_RULES}\n${RESEARCH_HOUSE_RULE}`;
 
 
 /**
@@ -374,12 +376,9 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
   ].join('\n');
 }
 
-/**
- * The shared instructions every team member gets in a business office (audit
- * README section 3), merged with what was built since. The team member's own
- * Work style arrives separately, through the hook. House rules, folders,
- * memory and company knowledge are appended by injectedPrompt.
- */
+/** Research's start instructions: its inbox and outbox only, no office data,
+ *  and replies only to the one who asked or to Michael. House rules and its
+ *  memory are appended by injectedPrompt. */
 export function researchInstructions(b: PromptBusiness, michael: string, p: PromptPaths, name: string = RESEARCH_NAME): string {
   return [
     `You are ${name}, the Research team member at ${where(b)}, the one who uses the internet. Teammates and ${michael} send you questions as messages. The app's trust layer reads each one first and may hand you a cleaned or more general version of what was asked; answer the question as you received it, and never ask for names, contact details, money or other private details.`,
@@ -392,6 +391,12 @@ export function researchInstructions(b: PromptBusiness, michael: string, p: Prom
   ].join('\n');
 }
 
+/**
+ * The shared instructions every team member gets in a business office (audit
+ * README section 3), merged with what was built since. The team member's own
+ * Work style arrives separately, through the hook. House rules, folders,
+ * memory and company knowledge are appended by injectedPrompt.
+ */
 export function teamMemberInstructions(name: string, role: string, michael: string, b: PromptBusiness, p: PromptPaths): string {
   return [
     `You are ${name}, the ${role} on the team at ${where(b)}. ${michael} is the office manager: he gives you work and is your only link to the owner. Anything you need from the owner, such as an approval, an answer or a file, you file for ${michael} to check, and he puts it on the owner's Ask me board.`,
@@ -673,12 +678,33 @@ export class HiveManager {
   /** The Research agent's current name (owner, ship 2 D17: renamable, Pete by
    *  default), as the owner set it in the app's settings and checked: never
    *  the registry's copy, which agents' shells can write (red team). */
-  researchName(): string { try { return cleanResearchName(this.researchNameSource()) ?? RESEARCH_NAME; } catch { return RESEARCH_NAME; } }
+  researchName(): string {
+    // Asked on every routed message and file tool call: worked out at most
+    // once a second, and again at once after a rename (performance review).
+    const now = Date.now();
+    if (this.researchNameMemo && now - this.researchNameMemo.at < 1000) return this.researchNameMemo.name;
+    const name = this.researchNameUncached();
+    this.researchNameMemo = { at: now, name };
+    return name;
+  }
+  private researchNameMemo: { at: number; name: string } | null = null;
+  private researchNameUncached(): string {
+    let name = RESEARCH_NAME;
+    try { name = cleanResearchName(this.researchNameSource()) ?? RESEARCH_NAME; } catch { /* the default */ }
+    // When another member already has that name or id, Research is called by
+    // its role, as ensureAgent names it, so the rules never point at the other
+    // member (api review, third ship).
+    try {
+      const taken = Object.entries(this.registry().agents).some(([id, a]) => id !== RESEARCH_ID && (nameKey(id) === nameKey(name) || (!!a?.name && nameKey(a.name) === nameKey(name))));
+      if (taken) return RESEARCH_ROLE;
+    } catch { /* no registry: the name as set */ }
+    return name;
+  }
   private researchNameSource: () => unknown = () => undefined;
-  setResearchName(fn: () => unknown): void { this.researchNameSource = fn; }
+  setResearchName(fn: () => unknown): void { this.researchNameSource = fn; this.researchNameMemo = null; }
   /** Every office's house rules, rule 9 included, with the Research agent's
    *  current name (owner, ship 2 D16: the internet rule is the same in every office). */
-  houseRules(): string { return researchText(BUSINESS_HOUSE_RULES, this.researchName()); }
+  houseRules(): string { return researchText(OFFICE_HOUSE_RULES, this.researchName()); }
 
   /** Main's handler for an agent's schedule request (a message to "scheduler"
    *  with a `schedule` object). It records a request for the owner and returns
@@ -1128,8 +1154,7 @@ export class HiveManager {
       // member already has is skipped, so two never share one; the role is
       // the last resort.
       ...(meta.id === RESEARCH_ID ? {
-        name: [this.researchName(), RESEARCH_ROLE]
-          .find((n) => !Object.entries(reg.agents).some(([otherId, a]) => otherId !== RESEARCH_ID && (nameKey(otherId) === nameKey(n) || (!!a?.name && nameKey(a.name) === nameKey(n))))) ?? RESEARCH_ROLE
+        name: this.researchName()
       } : {}),
       capabilities: meta.capabilities ?? prev?.capabilities ?? [],
       role,
@@ -1516,6 +1541,7 @@ export class HiveManager {
 
       const previousName = agent.name;
       agent.name = nextName;
+      this.researchNameMemo = null;
       this.writeJson(join(root, 'registry.json'), reg);
 
       // fleet.json is ephemeral and may not exist yet. When it does, keep its
@@ -2114,7 +2140,9 @@ export class HiveManager {
 
   /** Normalize a partial message into a full HiveMessage. */
   private normalize(partial: Partial<HiveMessage>, from: string): HiveMessage {
-    const act = (partial.act ?? 'inform') as MessageAct;
+    // An act outside the protocol reads as inform: a file can carry any
+    // string here, and it reaches prompts (red team, third ship).
+    const act = (MESSAGE_ACTS.includes(String(partial.act)) ? partial.act : 'inform') as MessageAct;
     return {
       id: isSafeMessageId(partial.id) ? partial.id : `${stamp()}-${shortRand()}`,
       conversation: partial.conversation ?? `conv-${shortRand()}`,
@@ -2232,7 +2260,14 @@ export class HiveManager {
       if (!this.stampKey || this.stampKey.length < 16) {
         this.stampKey = randomBytes(32);
         if (file) {
-          try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, this.stampKey.toString('hex'), { mode: 0o600 }); }
+          // Written whole or not at all: a cut write would leave a short key
+          // that drops every waiting message at the next start (review).
+          try {
+            mkdirSync(dirname(file), { recursive: true });
+            const tmp = `${file}.tmp-${shortRand()}`;
+            writeFileSync(tmp, this.stampKey.toString('hex'), { mode: 0o600 });
+            renameSync(tmp, file);
+          }
           catch (e) { console.error('[research] could not save the stamp key; messages waiting for Research at the next start will be sent back', e); }
         }
       }
@@ -2272,7 +2307,7 @@ export class HiveManager {
       }
       if (ok) continue;
       try { rmSync(full, { force: true }); } catch { /* next tick */ }
-      this.appendLog({ kind: 'drop', reason: 'unstamped-research-inbox', file: f });
+      this.appendLog({ kind: 'drop', reason: 'unstamped-research-inbox', file: createHash('sha256').update(f).digest('hex').slice(0, 16) });
       if (typeof m.from === 'string' && m.from !== RESEARCH_ID && this.registry().agents[m.from]) {
         this.tellSender(m.from, typeof m.id === 'string' ? m.id : null, m.conversation, NOT_SENT_SUBJECT, REFUSAL_UNSURE);
       }
@@ -2458,10 +2493,9 @@ export class HiveManager {
   private deliverToResearch(fromId: string, orig: HiveMessage, subject: string, body: string): void {
     // Research answers questions; it is never assigned work, so a request
     // reaches it as a query (a request would go to Michael as a teammate's
-    // job hand off). The thread is the app's own: the sender's thread id is
-    // agent written text the trust layer never read.
-    // The thread is one the app derives from the sender's, so follow ups in
-    // one thread reach Research in one thread too, without its id.
+    // job hand off). The thread is an HMAC of the sender and the sender's
+    // thread: follow ups in one thread reach Research in one thread too,
+    // without the sender's thread id, which the trust layer never read.
     const act: MessageAct = orig.act === 'inform' ? 'inform' : 'query';
     const thread = `conv-r-${createHmac('sha256', this.researchKey()).update(`thread\n${fromId}\n${orig.conversation}`).digest('hex').slice(0, 16)}`;
     const clean = this.normalize({ to: RESEARCH_ID, act, subject, body, conversation: thread }, fromId);
@@ -2487,8 +2521,11 @@ export class HiveManager {
     const reg = this.registry();
     const godId = reg.godId ?? 'god';
     const recipient = typeof msg.to === 'string' && reg.agents[msg.to] ? msg.to : null;
+    // The log is shared and committed: only an id-shaped recipient goes in,
+    // never a string Research made up (red team, third ship).
+    const logTo = typeof msg.to === 'string' && /^[\w-]{1,64}$/.test(msg.to) ? msg.to : 'invalid';
     const deny = (): 'denied' => {
-      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: msg.to, id: msg.id });
+      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: logTo, id: msg.id });
       if (recipient && recipient !== RESEARCH_ID) this.tellSender(recipient, null, msg.conversation, ANSWER_UNCHECKED_SUBJECT, ANSWER_UNCHECKED);
       return 'denied';
     };
@@ -2499,7 +2536,7 @@ export class HiveManager {
     // A reply to the app's own senders is dropped quietly, as for everyone,
     // so a refusal note never starts a loop of answers.
     if (['scheduler', 'heartbeat', 'mail', 'system', PRIVACY_CHECK_SENDER].includes(to)) {
-      this.appendLog({ kind: 'drop', reason: 'reply-to-system-sender', from: RESEARCH_ID, to: msg.to, id: msg.id });
+      this.appendLog({ kind: 'drop', reason: 'reply-to-system-sender', from: RESEARCH_ID, to: logTo, id: msg.id });
       return 'denied';
     }
     const toMichael = [godId, 'god', 'michael', 'human', resolveGodName(reg.agents[godId]?.name).toLowerCase()].includes(to);
@@ -2508,7 +2545,7 @@ export class HiveManager {
     const answering = (msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined) ?? this.researchThreads.get(msg.conversation);
     const asked = !!recipient && answering?.from === recipient;
     if (!toMichael && !asked) {
-      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: msg.to, id: msg.id, reason: 'not-an-asker' });
+      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: logTo, id: msg.id, reason: 'not-an-asker' });
       const note = this.normalize({ to: RESEARCH_ID, act: 'inform', subject: NOT_SENT_SUBJECT_OUT, body: RESEARCH_ONLY_ASKERS }, PRIVACY_CHECK_SENDER);
       this.researchCleared.add(note.id);
       try { this.routeMessage(note); } finally { this.researchCleared.delete(note.id); }
@@ -2519,31 +2556,37 @@ export class HiveManager {
     const v = this.trustCheck(`out:${createHash('sha256').update(raw).digest('hex')}`, () => layer.outbound({ subject: partial.subject, body: partial.body }));
     if (v === 'hold') return 'hold';
     if (v.decision === 'deny') return deny();
-    msg.subject = v.subject;
-    msg.body = `${researchText(RESEARCH_REPLY_LABEL, this.researchName())}\n\n${v.body}`;
     // Back into the sender's own thread, only when it goes back to that
     // sender; Research knows only the clean copies' ids, so any other reply
     // id it writes is dropped (ship review pass 3).
     const byId = msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined;
     const back = byId ?? this.researchThreads.get(msg.conversation);
-    if (back && back.from === msg.to) {
-      msg.in_reply_to = byId ? back.origId : null;
-      msg.conversation = back.conversation;
-    } else {
-      msg.in_reply_to = null;
-      if (back) msg.conversation = `conv-${shortRand()}`;
-    }
+    // What is delivered is built only from the layer's verdict and fields the
+    // app chooses: Research's act, times, flags and thread never pass through
+    // unchecked (red team, third ship).
+    const out = this.normalize({
+      id: msg.id,
+      to: msg.to,
+      act: 'inform',
+      subject: v.subject,
+      body: `${researchText(RESEARCH_REPLY_LABEL, this.researchName())}\n\n${v.body}`,
+      in_reply_to: back && back.from === msg.to && byId ? back.origId : null,
+      conversation: back && back.from === msg.to ? back.conversation : `conv-${shortRand()}`
+    }, RESEARCH_ID);
     const flagged = ('flagged' in v && v.flagged) || looksLikeInjection(`${v.subject}\n${v.body}`);
-    this.routeMessage(msg);
+    this.routeMessage(out);
     if (flagged) {
-      const toName = reg.agents[msg.to]?.name ?? msg.to;
-      this.appendLog({ kind: 'research-reply-flagged', to: msg.to, id: msg.id });
+      const toName = reg.agents[out.to]?.name ?? out.to;
+      this.appendLog({ kind: 'research-reply-flagged', to: logTo, id: out.id });
+      const n = this.researchName();
       this.deliver(this.normalize({
         to: godId,
         act: 'inform',
-        subject: `${this.researchName()}'s answer may carry web instructions`,
-        body: `${this.researchName()}'s answer to ${toName} ("${msg.subject.slice(0, 80)}") read like it was trying to steer its reader. The trust layer cleaned it and it was delivered labelled as information only. Look at it if the work matters.`
-      }, 'system'), godId);
+        subject: `${n}'s answer may carry web instructions`,
+        body: v.decision === 'clean'
+          ? `${n}'s answer to ${toName} ("${out.subject.slice(0, 80)}") read like it was trying to steer its reader. The trust layer cleaned it and it was delivered labelled as information only. Look at it if the work matters.`
+          : `${n}'s answer to ${toName} ("${out.subject.slice(0, 80)}") read like it was trying to steer its reader. It was delivered as written, labelled as information only. Look at it if the work matters.`
+      }, PRIVACY_CHECK_SENDER), godId);
     }
     return 'sent';
   }
@@ -3171,14 +3214,17 @@ export class HiveManager {
   }
 
   memory(id: string): string {
-    if (!this.root()) return '';
+    // Research's notes are web text it writes itself: the owner, the voice
+    // assistant and search see them only as the cleaned copy in the shared
+    // memory (owner, third ship D3).
+    if (!this.root() || id === RESEARCH_ID) return '';
     const p = join(this.agentDir(id), 'memory.md');
     return existsSync(p) ? readFileSync(p, 'utf8') : '';
   }
   /** The Memory tab's read: the index plus how many notes wait in
    *  memory/inbox.md for the next tidy-up (docs/designs/memory-tab-readable.md). */
   memoryDetail(id: string): { index: string; waiting: number } {
-    if (!/^[\w-]+$/.test(id) || !this.root()) return { index: '', waiting: 0 };
+    if (!/^[\w-]+$/.test(id) || !this.root() || id === RESEARCH_ID) return { index: '', waiting: 0 };
     const inbox = join(this.agentDir(id), 'memory', 'inbox.md');
     let waiting = 0;
     try { if (existsSync(inbox)) waiting = parseInbox(readFileSync(inbox, 'utf8')).length; } catch { /* count stays 0 */ }
@@ -3189,6 +3235,7 @@ export class HiveManager {
   procedure(id: string, slug: string): string | null {
     if (!/^[\w-]+$/.test(id) || !isProcedureSlug(slug) || !this.root()) return null;
     const p = join(this.agentDir(id), 'memory', 'procedures', `${slug}.md`);
+    if (id === RESEARCH_ID) return null;
     try { return existsSync(p) ? readFileSync(p, 'utf8').slice(0, MAX_PROCEDURE_CHARS) : null; } catch { return null; }
   }
   /** Whether an agent has recorded NON-TRIVIAL memory — i.e. has appended real
@@ -3198,7 +3245,7 @@ export class HiveManager {
    *  but most of the floor's history lives in a handful of them). Cheap: reads a
    *  small markdown file; never throws. Works for ANY id, active OR archived. */
   hasMemory(id: string): boolean {
-    if (!this.root()) return false;
+    if (!this.root() || id === RESEARCH_ID) return false;
     const p = join(this.agentDir(id), 'memory.md');
     if (!existsSync(p)) return false;
     try {
@@ -3892,7 +3939,7 @@ export class HiveManager {
     const p = this.handoffPath(id);
     if (!existsSync(p)) return null;
     try {
-      const text = readFileSync(p, 'utf8').trim();
+      const text = (id === RESEARCH_ID ? (readResearchFile(this.agentDir(id), p) ?? '') : readFileSync(p, 'utf8')).trim();
       const archive = join(this.agentDir(id), 'memory', 'handoffs');
       mkdirSync(archive, { recursive: true });
       renameSync(p, join(archive, `${new Date().toISOString().replace(/[:.]/g, '-')}.md`));
@@ -3938,7 +3985,11 @@ export class HiveManager {
     if (!existsSync(p)) return null;
     let entries: MemoryEntry[] = [];
     try {
-      const parsed = parseIndex(readFileSync(p, 'utf8'));
+      // Research's file is read the safe way: a link it made never reaches
+      // what its walls keep from it (red team, third ship).
+      const text = id === RESEARCH_ID ? readResearchFile(this.agentDir(id), p) : readFileSync(p, 'utf8');
+      if (text === null) return null;
+      const parsed = parseIndex(text);
       if (!parsed.isIndex) return null;
       entries = parsed.entries;
     } catch { return null; }
@@ -4001,11 +4052,15 @@ export class HiveManager {
     const out: VoiceMessage[] = [];
     for (const owner of owners) {
       const base = this.agentDir(owner);
+      // Research's own folders are its to write, so only its inbox, which the
+      // app alone fills with checked copies, is read; what it sent shows as
+      // the copies the trust layer delivered (owner, third ship D3).
+      const research = owner === RESEARCH_ID;
       const folders: Array<{ dir: string; direction: 'inbox' | 'outbox'; archived: boolean }> = [
         { dir: join(base, 'inbox'), direction: 'inbox', archived: false },
-        { dir: join(base, 'outbox'), direction: 'outbox', archived: false }
+        ...(research ? [] : [{ dir: join(base, 'outbox'), direction: 'outbox' as const, archived: false }])
       ];
-      if (includeArchived) {
+      if (includeArchived && !research) {
         folders.push({ dir: join(base, 'inbox', '.done'), direction: 'inbox', archived: true });
         folders.push({ dir: join(base, 'outbox', '.sent'), direction: 'outbox', archived: true });
       }
@@ -4061,7 +4116,9 @@ export class HiveManager {
     const out: Array<VoiceMessage & { dir: 'in' | 'out' }> = [];
     for (const owner of owners) {
       const base = this.agentDir(owner);
-      for (const [dir, archived] of [[join(base, 'inbox'), false], [join(base, 'inbox', '.done'), true]] as const) {
+      // Research's .done is its to write: only the inbox the app fills (D3).
+      const dirs = owner === RESEARCH_ID ? [[join(base, 'inbox'), false] as const] : [[join(base, 'inbox'), false] as const, [join(base, 'inbox', '.done'), true] as const];
+      for (const [dir, archived] of dirs) {
         for (const m of this.cachedMessages(dir, live)) {
           if (!m || typeof m.id !== 'string' || seen.has(m.id)) continue;
           const received = owner === agentId;
@@ -5362,7 +5419,7 @@ process.stdin.on('end', () => {
   };
   const rawTarget = String(input.file_path || input.notebook_path || '');
   const target = rawTarget ? pathOf(rawTarget) : '';
-  const tempSave = payload.hook_event_name === 'PreToolUse' && ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].indexOf(tool) >= 0
+  const tempSave = payload.hook_event_name === 'PreToolUse' && ${JSON.stringify([...FOLDER_WRITE_TOOLS])}.indexOf(tool) >= 0
     && /^(?:\\/private)?\\/(?:tmp|var\\/tmp|var\\/folders)(?:\\/|$)/i.test(target);
   // An MCP call too big for one hook frame (a long document to write) is sent
   // with only its short input fields: the connector, mail and QuickBooks gates

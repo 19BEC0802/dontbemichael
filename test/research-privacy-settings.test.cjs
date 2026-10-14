@@ -99,7 +99,8 @@ test('Research copy has no dashes', () => {
 test('the Research member reads as Research everywhere the owner sees it, under the name they gave it', () => {
   // Value: protects=the setup card shows its role, its locked engine stays labelled for screen readers, its name is the owner's to edit, and the floor never calls it Ryan; fails_when=the card drops the role, the name locks again, or it joins the in character banter; why_new=design review, owner ship 2 D17; seam=source
   const wiz = read('src/renderer/src/components/OnboardingWizard.tsx');
-  assert.match(wiz, /name=\{`\$\{RESEARCH_NAME\} · \$\{t\('research\.title'\)\}`\}/);
+  assert.match(wiz, /name=\{`\$\{researchName\} · \$\{t\('research\.title'\)\}`\}/, 'its current name (third ship)');
+  assert.match(wiz, /character="pete"/, 'Pete, its own face, not Ryan (owner, third ship D4)');
   const modal = read('src/renderer/src/components/EditAgentModal.tsx');
   assert.doesNotMatch(modal, /readOnly value=\{agent\.name\}/, 'the name is editable (ship 2 D17)');
   assert.match(modal, /info=\{isResearch \? t\('editAgent\.researchName', \{ name: researchName \}\) : undefined\}/);

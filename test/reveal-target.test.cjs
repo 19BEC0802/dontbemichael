@@ -37,5 +37,5 @@ test('the Profile tab\'s Open folder shows, never opens, a folder that is an app
   assert.equal(isPackageDir(path.join(base, 'Q3.2026')), false, 'dots in a name are fine');
   fs.mkdirSync(path.join(base, 'Finance', 'Contents', 'MacOS'), { recursive: true });
   assert.equal(isPackageDir(path.join(base, 'Finance')), true, 'an app by its insides, whatever its name');
-  assert.match(read('src/main/index.ts'), /if \(!dir \|\| isPackageDir\(cwd\)\) \{ shell\.showItemInFolder\(cwd\); return \{ ok: true \}; \}/);
+  assert.match(read('src/main/index.ts'), /if \(!recorded \|\| !dir \|\| isPackageDir\(shown\)\) \{ shell\.showItemInFolder\(shown\); return \{ ok: true \}; \}/);
 });

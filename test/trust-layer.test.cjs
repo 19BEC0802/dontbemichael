@@ -148,3 +148,14 @@ test('zero width and fullwidth characters do not hide a key or an email', async 
   const v = await l.inbound({ subject: 'x', body: 'Write to ｊａｎｅ＠northwind.example' });
   assert.equal(v.decision, 'deny');
 });
+
+test('a class the owner allows passes through the layer, and is never named in a refusal', async () => {
+  // Value: protects=the owner's Allowed choice reaches the trust layer; fails_when=marked or the recheck ignore settings; why_new=no test passed opts.classes (testing review, third ship); seam=fake runner
+  const { l, prompts } = layer(json({ decision: 'PASS' }), { classes: { contact: 'allowed' } });
+  const v = await l.inbound({ subject: 'x', body: 'Find the support page for help@example.com' });
+  assert.equal(v.decision, 'pass');
+  assert.doesNotMatch(prompts[0], /already found these private kinds/);
+  assert.match(prompts[0], /Allowed kinds \(fine to send\):[\s\S]*contact/);
+  const deny = layer(json({ decision: 'DENY', kinds: ['contact'] }), { classes: { contact: 'allowed' } });
+  assert.deepEqual(await deny.l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_UNSURE });
+});

@@ -16,43 +16,56 @@ export const MAX_NOTE_FILES = 200;
 /** Names looked at in the notes folder, whatever they are. */
 export const MAX_NOTE_ENTRIES = 2000;
 
+/** One of Research's own files, read the safe way: a plain file inside its
+ *  folder, opened without following a link, at most MAX_NOTE_BYTES, or null.
+ *  Every app read of a file Research's shell can write goes through here, since
+ *  the app reads with the owner's rights (red team, third ship: memory index,
+ *  handoff, procedures). */
+export function readResearchFile(agentDir: string, file: string): string | null {
+  let root = '';
+  try { root = realpathSync(agentDir); } catch { return null; }
+  return readOwnIn(root, file);
+}
+
+function readOwnIn(root: string, file: string): string | null {
+  // Its folder, as it really is, must be inside Research's own.
+  try {
+    const realDir = realpathSync(dirname(file));
+    if (realDir !== root && !realDir.startsWith(root + sep)) return null;
+  } catch { return null; }
+  // Opened without following a link, and read from that same open file, so
+  // nothing can be swapped in between; a file with a second name (a hard
+  // link) may be one Research can't read, so it is skipped too.
+  let fd = -1;
+  try {
+    // Without waiting: a pipe Research made would otherwise hold the open
+    // forever and freeze the app (ship review). Then only a plain file, of
+    // a size a note can have.
+    fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const st = fstatSync(fd);
+    if (!st.isFile() || st.nlink !== 1 || st.size > MAX_NOTE_BYTES) return null;
+    // The open file must be the one its path names inside the folder now,
+    // so a folder swapped for a link between the check and the open is
+    // caught (verification of the Codex fix).
+    const real = realpathSync(file);
+    if (!real.startsWith(root + sep)) return null;
+    const now = statSync(real);
+    if (now.ino !== st.ino || now.dev !== st.dev) return null;
+    // Read to its size from this open file, into a buffer one byte past it:
+    // a file that grew since the check is skipped (ship review pass 2).
+    const buf = Buffer.allocUnsafe(st.size + 1);
+    let n = 0;
+    for (let r = 1; r > 0 && n < buf.length; n += r) r = readSync(fd, buf, n, buf.length - n, null);
+    return n > st.size ? null : buf.subarray(0, n).toString('utf8');
+  } catch { return null; } finally {
+    if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }
+  }
+}
+
 export function readResearchNotes(agentDir: string): string {
   let root = '';
   try { root = realpathSync(agentDir); } catch { return ''; }
-  const readOwn = (file: string): string | null => {
-    // Its folder, as it really is, must be inside Research's own.
-    try {
-      const realDir = realpathSync(dirname(file));
-      if (realDir !== root && !realDir.startsWith(root + sep)) return null;
-    } catch { return null; }
-    // Opened without following a link, and read from that same open file, so
-    // nothing can be swapped in between; a file with a second name (a hard
-    // link) may be one Research can't read, so it is skipped too.
-    let fd = -1;
-    try {
-      // Without waiting: a pipe Research made would otherwise hold the open
-      // forever and freeze the app (ship review). Then only a plain file, of
-      // a size a note can have.
-      fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
-      const st = fstatSync(fd);
-      if (!st.isFile() || st.nlink !== 1 || st.size > MAX_NOTE_BYTES) return null;
-      // The open file must be the one its path names inside the folder now,
-      // so a folder swapped for a link between the check and the open is
-      // caught (verification of the Codex fix).
-      const real = realpathSync(file);
-      if (!real.startsWith(root + sep)) return null;
-      const now = statSync(real);
-      if (now.ino !== st.ino || now.dev !== st.dev) return null;
-      // Read to its size from this open file, into a buffer one byte past it:
-      // a file that grew since the check is skipped (ship review pass 2).
-      const buf = Buffer.allocUnsafe(st.size + 1);
-      let n = 0;
-      for (let r = 1; r > 0 && n < buf.length; n += r) r = readSync(fd, buf, n, buf.length - n, null);
-      return n > st.size ? null : buf.subarray(0, n).toString('utf8');
-    } catch { return null; } finally {
-      if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }
-    }
-  };
+  const readOwn = (file: string): string | null => readOwnIn(root, file);
   const parts: string[] = [];
   let total = 0;
   const add = (t: string | null): boolean => {

@@ -684,7 +684,10 @@ function researchDesk(): string | null {
 /** Research's own folders, which nobody else writes into (eng R2). */
 function researchFolders(): string[] {
   const root = hive.root();
-  return [root ? join(root, 'agents', RESEARCH_ID) : '', researchDesk() ?? ''].filter(Boolean);
+  const desk = researchDesk();
+  // Its Claude Code conversation too: raw web pages and its own output, which
+  // no one else reads (red team, third ship).
+  return [root ? join(root, 'agents', RESEARCH_ID) : '', desk ?? '', desk ? projectDir(desk) : ''].filter(Boolean);
 }
 
 const integrationBroker = new IntegrationBroker({
@@ -3778,8 +3781,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const dir = isResearch ? join(opts.cwd, RESEARCH_TMP_DIR) : harness ? join(expandTilde(harness), AGENT_TMP_DIR, agentTmpName(opts.hive.id)) : '';
     if (!dir) return undefined;
     try { mkdirSync(dir, { recursive: true }); } catch { return undefined; }
-    // Outside the system's own temp cleanup, so files over a week old go here.
-    pruneOldFiles(dir, 7 * 24 * 60 * 60_000);
+    // Outside the system's own temp cleanup, so files over a week old go here,
+    // after the start rather than in its way (performance review).
+    setTimeout(() => pruneOldFiles(dir, 7 * 24 * 60 * 60_000), 5_000).unref?.();
     return dir;
   })();
   // Without its own scratch folder a Claude agent's session files would land
@@ -3999,7 +4003,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       // another agent's conversation holds office data (ship review).
       const resumable = isResearch
         ? /^[\w-]{1,128}$/.test(sid) && existsSync(join(projectDir(opts.cwd), `${sid}.jsonl`))
-        : seedSessionTranscript(opts.cwd, sid);
+        : seedSessionTranscript(opts.cwd, sid, researchDesk() ? [projectDir(researchDesk()!)] : []);
       if (resumable) {
         args.push('--resume', sid);
         didResume = true;
@@ -4647,12 +4651,19 @@ ipcMain.handle('fs:revealPath', async (_evt, p: unknown) => {
  *  folder opens; a link there is shown, not followed (D12). */
 ipcMain.handle('fs:openAgentFolder', async (_evt, id: unknown) => {
   if (typeof id !== 'string' || !id.length) return { ok: false, error: 'bad request' };
-  const cwd = hive.registry().agents[id]?.cwd;
-  if (!cwd) return { ok: false, error: 'not found' };
+  // Only a folder the app's own settings name opens: a team member's folder
+  // chosen at setup, or Michael's business folder. The registry's path is in
+  // a file agents' shells can write, so it is only ever shown (owner, third
+  // ship D2).
+  const cfg = readConfig();
+  const reg = hive.registry();
+  const recorded = id === (reg.godId ?? 'god') ? cfg.businessFolder : (cfg.businessTeam ?? []).find((m) => m.agentId === id)?.folder;
+  const shown = recorded || reg.agents[id]?.cwd;
+  if (!shown) return { ok: false, error: 'not found' };
   let dir = false;
-  try { dir = lstatSync(cwd).isDirectory(); } catch { return { ok: false, error: 'not found' }; }
-  if (!dir || isPackageDir(cwd)) { shell.showItemInFolder(cwd); return { ok: true }; }
-  const err = await shell.openPath(cwd);
+  try { dir = lstatSync(shown).isDirectory(); } catch { return { ok: false, error: 'not found' }; }
+  if (!recorded || !dir || isPackageDir(shown)) { shell.showItemInFolder(shown); return { ok: true }; }
+  const err = await shell.openPath(shown);
   return err ? { ok: false, error: err } : { ok: true };
 });
 
@@ -5155,8 +5166,6 @@ ipcMain.handle('research:prepare', () => {
   writeConfig({ research: { ...(cfg.research ?? {}), on: true, notice: false } });
   return { ok: true as const, cwd: desk };
 });
-/** Turning Research off: its waiting asks go back to their senders. The
- *  renderer closes its terminal and archives it. */
 /** Remove files under `dir` older than `maxAgeMs`, and folders they leave
  *  empty. Best effort: a file in use is left for next time. */
 function pruneOldFiles(dir: string, maxAgeMs: number): void {
@@ -6367,6 +6376,8 @@ ipcMain.handle('hive:textSearch', (_evt, query: unknown) => {
   const agentsDir = join(root, 'agents');
   if (existsSync(agentsDir)) {
     for (const id of readdirSync(agentsDir)) {
+      // Research's notes are its own web text: never in the owner's search (D3).
+      if (id === RESEARCH_ID) continue;
       targets.push({ path: join(agentsDir, id, 'memory.md'), source: `${id}/memory.md` });
     }
   }
