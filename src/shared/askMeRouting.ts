@@ -70,6 +70,8 @@ export function answerMessages(p: {
   title: string;
   q: string;
   a: string;
+  /** When the owner answered; named on the last line (answeredAtOf). */
+  answeredAt?: string;
 }): AnswerMessage[] {
   const title = cardText(p.title);
   // The card id comes from the ledger agents write, so it is cleaned like the title.
@@ -91,10 +93,20 @@ export function answerMessages(p: {
         : `It is in ${p.raiserName}'s memory notes.`,
       'Route the follow-up: hand the card to the same team member or another, or ask the owner again. Then close this request with a "done" reply (in_reply_to this message). It stays open until you do.',
       // A bundle answered in part comes back with the rest (owner, 2026-10-11).
-      'Check each question of the ask against the answer. If any is left unanswered, first add one new ask on this card holding only those questions and keep the card Blocked, or, when this card is done, make a new card that asks them, so none is lost.'
+      'Check each question of the ask against the answer. If any is left unanswered, first add one new ask on this card holding only those questions and keep the card Blocked, or, when this card is done, make a new card that asks them, so none is lost.',
+      ...(p.answeredAt ? [`Answered at ${p.answeredAt}.`] : [])
     ].join('\n')
   };
   return [forMichael];
+}
+
+/** The last line of an answer's request to Michael: which answer it carries,
+ *  so the launch catch-up matches each request to its own answer. */
+const ANSWERED_AT_LINE = /\nAnswered at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\.$/;
+
+/** The answer time a request to Michael names, if it names one. */
+export function answeredAtOf(body: unknown): string | undefined {
+  return typeof body === 'string' ? ANSWERED_AT_LINE.exec(body)?.[1] : undefined;
 }
 
 /**
