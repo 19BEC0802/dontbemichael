@@ -182,6 +182,9 @@ export interface TrustLayer {
   inbound: (msg: { subject?: unknown; body?: unknown }) => Promise<InboundVerdict>;
   /** Clean what Research sends back before a teammate or the shared memory reads it. */
   outbound: (msg: { subject?: unknown; body?: unknown }) => Promise<OutboundVerdict>;
+  /** The owner's privacy settings as a key: a verdict reached under other
+   *  settings is never used (Codex review, third ship). */
+  policyKey?: () => string;
 }
 
 export function makeTrustLayer(deps: TrustLayerDeps): TrustLayer {
@@ -262,5 +265,8 @@ export function makeTrustLayer(deps: TrustLayerDeps): TrustLayer {
       : { decision: 'clean', subject: v.subject, body: v.body, flagged: v.flag };
   };
 
-  return { inbound, outbound };
+  const policyKey = (): string => {
+    try { return JSON.stringify(deps.settings()); } catch { return 'unreadable'; }
+  };
+  return { inbound, outbound, policyKey };
 }

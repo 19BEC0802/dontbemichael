@@ -2462,6 +2462,15 @@ export class HiveManager {
     return c.verdict;
   }
 
+  /** A check's key: the message and the owner's privacy settings, so a
+   *  verdict reached before the owner changed them is never used; the message
+   *  is checked again (Codex review, third ship). */
+  private trustKey(layer: TrustLayer, raw: string): string {
+    let policy = '';
+    try { policy = layer.policyKey?.() ?? ''; } catch { policy = 'unreadable'; }
+    return createHash('sha256').update(raw).update('\0').update(policy).digest('hex');
+  }
+
   private pruneTrustChecks(now = Date.now()): void {
     // Only finished checks: one still running or waiting its turn is kept, so
     // a long queue never starts a second paid check for the same message.
@@ -2481,7 +2490,7 @@ export class HiveManager {
     if (hasAttachments(partial)) return deny(REFUSAL_FILES);
     if (!this.trustLayer) return deny(REFUSAL_UNSURE);
     const layer = this.trustLayer;
-    const v = this.trustCheck(`in:${createHash('sha256').update(raw).digest('hex')}`, () => layer.inbound({ subject: partial.subject, body: partial.body }));
+    const v = this.trustCheck(`in:${this.trustKey(layer, raw)}`, () => layer.inbound({ subject: partial.subject, body: partial.body }));
     if (v === 'hold') return 'hold';
     if (v.decision === 'deny') return deny(v.reason);
     this.deliverToResearch(senderId, msg, v.subject, v.body);
@@ -2675,7 +2684,7 @@ export class HiveManager {
     }
     if (!this.trustLayer) return deny();
     const layer = this.trustLayer;
-    const v = this.trustCheck(`out:${createHash('sha256').update(raw).digest('hex')}`, () => layer.outbound({ subject: partial.subject, body: partial.body }));
+    const v = this.trustCheck(`out:${this.trustKey(layer, raw)}`, () => layer.outbound({ subject: partial.subject, body: partial.body }));
     if (v === 'hold') return 'hold';
     if (v.decision === 'deny') return deny();
     // Back into the sender's own thread, only when it goes back to that

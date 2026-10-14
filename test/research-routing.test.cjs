@@ -1061,3 +1061,30 @@ test('the top of Research\'s folder holds no pipe after a start, and its outbox 
   assert.equal(hive.inboxBacklog('research'), 0);
   assert.deepEqual(hive.outbox('research'), []);
 });
+
+test('a verdict reached before the owner changed what stays private is never used; the message is checked again', async (t) => {
+  // Value: protects=tightening a privacy setting applies to a message whose check already finished; fails_when=the check key is the message alone; why_new=Codex review, third ship; seam=fake layer with a policy key
+  let policy = 'loose';
+  const layer = fakeLayer();
+  layer.policyKey = () => policy;
+  const { hive } = await office(t, { layer });
+  send(hive, 'pam', { to: 'research', act: 'query', subject: 'q', body: 'Pizza trends' });
+  assert.equal(hive.routeOnce(), 0);
+  await tick();
+  policy = 'strict';
+  assert.equal(hive.routeOnce(), 0, 'held for a new check');
+  assert.equal(layer.calls.inbound.length, 2);
+  await tick();
+  assert.equal(hive.routeOnce(), 1);
+  assert.equal(msgsIn(hive, 'research').length, 1);
+});
+
+test('a web or mail link that shows as clickable in a reply opens; other schemes stay blocked', () => {
+  // Value: protects=named links for http and mail open instead of failing silently, and nothing else is shelled; fails_when=app:openExternal accepts only https, or accepts any scheme; why_new=Codex review, third ship; seam=source pin (index.ts needs Electron)
+  const idx = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  const m = idx.match(/ipcMain\.handle\('app:openExternal'[\s\S]*?!\/(\^\(x-apple[^\n]*?)\/i\.test\(url\)/);
+  assert.ok(m, 'the opener keeps an allow list');
+  const re = new RegExp(m[1], 'i');
+  for (const ok of ['https://example.com', 'http://example.com', 'mailto:a@example.com', 'x-apple.systempreferences:com.apple']) assert.ok(re.test(ok), ok);
+  for (const bad of ['file:///etc/passwd', 'javascript:alert(1)', 'smb://host/share', 'tel:123']) assert.ok(!re.test(bad), bad);
+});

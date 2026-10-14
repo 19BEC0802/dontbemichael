@@ -6449,13 +6449,14 @@ ipcMain.handle('github:ciRuns', (_evt, cwd: unknown) =>
 ipcMain.handle('app:setNotifications', (_evt, val) => writeConfig({ notifications: val === true }));
 
 // ─── IPC: onboarding reliability — open Settings deep-link + login-item toggle ─
-/** Open a System Settings deep-link (or https URL) in the OS default handler.
- *  Restricted to Settings panes / https so the renderer can't shell arbitrary
- *  schemes. macOS uses `x-apple.systempreferences:`, Windows uses `ms-settings:`
+/** Open a System Settings deep-link, a web link or a mail link in the OS
+ *  default handler. Restricted to Settings panes, http(s) and mailto so the
+ *  renderer can't shell arbitrary schemes; a link in a reply that shows as
+ *  clickable opens (Codex review, third ship). macOS uses `x-apple.systempreferences:`, Windows uses `ms-settings:`
  *  (Linux has no universal settings URI, so the renderer never sends one there).
  *  Used by the onboarding "Permissions & reliability" step. */
 ipcMain.handle('app:openExternal', async (_evt, url: unknown) => {
-  if (typeof url !== 'string' || !/^(x-apple\.systempreferences:|ms-settings:|https:\/\/)/.test(url)) {
+  if (typeof url !== 'string' || !/^(x-apple\.systempreferences:|ms-settings:|https?:\/\/|mailto:)/i.test(url)) {
     return { ok: false, error: 'blocked url' };
   }
   await shell.openExternal(url);
