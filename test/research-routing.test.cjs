@@ -1088,3 +1088,21 @@ test('a web or mail link that shows as clickable in a reply opens; other schemes
   for (const ok of ['https://example.com', 'http://example.com', 'mailto:a@example.com', 'x-apple.systempreferences:com.apple']) assert.ok(re.test(ok), ok);
   for (const bad of ['file:///etc/passwd', 'javascript:alert(1)', 'smb://host/share', 'tel:123']) assert.ok(!re.test(bad), bad);
 });
+
+test('an owner or app note checked under settings the owner then changed is checked again before Research sees it', async (t) => {
+  // Value: protects=tightening a privacy setting applies to a note whose check is under way; fails_when=queueForResearch delivers a verdict reached under the old settings; why_new=Codex review, third ship pass 2; seam=fake layer with a policy key
+  let policy = 'loose';
+  let release;
+  const layer = fakeLayer({ inbound: (m) => new Promise((r) => { release = () => r({ decision: 'pass', subject: String(m.subject), body: String(m.body) }); }) });
+  layer.policyKey = () => policy;
+  const { hive } = await office(t, { layer });
+  hive.send({ to: 'research', act: 'inform', subject: 'Reminder', body: 'x' }, 'system');
+  await tick();
+  assert.equal(layer.calls.inbound.length, 1);
+  policy = 'strict';
+  release(); await tick(); await tick();
+  assert.equal(msgsIn(hive, 'research').length, 0, 'not delivered under the old settings');
+  assert.equal(layer.calls.inbound.length, 2, 'checked again');
+  release(); await tick(); await tick();
+  assert.equal(msgsIn(hive, 'research').length, 1);
+});

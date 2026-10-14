@@ -1008,6 +1008,12 @@ export class HookServer {
     // (red team, third ship).
     const researchOwn = [hiveRoot ? join(hiveRoot, 'agents', RESEARCH_ID) : '', home ? join(home, RESEARCH_DESK_DIR) : ''].filter(Boolean);
     const researchWall = [...researchOwn, home ? projectDir(join(home, RESEARCH_DESK_DIR)) : ''].filter(Boolean);
+    // Where Research's file tools may write: what its shell may (hive.ts
+    // researchShellWrite), never the top of its folder.
+    const researchWrite = [...(hiveRoot ? ['inbox', 'outbox', 'memory'].map((d) => join(hiveRoot, 'agents', RESEARCH_ID, d)) : []), home ? join(home, RESEARCH_DESK_DIR) : ''].filter(Boolean);
+    // Each also as the folder it really is, since a target is judged both
+    // ways (a home under a linked folder, /var on a Mac).
+    const withReal = (l: string[]): string[] => Array.from(new Set(l.flatMap((d) => [d, realPathOf(d) ?? d])));
     // Judged as asked and as the file it really is; resolved once.
     const real = realPathOf(target);
     const both = [target, real].filter((x): x is string => !!x);
@@ -1022,7 +1028,7 @@ export class HookServer {
         // Every temporary folder; its own session files are in its desk (D6.1).
         ...tempFolders(process.platform, tmpdir())].filter(Boolean);
       for (const t of both) {
-        const r = researchFolderDecision(walled, researchOwn, tool, t, ci);
+        const r = researchFolderDecision(walled, withReal(researchOwn), tool, t, ci, withReal(researchWrite));
         if (r.deny) return r;
       }
       return { deny: false };

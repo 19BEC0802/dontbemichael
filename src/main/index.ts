@@ -632,20 +632,22 @@ const standingFit = standingFitCheck({
  *  check's runner, in an app-only folder of its own, no tools. What it reads
  *  is Research's raw text, so each run's transcript is removed as it ends
  *  (red team, third ship). */
-/** Transcripts the trust layer left in the standing check's folder before it
- *  had its own, holding Research's raw text: removed once a launch, before
- *  the first check (third ship review). The standing check's own are kept
- *  while new, so a check under way is never cut short. */
+/** Transcripts holding Research's raw text that a check left behind: from
+ *  before the trust layer had its own folder, or from a check the app or the
+ *  computer stopped mid way. Removed once a launch, before the first check
+ *  (third ship review). Only old ones, so a check under way is never cut short. */
 let oldCheckTranscriptsSwept = false;
 function sweepOldCheckTranscripts(): void {
   if (oldCheckTranscriptsSwept) return;
   oldCheckTranscriptsSwept = true;
-  const dir = projectDir(join(app.getPath('userData'), 'standing-check'));
   const cutoff = Date.now() - 60 * 60_000;
-  let names: string[] = [];
-  try { names = readdirSync(dir); } catch { return; }
-  for (const n of names) {
-    try { if (lstatSync(join(dir, n)).mtimeMs < cutoff) rmSync(join(dir, n), { recursive: true, force: true }); } catch { /* next launch */ }
+  for (const folder of ['standing-check', 'trust-check']) {
+    const dir = projectDir(join(app.getPath('userData'), folder));
+    let names: string[] = [];
+    try { names = readdirSync(dir); } catch { continue; }
+    for (const n of names) {
+      try { if (lstatSync(join(dir, n)).mtimeMs < cutoff) rmSync(join(dir, n), { recursive: true, force: true }); } catch { /* next launch */ }
+    }
   }
 }
 
@@ -7478,6 +7480,9 @@ function bootstrapHiveServices(): void {
   hive.onScheduleRequest(receiveScheduleRequest);
   hive.setTrustLayer(trustLayer);
   memory.setNotesFilter(researchNotesForPalace);
+  // Research's cleaned copy is made again when the owner changes what stays
+  // private, not only when its notes change (Codex review, third ship).
+  memory.setMineKey((id) => (id === RESEARCH_ID ? trustLayer.policyKey?.() ?? '' : ''));
   hive.setResearchEnabled(() => !!readConfig().research?.on);
   hive.setResearchName(() => readConfig().research?.name);
   // The update that took the internet from the team (issue #230): an office

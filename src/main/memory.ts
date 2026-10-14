@@ -123,7 +123,11 @@ export class MemoryManager {
   /** True while a mineNow() pass is in flight — serializes palace writers. */
   private mining = false;
   /** agentId → memory.md mtimeMs at last successful mine (skip unchanged). */
-  private lastMined = new Map<string, number>();
+  private lastMined = new Map<string, string>();
+  /** More than the memory file's time that makes an agent's mined copy stale
+   *  (Research's: the owner's privacy settings). */
+  private mineKey: (id: string) => string = () => '';
+  setMineKey(fn: (id: string) => string): void { this.mineKey = fn; }
   /** Which folder to mine for an agent: undefined mines its own folder, null
    *  skips it, a path mines that folder instead (Research's notes go in only
    *  as a copy its trust layer cleaned, ship review D2.9). */
@@ -319,8 +323,11 @@ export class MemoryManager {
         if (!existsSync(mem)) continue;
         let mtime = 0;
         try { mtime = statSync(mem).mtimeMs; } catch { continue; }
-        if (this.lastMined.get(id) === mtime) continue; // unchanged — skip the model load
-        this.lastMined.set(id, mtime);
+        let extra = '';
+        try { extra = this.mineKey(id); } catch { extra = 'unreadable'; }
+        const key = `${mtime}:${extra}`;
+        if (this.lastMined.get(id) === key) continue; // unchanged — skip the model load
+        this.lastMined.set(id, key);
         let dir: string | null | undefined = agentDir;
         if (this.notesFilter) {
           try { const d = await this.notesFilter(id, agentDir); if (d !== undefined) dir = d; } catch { dir = null; }

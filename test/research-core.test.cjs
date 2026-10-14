@@ -177,6 +177,13 @@ test('Research\'s conversation is Claude Code\'s to write, not its tools\', and 
   const server = new HookServer(hive, () => null, () => ({ harnessHome: home }));
   const write = server.handle({ agent_id: 'research', hook_event_name: 'PreToolUse', cwd: desk, tool_name: 'Write', tool_input: { file_path: path.join(rDir, 'planted.jsonl'), content: 'x' } });
   assert.equal(write.hookSpecificOutput?.permissionDecision, 'deny', 'Research writes nothing there itself');
+  // Its file tools write only where its shell may (Codex review, third ship).
+  const rdir = path.join(hive.root(), 'agents', 'research');
+  const tool = (name, f) => server.handle({ agent_id: 'research', hook_event_name: 'PreToolUse', cwd: desk, tool_name: name, tool_input: { file_path: f, content: 'x', old_string: 'a', new_string: 'b' } }).hookSpecificOutput?.permissionDecision;
+  assert.equal(tool('Write', path.join(rdir, 'identity.md')), 'deny');
+  assert.equal(tool('Edit', path.join(rdir, '.claude', 'skills', 'x', 'SKILL.md')), 'deny');
+  assert.notEqual(tool('Write', path.join(rdir, 'outbox', 'a.json')), 'deny');
+  assert.notEqual(tool('Read', path.join(rdir, 'identity.md')), 'deny');
   const read = server.handle({ agent_id: 'pam', hook_event_name: 'PreToolUse', cwd: home, tool_name: 'Read', tool_input: { file_path: path.join(rDir, 's1.jsonl') } });
   assert.equal(read.hookSpecificOutput?.permissionDecision, 'deny', 'and a teammate reads none of it');
   const other = server.handle({ agent_id: 'research', hook_event_name: 'PreToolUse', cwd: desk, tool_name: 'Read', tool_input: { file_path: path.join(projectDir(path.join(home, 'pam')), 's9.jsonl') } });
@@ -196,6 +203,9 @@ test('the trust layer\'s checks keep no transcript of Research\'s text, and Rese
   assert.match(idx, /if \(isResearch\) pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);\n\s+else setTimeout/);
   assert.match(idx, /const dir = isResearch \? ownResearchDir\(opts\.cwd, RESEARCH_TMP_DIR\) :/, 'its scratch folder only as a real folder');
   assert.match(layer, /sweepOldCheckTranscripts\(\);/, 'old check transcripts are swept');
+  assert.match(idx, /for \(const folder of \['standing-check', 'trust-check'\]\)/, 'and those a stopped check left in its own folder');
+  assert.match(idx, /memory\.setMineKey\(\(id\) => \(id === RESEARCH_ID \? trustLayer\.policyKey\?\.\(\) \?\? '' : ''\)\);/, 'its mined copy is made again when privacy settings change');
+  assert.match(src('src/main/memory.ts'), /const key = `\$\{mtime\}:\$\{extra\}`;/);
   assert.match(idx, /claudeProjectsRoot\(\), \.\.\.teamFolders,/, 'its shell is walled from the projects folder wherever it is');
   // The guard itself: a link left in place of the scratch folder is replaced,
   // and what it pointed at is untouched.

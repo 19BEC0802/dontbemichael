@@ -66,6 +66,15 @@ test('Research opens nothing of the office, and its own folders reopen', () => {
   assert.equal(F.researchFolderDecision(walled, own, 'Write', P('/w/home/hive/agents/research/outbox/a.json'), true).deny, false);
   assert.equal(F.researchFolderDecision(walled, own, 'Read', P('/w/home/research-desk/notes.md'), true).deny, false);
   assert.equal(F.researchFolderDecision(walled, own, 'Bash', P('/w/home/hive/tasks.json'), true).deny, false, 'not a file tool');
+  // It reads its whole folder but writes only where its shell may: the app keeps the rest (Codex review, third ship).
+  const writeOwn = ['inbox', 'outbox', 'memory'].map((d) => P(`/w/home/hive/agents/research/${d}`)).concat(P('/w/home/research-desk'));
+  for (const f of ['identity.md', 'memory.md', 'cursor.json', '.claude/skills/x/SKILL.md']) {
+    assert.equal(F.researchFolderDecision(walled, own, 'Write', P(`/w/home/hive/agents/research/${f}`), true, writeOwn).deny, true, f);
+    assert.equal(F.researchFolderDecision(walled, own, 'Read', P(`/w/home/hive/agents/research/${f}`), true, writeOwn).deny, false, f);
+  }
+  for (const f of ['hive/agents/research/outbox/a.json', 'hive/agents/research/memory/inbox.md', 'research-desk/notes.md']) {
+    assert.equal(F.researchFolderDecision(walled, own, 'Edit', P(`/w/home/${f}`), true, writeOwn).deny, false, f);
+  }
 });
 
 test('nobody else writes into or reads Research\'s folders', () => {

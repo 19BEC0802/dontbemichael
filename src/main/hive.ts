@@ -2466,9 +2466,10 @@ export class HiveManager {
    *  verdict reached before the owner changed them is never used; the message
    *  is checked again (Codex review, third ship). */
   private trustKey(layer: TrustLayer, raw: string): string {
-    let policy = '';
-    try { policy = layer.policyKey?.() ?? ''; } catch { policy = 'unreadable'; }
-    return createHash('sha256').update(raw).update('\0').update(policy).digest('hex');
+    return createHash('sha256').update(raw).update('\0').update(this.policyOf(layer)).digest('hex');
+  }
+  private policyOf(layer: TrustLayer): string {
+    try { return layer.policyKey?.() ?? ''; } catch { return 'unreadable'; }
   }
 
   private pruneTrustChecks(now = Date.now()): void {
@@ -2530,10 +2531,15 @@ export class HiveManager {
       this.appendLog({ kind: 'trust-denied', from: msg.from, id: msg.id, ...(why ? { reason: why } : {}) });
       tell(reason);
     };
-    this.trustLayer.inbound({ subject: msg.subject, body: msg.body }).then((v) => {
+    const layer = this.trustLayer;
+    const policy = this.policyOf(layer);
+    layer.inbound({ subject: msg.subject, body: msg.body }).then((v) => {
       this.researchQueued--;
       if (!fromAgent) this.researchPending(msg, false);
       try {
+        // The owner changed what stays private while it was checked: checked
+        // again under the new settings (Codex review, third ship).
+        if (this.policyOf(layer) !== policy) { this.queueForResearch(msg); return; }
         if (v.decision === 'deny') return refuse(v.reason);
         // Research may have been turned off while the check ran.
         if (!this.researchOn()) return refuse(REFUSAL_OFF, 'research-off');

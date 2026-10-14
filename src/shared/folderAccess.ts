@@ -259,11 +259,14 @@ export function researchFolderPolicy(walled: string[], own: string[], home?: str
 /** One file tool call by Research: it writes only its own folders (an
  *  allowlist, ship review D2.6), and reads its own folders or anything outside
  *  and above no wall (the home folder is walled, D2.5). */
-export function researchFolderDecision(walled: string[], own: string[], tool: string, target: string, caseInsensitive: boolean): { deny: boolean; reason?: string } {
+export function researchFolderDecision(walled: string[], own: string[], tool: string, target: string, caseInsensitive: boolean, writeOwn: string[] = own): { deny: boolean; reason?: string } {
   const writes = FOLDER_WRITE_TOOLS.has(tool);
   if (!writes && !FOLDER_READ_TOOLS.has(tool)) return { deny: false };
   const inside = insideFn(caseInsensitive);
-  if (own.some((f) => f && inside(f, target))) return { deny: false };
+  // It reads its whole folder but writes only where its shell may: the app
+  // keeps the rest (identity, memory index, cursor, skills; Codex review,
+  // third ship).
+  if ((writes ? writeOwn : own).some((f) => f && inside(f, target))) return { deny: false };
   if (writes) {
     return { deny: true, reason: 'You save files only in your own desk and notes folder. Put what you write there.' };
   }
