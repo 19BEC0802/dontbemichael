@@ -7,7 +7,7 @@ It is generated from the pull requests themselves rather than from commit metada
 dropped because their git email does not happen to match their GitHub account. It is regenerated
 from merged pull requests, so you appear without having to ask.
 
-**63 people** have contributed so far.
+**69 people** have contributed so far.
 
 <a href="https://github.com/agentvivekkumar/dontbemichael/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=agentvivekkumar/dontbemichael" alt="Contributor avatars">
@@ -22,7 +22,7 @@ requests, and a pull request always has a real account behind it.
 
 | Contributor | Contributions | First | Most recent |
 |---|---:|---|---|
-| [@agentvivekkumar](https://github.com/agentvivekkumar) | 47 | 2026-09-15 | 2026-10-12 |
+| [@agentvivekkumar](https://github.com/agentvivekkumar) | 48 | 2026-09-15 | 2026-10-14 |
 | [@amartya1523](https://github.com/amartya1523) | 17 | 2026-10-10 | 2026-10-13 |
 | [@SantoshMalana](https://github.com/SantoshMalana) | 9 | 2026-10-12 | 2026-10-13 |
 | [@dhruvpuri](https://github.com/dhruvpuri) | 7 | 2026-10-10 | 2026-10-10 |
@@ -85,8 +85,14 @@ requests, and a pull request always has a real account behind it.
 | [@arksaraf135](https://github.com/arksaraf135) | 1 | 2026-10-13 | 2026-10-13 |
 | [@dave-16](https://github.com/dave-16) | 1 | 2026-10-13 | 2026-10-13 |
 | [@TolgaRodoplu](https://github.com/TolgaRodoplu) | 1 | 2026-10-13 | 2026-10-13 |
+| [@vaidyavivek](https://github.com/vaidyavivek) | 1 | 2026-10-13 | 2026-10-13 |
+| [@Shreyas652](https://github.com/Shreyas652) | 1 | 2026-10-13 | 2026-10-13 |
+| [@dhanoliya-ji](https://github.com/dhanoliya-ji) | 1 | 2026-10-13 | 2026-10-13 |
+| [@AnonymousSurya](https://github.com/AnonymousSurya) | 1 | 2026-10-14 | 2026-10-14 |
+| [@ReubenSGE](https://github.com/ReubenSGE) | 1 | 2026-10-14 | 2026-10-14 |
+| [@shayanizer8](https://github.com/shayanizer8) | 1 | 2026-10-14 | 2026-10-14 |
 
-_152 pull requests from 63 people._
+_159 pull requests from 69 people._
 
 ## † Contributions that never got the merged badge
 
