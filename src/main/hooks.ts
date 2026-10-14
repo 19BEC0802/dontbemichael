@@ -11,8 +11,8 @@
  * Runs in the Electron main process.
  */
 import { createServer, type Server } from 'node:net';
-import { existsSync, realpathSync, rmSync } from 'node:fs';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { existsSync, lstatSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { Notification, type WebContents } from 'electron';
 import { redactSecrets, type HiveManager } from './hive';
@@ -1169,12 +1169,24 @@ export function toolLine(tool: unknown, input: unknown): string | undefined {
 
 /** The real path of `p`, following links and taking the letter case on disk.
  *  A file that doesn't exist yet takes the real path of its nearest existing
- *  folder. Null when nothing along the way can be read. */
+ *  folder. A link whose target isn't there yet leads to that target: a Write
+ *  through it creates the file the link names, not one beside the link (#231).
+ *  Null when nothing along the way can be read, or the links go round. */
 export function realPathOf(p: string): string | null {
   let dir = p;
   const rest: string[] = [];
-  for (;;) {
+  for (let links = 0; ;) {
     try { return join(realpathSync.native(dir), ...rest); } catch { /* not there yet */ }
+    let to: string | null = null;
+    try { if (lstatSync(dir).isSymbolicLink()) to = readlinkSync(dir); } catch { /* not there at all */ }
+    if (to !== null) {
+      // The most links an OS follows in one path (Linux allows 40).
+      if (++links > 40) return null;
+      // Joined as written, not tidied: the OS follows `sub` in `sub/../x`
+      // before it goes up, so the climb has to resolve it the same way.
+      dir = isAbsolute(to) ? to : dirname(dir) + sep + to;
+      continue;
+    }
     const up = dirname(dir);
     if (up === dir) return null;
     rest.unshift(basename(dir));
