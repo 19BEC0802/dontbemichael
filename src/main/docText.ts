@@ -17,7 +17,7 @@
 
 import { readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { extname } from 'node:path';
+import { extname, posix } from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { macOcr, MAX_OCR_PAGES } from './macOcr';
 import { ownValue } from '../shared/ownValue';
@@ -134,7 +134,12 @@ function fromOoxml(srcPath: string, kind: 'docx' | 'pptx' | 'xlsx', read: OoxmlR
     return { kind: 'unreadable', reason: 'This file is protected by a password or damaged. Remove the password (or save it again) and add it again.' };
   }
 
-  const text = tidy(read(files));
+  let text: string;
+  try {
+    text = tidy(read(files));
+  } catch {
+    return { kind: 'unreadable', reason: 'This file is damaged or missing parts. Save it again and add it again.' };
+  }
   if (!text) {
     return {
       kind: 'unreadable',
@@ -188,7 +193,37 @@ function readSlides(files: Record<string, Uint8Array>): string {
       .filter((x) => Number.isFinite(x.i))
       .sort((a, b) => a.i - b.i); // numeric: slide2 before slide10
 
-  const slides = numbered(/^ppt\/slides\/slide(\d+)\.xml$/)
+  let ordered = numbered(/^ppt\/slides\/slide(\d+)\.xml$/);
+  if (files['ppt/presentation.xml']) {
+    // Part names survive a reorder in PowerPoint. The presentation's slide-id
+    // list, not slide1.xml/slide2.xml, defines the owner's displayed sequence.
+    const targets = new Map<string, string>();
+    const rels = files['ppt/_rels/presentation.xml.rels'];
+    for (const m of (rels ? strFromU8(rels) : '').matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+      const id = attr(m[1], 'Id');
+      const target = attr(m[1], 'Target');
+      if (!id || !target || !attr(m[1], 'Type')?.endsWith('/slide') || attr(m[1], 'TargetMode') === 'External') continue;
+      const path = decodeXml(target);
+      // ZIP entry paths always use '/', including when the app runs on Windows.
+      targets.set(id, posix.normalize(path.startsWith('/') ? path.slice(1) : posix.join('ppt', path)));
+    }
+    ordered = [];
+    const seen = new Set<string>();
+    let position = 0;
+    for (const m of strFromU8(files['ppt/presentation.xml']).matchAll(/<p:sldId\b([^>]*)\/?>/g)) {
+      position++;
+      const n = targets.get(attr(m[1], 'r:id') ?? '');
+      // A broken manifest must not silently fall back to a guessed order.
+      if (!n || !files[n]) throw new Error('Missing presentation slide');
+      // Untrusted slide lists can repeat one part thousands of times. Read it
+      // only at its first position, even if different relationships name it.
+      if (seen.has(n)) continue;
+      seen.add(n);
+      ordered.push({ n, i: position });
+    }
+  }
+
+  const slides = ordered
     .map(({ n, i }) => {
       const t = drawingParagraphs(strFromU8(files[n]));
       return t ? `Slide ${i}\n${t}` : '';
