@@ -197,13 +197,21 @@ test('a link to a file not there yet is judged by where it leads, so a Write can
   assert.equal(realPathOf(path.join(sales, 'notes.txt')), path.join(finance, 'planted.txt'));
   assert.equal(realPathOf(path.join(sales, 'rel.txt')), path.join(finance, 'rel.txt'), 'a relative link is read from its own folder');
   assert.equal(realPathOf(path.join(sales, 'drafts', 'june.txt')), path.join(finance, 'new', 'june.txt'), 'a link to a folder not there yet');
-  assert.equal(realPathOf(path.join(sales, 'trick')), path.join(finance, 'planted2.txt'), 'a link through another link goes up from where that one leads');
   assert.equal(realPathOf(path.join(sales, 'a')), null, 'links that go round end');
   assert.equal(realPathOf(path.join(sales, 'plain.txt')), path.join(sales, 'plain.txt'), 'a new file with no link stays where it is');
   const l = { business: biz, teamFolders: [sales, finance] };
   const me = { isGod: false, cwd: sales };
   assert.equal(folderDecision(me, l, 'Write', realPathOf(path.join(sales, 'notes.txt')), true).deny, true);
-  assert.equal(folderDecision(me, l, 'Write', realPathOf(path.join(sales, 'trick')), true).deny, true);
+  // A link through another link is judged where the system really puts the
+  // file: on macOS and Linux sub/.. goes up from where sub leads (Finance);
+  // Windows reads the .. off the text first (Sales). Judged before the write,
+  // checked against where the write lands.
+  const judged = realPathOf(path.join(sales, 'trick'));
+  fs.writeFileSync(path.join(sales, 'trick'), 'x');
+  const landed = [path.join(finance, 'planted2.txt'), path.join(sales, 'planted2.txt')].find((f) => fs.existsSync(f));
+  assert.equal(judged, landed, 'a link through another link is judged where the write lands');
+  if (process.platform !== 'win32') assert.equal(landed, path.join(finance, 'planted2.txt'));
+  assert.equal(folderDecision(me, l, 'Write', judged, true).deny, landed === path.join(finance, 'planted2.txt'));
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
