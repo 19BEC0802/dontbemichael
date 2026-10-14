@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { ownerLedger } from '../shared/taskLedger';
 import { ownValue } from '../shared/ownValue';
+import { copyableLink, DEFAULT_COPY_LINK_LABEL, menuLabel } from '../shared/linkMenu';
 import { execFile, spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync,
@@ -3346,6 +3347,15 @@ function createWindow(): BrowserWindow {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
   });
 
+  // Right-click on a web or email link offers "Copy link address": a named link
+  // shows a name, so selecting its text never copies the address. Nothing else
+  // gets a menu.
+  win.webContents.on('context-menu', (_e, params) => {
+    const url = copyableLink(params.linkURL);
+    if (!url) return;
+    Menu.buildFromTemplate([{ label: copyLinkLabel, click: () => clipboard.writeText(url) }]).popup({ window: win });
+  });
+
   // Close interception when live PTYs exist. The red-X destroys the window;
   // intercept it the same way before-quit does so PTY users aren't surprised.
   win.on('close', (e) => {
@@ -4319,6 +4329,9 @@ ipcMain.handle('app:copyToClipboard', (_evt, text: unknown) => {
   try { clipboard.writeText(text); return { ok: true }; }
   catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
 });
+// The link menu's label in the app language (linkMenu.ts), sent by the renderer.
+let copyLinkLabel = DEFAULT_COPY_LINK_LABEL;
+ipcMain.on('app:setCopyLinkLabel', (_evt, label: unknown) => { copyLinkLabel = menuLabel(label); });
 ipcMain.handle('app:readClipboard', () => {
   try { return clipboard.readText(); } catch { return ''; }
 });

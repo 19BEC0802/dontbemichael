@@ -771,6 +771,9 @@ const api = {
   // ─── Clipboard ─────────────────────────────────────────────────────────────
   copyToClipboard: (text: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('app:copyToClipboard', text),
+  /** The right-click "Copy link address" label, in the app language. */
+  setCopyLinkLabel: (label: string): void =>
+    ipcRenderer.send('app:setCopyLinkLabel', label),
   /** Read the system clipboard as plain text ('' when empty/unreadable). */
   readClipboard: (): Promise<string> =>
     ipcRenderer.invoke('app:readClipboard'),
