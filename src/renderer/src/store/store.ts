@@ -4,6 +4,7 @@ import type { OfficeCharacterName } from '@/scene/office/cast';
 import type { StatusKind } from '@/components/PixelBadge';
 import type { AgentProvider } from '@shared/agentProvider';
 import type { HireManifest } from '@shared/hire';
+import { ownValue } from '@shared/ownValue';
 import {
   EMPTY_HIRE_QUEUE,
   clearHireQueue,
@@ -489,7 +490,7 @@ export function actionText(action: string, t: (key: string, opts?: Record<string
   if (plain === 'idle') return t('office.activity.idle');
   // Engine words become office words (owner, 2026-09-30: "using Bash" confuses
   // a business owner). Only the words shown change; the stored action does not.
-  const said = OFFICE_WORDS[plain];
+  const said = ownValue(OFFICE_WORDS, plain);
   if (said) return t(`office.activity.${said}`);
   const tool = toolOfAction(action);
   if (tool) return toolText(tool, t);

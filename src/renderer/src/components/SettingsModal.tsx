@@ -1,3 +1,5 @@
+import { ResearchPrivacySettings } from './ResearchPrivacySettings';
+import { cleanDataClassOverrides } from '../../../shared/dataClasses';
 import { MailboxesSettings } from './MailboxesSettings';
 import { ClaudeConnectorsSettings } from './ClaudeConnectorsSettings';
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
@@ -181,8 +183,8 @@ const sectionRule = { height: 1, background: 'var(--cth-line)' } as const;
 
 // Agents & Models and Autonomy & Budgets are one Agents tab (owner, 2026-10-01):
 // the model agents run on, how much they do alone and the limits that stop them.
-export type Section = 'General' | 'Company profile' | 'Prerequisites' | 'Agents' | 'Skills' | 'Connections' | 'Voice' | 'Memory & Knowledge';
-const NAV_SECTIONS: Section[] = ['General', 'Company profile', 'Prerequisites', 'Agents', 'Skills', 'Connections', 'Voice', 'Memory & Knowledge'];
+export type Section = 'General' | 'Company profile' | 'Prerequisites' | 'Agents' | 'Skills' | 'Connections' | 'Research & privacy' | 'Voice' | 'Memory & Knowledge';
+const NAV_SECTIONS: Section[] = ['General', 'Company profile', 'Prerequisites', 'Agents', 'Skills', 'Connections', 'Research & privacy', 'Voice', 'Memory & Knowledge'];
 /** The tabs shown: the Voice tab is hidden while voice is off (SHOW_VOICE). */
 const VISIBLE_SECTIONS: Section[] = NAV_SECTIONS.filter((s) => s !== 'Voice' || SHOW_VOICE);
 /** i18n key for each nav section's label — the Section values themselves stay
@@ -194,6 +196,7 @@ const NAV_SECTION_KEYS: Record<Section, string> = {
   'Agents': 'settings.nav.agents',
   'Skills': 'settings.nav.skills',
   'Connections': 'settings.nav.connections',
+  'Research & privacy': 'settings.nav.research',
   'Voice': 'settings.nav.voice',
   'Memory & Knowledge': 'settings.nav.memoryKnowledge'
 };
@@ -1028,6 +1031,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                   padding: 10,
                   background: 'var(--cth-card-2)'
                 }}>
+                  {/* Research & privacy is in every office (owner, ship 2 D16). */}
                   {VISIBLE_SECTIONS.map((section) => {
                     const active = activeSection === section;
                     return (
@@ -1624,6 +1628,16 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                       <McpDefaultsSettings config={config} />
                       <div style={{ height: 1, background: 'var(--cth-line)' }} />
                     </>
+                  )}
+
+                  {/* Research & privacy (docs/designs/research-agent-privacy.md, D3):
+                      the one member on the internet, then what may be sent to it. */}
+                  {activeSection === 'Research & privacy' && (
+                    <ResearchPrivacySettings
+                      config={config}
+                      classes={pending.dataClasses ?? config.dataClasses}
+                      onClassesChange={(next) => stage({ dataClasses: cleanDataClassOverrides(next) ?? {} } as Partial<HarnessConfig>)}
+                    />
                   )}
 
                   {activeSection === 'Connections' && (

@@ -173,3 +173,22 @@ export function resultHeadline(result: string | undefined): string {
     )
     .trim();
 }
+
+/** The Tasks board's filter (issue 158): what the owner typed and one team
+ *  member ('' for everyone). */
+export interface TaskFilter { query: string; assignee: string }
+
+/** Is either part of the filter set? While it is, the board unfolds Done. */
+export function filterActive(f: TaskFilter): boolean {
+  return f.query.trim() !== '' || f.assignee !== '';
+}
+
+/** Does a card pass the filter? Every typed word must appear, in any case, in
+ *  the card's id, title, description or result; a member must be its assignee. */
+export function taskMatches(task: HiveTask, f: TaskFilter): boolean {
+  if (f.assignee && task.assignee !== f.assignee) return false;
+  const words = f.query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const text = [task.id, task.title, task.description, task.result].filter(Boolean).join(' ').toLowerCase();
+  return words.every((w) => text.includes(w));
+}

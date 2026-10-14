@@ -244,7 +244,9 @@ same in both themes: Michael's World's Best Boss mug (on ink in both themes), Pa
 palette, Erin's balloon, Dwight's beet, Jim's tuna can, Stanley's pretzel, Phyllis's
 knitting, Andy's banjo, Ryan's rocket, Oscar's calculator, Angela's cat, Kevin's chili
 pot, Toby's island palm, Kelly's phone, Nick's router, Sadiq's lock, Creed's sprout,
-Meredith's party hat, Darryl's music note (owner, 2026-10-03: the letter added nothing).
+Meredith's party hat, Darryl's music note (owner, 2026-10-03: the letter added nothing),
+and Pete's magnifier over a globe for the Research member, its own face that no hire takes
+(owner, third ship D4).
 Someone with no known character keeps their initial. One component draws them all
 (`PersonAvatar`, `scene/office/props.tsx`).
 
@@ -567,6 +569,31 @@ team to restore. It never opens the column or counts toward Needs you.
 Closing a person's or Michael's panel returns to the board while anything waits, and
 collapses the column when nothing does.
 
+### 7.6a Office stops (OfficeBreakNotice)
+
+When Claude cannot work, the office says why on one card at the top of Needs you
+and in a chip in the top bar that opens Needs you. Nothing types into a Claude
+terminal until it is back; schedules run as configured and their jobs wait in
+the inboxes. One state, three reasons (docs/designs/office-stopped-account.md):
+
+| Reason | When | Look | Card |
+|---|---|---|---|
+| Plan limit | The Claude plan reached its usage limit | Quiet: `amber` soft card and chip, not counted. It ends on its own. | "The office is on a break", then when work starts again |
+| Out of credit | The Anthropic account has no credit (`billing_error`) | An owner to do: a plain Ask me card (§7.8, no side rule), counted in the Needs you button; `coral` chip "Office stopped" | "Your Anthropic account is out of credit." Primary Add credit (the `external` icon, spoken "opens in your browser") opens the Anthropic billing page; secondary Try again |
+| Sign in | The login expired, or the API key stopped working (`authentication_failed`) | As out of credit | Account: "Your Claude account needs you to sign in again." with Sign in. API key: "The Anthropic API key stopped working." with Change key. Both open the Get Michael ready rows. |
+
+Title "The office stopped" (the plan limit keeps "The office is on a break"),
+one reason line (`role="status"`), then the buttons; the explanation is behind
+the info icon. The card sits first in Needs you. While a sign in stop is on, the
+Get Michael ready card (§7.25) is not shown, so one problem is one card.
+
+States after the owner acts: Checking (the buttons go; a small spinner and
+"Checking that work can start"), Still out ("Still out of credit. Credit can
+take a few minutes to show." with the buttons back), Done (the card and chip
+go). Out of credit and an expired account login also check on their own every
+15 minutes; a key that stopped working waits for Change key. Resuming only sends
+the next message: nothing restarts, except the Claude terminals after a new key.
+
 ### 7.7 Buttons
 
 | Kind | Fill | Text | Border | Use |
@@ -608,7 +635,9 @@ stands on its own.
   eight lines, then scrolls; owner, 2026-10-01: a longer answer was hard to write;
   placeholder "Your answer, or done if you handled it") and a primary "Reply"; "Holding up N tasks" folded under it; and
   a footer with "See full context" (the ask's full background and history; owner,
-  2026-10-01: it is context, not a task) and "N earlier answers". Cmd or Ctrl+Enter sends; Enter
+  2026-10-01: it is context, not a task) and "N earlier answers". The footer shows only
+  when the card holds more than the question: a background, a result, or other
+  questions and answers (owner, 2026-10-12: it opened to a repeat of the question). Cmd or Ctrl+Enter sends; Enter
   respects IME composition.
 - "Holding up N tasks", when tasks wait on the answer, opens to their titles in `ink-2`
   (a status dot each, up to 6, then "+N more").
@@ -626,6 +655,18 @@ stands on its own.
   Show in Finder. A file that is gone, or outside every office folder, is a chip with no
   fill, a `line` ring, all `ink-3` and "Not found": text, not a button. Folded cards show
   nothing. Task detail and Michael's replies (§7.19) use the same chips.
+- Links in agent text (owner, 2026-10-11; `docs/designs/named-links.md`) are named, on
+  every card-mode surface (Ask me, Michael's replies, Task detail, memory notes, Work
+  styles, profile); file tabs and the IDE show links as written. A pasted URL shows the
+  app it opens ("HubSpot", "QuickBooks", "Google Sheets"), else the site without `www.`,
+  or the address for email; a link the agent wrote as words keeps them. The link is
+  `indigo-text` 500, underline 1 px at 2 px offset (2 px on hover), then a 12 px
+  `external` icon (`mail` for email) 3 px after it, glued to the last word; the full
+  URL is its tooltip; focus ring 2 px `indigo`, 2 px offset. Hidden after the name for
+  screen readers: "opens in your browser" or "opens your email app". When the words
+  name a known app or a web address the link does not go to, the real site follows in
+  `ink-3`: "HubSpot (hubspot-login.example)". Hosts are what the browser reaches
+  (lowercase, punycode for a look-alike letter).
 - Optional secondary actions Michael attached (for a broken mailbox: "Open Mailboxes").
 - **Mail approval cards** (MailProposalCards, docs/designs/send-on-approval.md): "{name}
   wants to send an email" with the avatar; From, To and Cc as `t-meta` lines; editable
@@ -639,6 +680,10 @@ stands on its own.
   the questions. Same frame, file rows and reply; a secondary "Got it" clears it and sends
   Michael nothing. Reports never turn the Needs you pill coral or hold the column open:
   with only reports waiting the quiet pill reads "Reports: N" and opens the board.
+- **Research card** (issue #230, once, updated offices only): the same Report card, "Your team no
+  longer uses the internet", "This keeps your private data in. One team member, Pete, can look
+  things up for them, after a privacy check. Pete is off until you turn them on.", Got it and Open
+  Research & privacy (primary, opens Settings on Research & privacy); either clears it for good.
 
 ### 7.9 Schedule request card (ScheduleRequestCards)
 
@@ -848,6 +893,10 @@ a small "Fix" coral pill that opens Settings, Connections, Mailboxes.
   whose owner answer Michael has not closed reads "With Michael" and how long, then
   "Michael hasn't moved this" after one working day of office hours; a Blocked card with
   nothing asked reads "Nothing asked". Done shows the last 5 and "N more".
+- Find a card (issue 158): one row above the columns, a search field (`cth-input`, 30 px,
+  up to 260 px, placeholder "Search tasks") and a team member select ("Everyone" first,
+  `line-input` boundary, 30 px). While either is set, a quiet Clear (28 px target, `ink-2`)
+  follows them, each column counts only matching cards, and Done unfolds in full.
 
 ### 7.21 Task detail (TaskDetailOverlay)
 
@@ -869,7 +918,9 @@ Centered overlay over the stage (never over the right column), 528 px wide, `r-2
   activity lives in its conversation and the office log). A To do card with a one off
   step at a set time shows "Next: Mon, 12 Oct, 8:00 AM" (`nextAt`, local time), on the
   card under the assignee and in the detail.
-  QUESTIONS (the Q and A trail; an open question sits
+  QUESTIONS (the Q and A trail, newest first like Ask me, each question's top row saying
+  how long ago it was asked, "5d ago", 11 px `ink-3` as on Ask me cards, nothing when the
+  time is missing; an open question sits
   in a coral soft box with a "Waiting for you" pill; answered ones are plain), DEPENDENCIES
   (rows with a link icon, mono id, title, "waits on this").
 - Footer: secondary "Assign" with the hint "Sends it to Michael to hand out"; secondary
@@ -959,7 +1010,10 @@ Full window, no app chrome.
   Calendar" with a dashed `line-2` border, "nothing to connect" `ink-3`), and a mono
   "Works in Harbor & Pine/Finance" line with a "change" link. Unchecked rows at 55%.
   Footer: "N picked, M to connect" and Back (secondary), Next (primary). The footer sticks
-  to the window's bottom edge, so Next stays in reach on a long step.
+  to the window's bottom edge, so Next stays in reach on a long step. Last in the list, one
+  unchecked row for Research (issue #230): Pete's own character, its current name, "Looks things up on the
+  internet for the team, and sees no office data.", a "uses the internet" chip in the "always on"
+  style; picked, it starts with the team.
 - **Ready step** (Get Michael ready, docs/designs/get-michael-ready.md): heading with an
   info icon, then two quiet rows in one `line` card, a 26 px tinted icon each: Claude Code
   (Checking, Installing with a moving `indigo` bar, Installed `green`, or a `coral-text`
@@ -978,6 +1032,12 @@ Full window, no app chrome.
   each with a small name tag and a check on its screen; an unpicked department shows as a
   dashed outline with a "Name, not picked" tag on its back corner, clear of the pods in
   front of it.
+
+### 7.25a The crash screen (ErrorBoundary)
+
+When a screen throws, the window shows one centered line in `t-ui` 600, "Something went
+wrong on this screen.", and a primary Reload button under it, on the page background, instead
+of a blank window. Nothing else: no stack, no codes (they go to the log).
 
 ### 7.26 Settings and the hire wizard
 
@@ -1010,6 +1070,32 @@ starts closed and opens by itself for a connector the owner has not seen or a fa
 name (14px, 600), status in words (connected, an underlined "Sign in at claude.ai" link, or a coral
 "Removed from your Claude account" chip with Clear, sorted first), then the owner's switch. A
 failed read is one line with the time of the last good read and Try again.
+
+**Research & privacy** (Settings, after Connections; `docs/designs/research-agent-privacy.md`,
+owner 2026-10-13). Only Pete, the Research team member, uses the internet; this section turns him on
+and sets what the team may send him. Pete first: a `sectionHead` "Research" with an info icon, then
+one row whose state line is `role="status"`: grey dot "Off. Pete can't look things up for your team."
+with Turn on; a 12 px `indigo` spinner and "Hiring Pete…" or "Turning off Pete…" with no
+button; green dot "On. Pete looks things up for the team." with Turn off; coral dot "Pete
+couldn't start." with Try again. Turn on and Turn off act at once, never at Save. Turn off with asks
+waiting shows one line under the row, "N asks are waiting. They go back to the sender.", with Cancel
+(focused; Esc cancels without closing Settings) and Turn off (primary). On Windows one `ink-3` line
+under the row: "On Windows, Pete can still reach your office files." with an info icon. Then a
+hairline and "What your team may send to Pete" with an info icon and the computed count ("4
+allowed, 8 private"); while Pete is off, "Used when Pete is on." in `ink-3`. Twelve 40 px rows
+in a fixed order, never re-sorted: the class name, an info icon with its examples, and the Sending
+style segmented control [Allowed, Private] (a radio group named by the class); Passwords and keys
+shows a 12 px lock and "Always private" instead. The classes save with the footer Save. When a team
+member runs on another engine, one `ink-3` line under the classes names them ("Kelly run on another
+engine, so these rules don't reach them yet.") with an info icon. The send heading is a sentence
+(`t-ui` 600, `ink-2`), not a caps label. The section shows in every office (owner, ship 2 D16).
+Pete's Access tab shows one `ink-3` line (no
+mailboxes, connectors or schedules) and a link here. Every message to Pete passes his trust
+layer: a sender whose question was cleaned gets "Sent to Pete as" from Privacy check in its
+Messages, showing what Pete was asked. Pete is the default name: in Edit agent the owner may rename
+the Research member (an info icon says it stays the Research member whatever its name), and every
+string here takes the current name. Its engine offers Claude only, shown as plain text once on
+Claude.
 
 ---
 
@@ -1371,6 +1457,10 @@ name. Under 400 px the table steps down to 11 / 16. The section never scrolls si
 - Sizes: 14 (inline in meta), 16 (buttons, rows), 18 (top bar), 20 (empty states).
 - Every icon only button has an `aria-label` and a tooltip.
 - `file` (a document) and `sheet` (a spreadsheet or CSV) mark Ask me file rows (§7.8).
+- `external` (opens the browser) and `mail` (opens the mail app) follow a named link in
+  agent text, at 12 (§7.8).
+- `lock` marks a choice that cannot be changed, at 12, with visible words beside it
+  ("Always private", §7.26).
 - `help` (a question in a circle) marks a state that could not be checked (§7.25); `info`
   opens an InfoTip explanation. Never swap them.
 - `components/Icon.tsx` draws these outline icons; the v1 pixel set is retired (§17, row 6).
@@ -1563,6 +1653,14 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-10-10 | Panel tabs: the mouse wheel scrolls an overflowing tab row sideways, and an edge fades while tabs are hidden past it (§7.11). |
 | 2026-10-12 | Web: the home page's task board after the refund story, the Tasks view (§7.20) as a read only picture that leads with Blocked and Waiting on small screens (§9.13). |
 | 2026-10-12 | Web: file tabs after the task board, a CSV open in a file tab (§7.2) from a chip on Oscar's Ask me card (§7.8), the card beside it, as a read only picture (§9.14). |
+| 2026-10-12 | Named links in agent text: a pasted URL on a card shows the app or site it opens, with an `external` or `mail` icon, a hidden screen reader phrase, and the real site in `ink-3` when the words name another one (§7.8, §10). |
+| 2026-10-12 | Ask me: the See full context footer shows only when the card has a background, a result or other questions and answers (§7.8). |
+| 2026-10-12 | Task detail: QUESTIONS newest first, each with how long ago it was asked (§7.21). |
+| 2026-10-12 | Office stops: out of credit and a sign in that stopped working join the plan limit break, as a counted owner to do with a coral chip; the plan limit stays the quiet amber break (§7.6a). |
+| 2026-10-13 | Research & privacy (issue #230): a Settings section with the Research row and the data classes (§7.26), Research in the onboarding Team step (§7.25), the one time Research report card (§7.8); the Sites group is gone from the Access tab (§7.12). |
+| 2026-10-13 | The Research team member is called Pete (owner): the Settings copy, the Team step row and the report card name him (§7.8, §7.25, §7.26); his name and engine show as plain text in Edit agent. |
+| 2026-10-13 | The Research member is renamable, Pete by default, and the copy takes its current name; Research & privacy shows in every office (owner, ship 2 D16, ship 2 D17). |
+| 2026-10-13 | Research wears Pete, its own character (magnifier over a globe), not Ryan, who stays Marketing's (owner, third ship D4, §3.4, §7.25); the crash screen (§7.25a) and the `lock` icon (§10) are written down. |
 | 2026-10-04 | Banter flies as paper planes only; an envelope on the floor is always a real message (§8.8, §8.12). |
 | 2026-10-04 | Ask me file rows: a question's named files open from the card, or show in Finder (§7.8); `file` and `sheet` icons (§10). |
 | 2026-10-01 | Pre-landing review fixes: dialogs close when closing time starts and its bar sits above them; the compact grid stays clear of the right column; selecting someone dims the rest of the stage to 45% (§7.14); Traces behind a flag (§7.11); setup screens on v2 fields and rows (§7.25); the composer keeps its width and takes pastes (§7.19); Settings and closing time copy in plain words. |

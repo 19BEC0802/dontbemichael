@@ -1,3 +1,4 @@
+import { RESEARCH_ID } from '@shared/research';
 /**
  * The Office view: the studio (branding/DESIGN.md 8), the v2 replacement for the
  * pixel floor. The SVG art is drawn on a fixed 1060 x 816 stage and scaled to
@@ -1078,7 +1079,9 @@ function useIdleQuote(
     // Someone idle and in (not clocking in, not gone home at closing time), in
     // a pod where nobody still at work is busy, so a bubble never sits on an
     // open card or a dark office.
-    const quietPeople = () => chatCandidates(live.current.pods, live.current.gone, ACTIVE, ACTION_CLOCKING_IN);
+    // The Research member borrows Ryan's character, so it takes no part in the in character
+    // lines and banter that would call him Ryan (ship review).
+    const quietPeople = () => chatCandidates(live.current.pods, live.current.gone, ACTIVE, ACTION_CLOCKING_IN).filter((p) => p.id !== RESEARCH_ID);
     const podOfId = (id: string) => live.current.pods.find((p) => p.members.some((m) => m.id === id));
     const pickOne = (people: Agent[]) => {
       const others = people.length > 1 ? people.filter((x) => x.id !== lastSpeaker.current) : people;

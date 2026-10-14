@@ -1,3 +1,5 @@
+import { RESEARCH_ID } from '../../../shared/research';
+import { startResearch } from '@/shell/research';
 import { useEffect, useRef } from 'react';
 import { useStore, type Agent, type QueuedMessage, type StationKind, type ToolKind } from '@/store/store';
 import {
@@ -19,7 +21,7 @@ import { resolveGodName } from '../../../shared/godIdentity';
 import { acquireTerminal, resetTerminal, isTerminalAutomationSafe, hasTerminalDraft } from '@/components/terminalPool';
 import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition } from './queueDelivery';
 import { RunningToolCalls } from './runningToolCalls';
-import { OFFICE_CAST, DEFAULT_CHARACTER, type OfficeCharacterName } from '@/scene/office/cast';
+import { OFFICE_CAST, DEFAULT_CHARACTER, HIREABLE_CAST, type OfficeCharacterName } from '@/scene/office/cast';
 import { teamMemberName, teamMemberRole, teamMemberGoal, teamAccent, teamMemberStart, rewrittenInstructions } from '../../../shared/teamPlan';
 import type { AgentDefinitionV2 } from '../../../shared/agentDefinition';
 import { FIRST_TASK_EDITED_MAX, withoutLegacyFirstTask } from '../../../shared/firstTask';
@@ -344,7 +346,12 @@ async function startBusinessTeam(config: HarnessConfig): Promise<void> {
   const team = config.businessTeam ?? [];
   // After the first run, only the members that failed to start are tried.
   const retry = config.businessTeamStarted ? new Set(config.businessTeamRetry ?? []) : undefined;
-  if (team.length === 0 || retry?.size === 0) return;
+  // Research, when the owner picked it in the Team step (issue #230): started
+  // with the first run even when no other member was picked.
+  if (team.length === 0 || retry?.size === 0) {
+    if (!retry) await startPickedResearch(config);
+    return;
+  }
 
   const { packs, core } = await window.cth.packsList();
   // The business's pack; when its type is unknown (an office continued from its
@@ -374,7 +381,7 @@ async function startBusinessTeam(config: HarnessConfig): Promise<void> {
   const command = buildSpawnCommand(config, model, provider);
   const [exe, ...args] = tokenizeCommand(command.trim());
   const castName = (c?: string): OfficeCharacterName =>
-    OFFICE_CAST.some((m) => m.name === c) ? (c as OfficeCharacterName) : DEFAULT_CHARACTER;
+    HIREABLE_CAST.some((m) => m.name === c) ? (c as OfficeCharacterName) : DEFAULT_CHARACTER;
 
   const failed: string[] = [];
   for (const [index, member] of team.entries()) {
@@ -442,6 +449,14 @@ async function startBusinessTeam(config: HarnessConfig): Promise<void> {
     }
   }
   await window.cth.updateConfig({ businessTeamStarted: true, businessTeamRetry: failed }).catch(() => undefined);
+  if (!retry) await startPickedResearch(config);
+}
+
+/** Research, when the owner picked it in the Team step (issue #230). */
+async function startPickedResearch(config: HarnessConfig): Promise<void> {
+  if (!config.research?.on || useStore.getState().agents.some((a) => a.id === RESEARCH_ID)) return;
+  const r = await startResearch(config);
+  if (!r.ok) console.warn(`[team] Research did not start: ${r.error ?? 'unknown error'}`);
 }
 
 /**
@@ -690,6 +705,14 @@ export function useHive(config: HarnessConfig | null): void {
   useEffect(() => {
     return window.cth.onHiveHookEvent((e) => {
       if (!e.agentId) return;
+      // A new Claude process (a start or a --resume, not a /compact or /clear)
+      // has not been told about the mail already in its inbox: the nudge typed
+      // into the process it replaced (signed out, wedged, killed) went with it.
+      // Forget what this agent was nudged about, so the inbox wake (#3) names
+      // that mail again. Without it, Michael restarted after the owner saved
+      // an API key sat idle: the office open standup had been nudged into a
+      // signed out Claude and was never named again.
+      if (e.event === 'SessionStart' && (e.source === 'startup' || e.source === 'resume')) delete nudged.current[e.agentId];
       if (e.event === 'Notification' || e.event === 'PermissionRequest') promptSubmits.noteAttention(e.agentId);
       const { updateAgent, agents } = useStore.getState();
       const self = agents.find((a) => a.id === e.agentId);
@@ -1246,7 +1269,7 @@ export function useHive(config: HarnessConfig | null): void {
       // particular character. Unknown values fall through to the inference rather
       // than breaking the card.
       const castMember = (q?: string) =>
-        q ? OFFICE_CAST.find((m) => m.name === q || m.displayName.toLowerCase() === q)?.name : undefined;
+        q ? HIREABLE_CAST.find((m) => m.name === q || m.displayName.toLowerCase() === q)?.name : undefined;
       const character =
         castMember(rec.character?.trim().toLowerCase()) ??
         castMember((rec.name || rec.id).toLowerCase()) ??
@@ -1359,7 +1382,12 @@ export function useHive(config: HarnessConfig | null): void {
       }
     };
     window.addEventListener(ENGINE_READY_EVENT, onReady);
-    return () => window.removeEventListener(ENGINE_READY_EVENT, onReady);
+    // A new API key replaced one that stopped working (office-stopped-account.md):
+    // the running Claude terminals restart, resumed, the same way.
+    const offKey = window.cth.onOfficeRestartClaude?.((restart) => {
+      onReady(new CustomEvent(ENGINE_READY_EVENT, { detail: { restart } }));
+    });
+    return () => { window.removeEventListener(ENGINE_READY_EVENT, onReady); offKey?.(); };
   }, [config?.onboardingComplete]);
 
   // 8) Restart to apply (docs/designs/multi-mailbox.md E2 + E5, and

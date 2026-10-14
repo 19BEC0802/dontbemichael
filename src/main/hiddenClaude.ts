@@ -1,6 +1,7 @@
 import * as pty from 'node-pty';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { resolveCommand, userShellPath } from './shellEnv';
 import { expandTilde } from './fs';
 import { projectDir } from './transcript';
@@ -45,6 +46,9 @@ export interface HiddenClaudeOptions {
   /** Setting sources to load (--setting-sources), e.g. "user" so a project's
    *  settings and hooks in the folder can't change a check. */
   settingSources?: string;
+  /** Settings passed with --settings (a JSON string), laid over the sources
+   *  above, e.g. {"disableAllHooks": true} so no hook runs in the session. */
+  settingsJson?: string;
   /** Directories added via --add-dir (for context gathering). */
   addDirs?: string[];
   /** Hard cap ms before forcing prompt send regardless of boot activity. Default 7000. */
@@ -71,7 +75,14 @@ export interface HiddenClaudeOptions {
   onScreenText?: (text: string) => void;
   /** Stops the call: the session is killed and the result is 'cancelled'. */
   signal?: AbortSignal;
+  /** Remove this session's transcript once it ends: it holds text that must
+   *  not stay where agents can read (Research's, red team third ship). */
+  dropTranscript?: boolean;
 }
+
+/** How long after a session ends its transcript is removed again, for a
+ *  last write as the process exits. */
+const DROP_AGAIN_MS = 3_000;
 
 /** How Claude signs in for these checks, set once by the app (index.ts):
  *  the owner's API key when they chose one in Get Michael ready, else nothing. */
@@ -124,6 +135,7 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
       ...(opts.noTools ? ['--tools', '', '--strict-mcp-config'] : ['--strict-mcp-config', '--disallowedTools', ...disallowed]),
     ];
     if (opts.settingSources) args.push('--setting-sources', opts.settingSources);
+    if (opts.settingsJson) args.push('--settings', opts.settingsJson);
     for (const d of addDirs) { args.push('--add-dir', d); }
 
     const bootCapMs = opts.bootCapMs ?? 7000;
@@ -207,6 +219,16 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
       clearTimeout(bootMaxTimer);
       clearTimeout(globalTimer);
       kill();
+      if (opts.dropTranscript) {
+        const drop = () => {
+          const dir = projectDir(opts.cwd);
+          for (const p of [transcriptFile(dir, sessionId), join(dir, sessionId)]) {
+            try { rmSync(p, { recursive: true, force: true }); } catch { /* next time */ }
+          }
+        };
+        drop();
+        setTimeout(drop, DROP_AGAIN_MS).unref?.();
+      }
       resolve(r);
     };
 
