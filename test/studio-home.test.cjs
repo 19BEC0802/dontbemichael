@@ -134,6 +134,13 @@ test('the studio moves on real events only: scheduled runs, mail, tools, done ta
   assert.match(life, /\/\^mcp__md-mail__\(\[a-z_\]\+\)\$\/\.exec\(e\.tool\)/);
   assert.match(life, /const dir: 'in' \| 'out' = op === 'read' \? 'in' : 'out';/);
   assert.match(life, /window\.cth\.onHiveHookEvent\(onHook\)/);
+  // Blocked tool calls must not animate mail envelopes or tool glyphs.
+  assert.match(life, /if \(e\.blocked\) return;/);
+  assert.ok(
+  life.indexOf('if (e.blocked) return;') >= 0 &&
+  life.indexOf('const mail =') > life.indexOf('if (e.blocked) return;'),
+  'blocked events are ignored before mail-envelope animation',
+  );
   // A done burst only for a task that newly reached Done, never on first load.
   assert.match(life, /if \(!before \|\| Date\.now\(\) - openedAt\.current < 6000 \|\| live\.current\.paused\) return;/);
   assert.match(life, /if \(\/\^Bash\$\|\^BashOutput\$\/\.test\(tool\)\) return 'terminal';/);

@@ -729,6 +729,9 @@ export function useHive(config: HarnessConfig | null): void {
       } else if (e.event === 'PostCompact') {
         if (!breakerArmed) updateAgent(e.agentId, { status: 'working', action: 'resumed', carrying: undefined, actionDetail: undefined, actionAt: Date.now() });
       } else if (e.event === 'PreToolUse' && e.tool) {
+        // A blocked event means the hook denied this call; nothing ran.
+        // Do not update the agent's working state or count a tool use for it.
+        if (e.blocked) return;
         const m = stationForTool(e.tool);
         // Each tool call restarts the clock the closing-time rows show.
         if (!breakerArmed) updateAgent(e.agentId, { status: 'working', currentStation: m.station, carrying: m.carry, action: `using ${e.tool}`, actionDetail: e.detail, actionAt: Date.now() });

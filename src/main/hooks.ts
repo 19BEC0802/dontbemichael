@@ -1085,8 +1085,10 @@ export class HookServer {
     }
   }
 
+  // A refused call sends no step and is marked blocked, so the sidebar and
+  // the office floor show nothing for a call that never ran.
   private emitRefused(agentId: string | undefined, event: string, p: HookPayload): void {
-    this.emit(agentId, event, p, false, true);
+    this.emit(agentId, event, p, true, true);
   }
 
   private emit(agentId: string | undefined, event: string, p: HookPayload, blocked = false, refused = false): void {
