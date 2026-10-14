@@ -1015,7 +1015,8 @@ export class HookServer {
     // it reads nothing in the home folder or the office but its own folders,
     // and writes only those (D2.5, D2.6).
     if (agentId === RESEARCH_ID) {
-      const walled = [homedir(), home ?? '', cfg.businessFolder ?? '', this.getKnowledge?.().root ?? '',
+      // Claude Code's projects folder too, wherever CLAUDE_CONFIG_DIR puts it.
+      const walled = [homedir(), home ?? '', cfg.businessFolder ?? '', this.getKnowledge?.().root ?? '', claudeProjectsRoot(),
         ...(cfg.businessTeam ?? []).map((m) => m.folder),
         ...Object.values(reg.agents).filter((a) => a.id !== agentId && a.cwd).map((a) => a.cwd),
         // Every temporary folder; its own session files are in its desk (D6.1).

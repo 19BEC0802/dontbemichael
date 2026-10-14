@@ -1005,6 +1005,8 @@ test('the app\'s writes in Research\'s folder never go through a link or a secon
   fs.writeFileSync(path.join(dir, 'memory', 'handoff.md'), 'notes');
   assert.equal(hive.takeHandoff('research'), 'notes');
   assert.deepEqual(fs.readdirSync(elsewhere), [], 'nothing moved through the link');
+  assert.ok(!fs.existsSync(path.join(dir, 'memory', 'handoff.md')), 'taken and removed, never moved');
+  assert.equal(hive.takeHandoff('research'), null, 'taken once');
 });
 
 test('a repaired outbox file is written over only when it is the agent\'s own plain file', posixOnly('hard links'), async (t) => {
@@ -1016,4 +1018,46 @@ test('a repaired outbox file is written over only when it is the agent\'s own pl
   fs.linkSync(outside, path.join(hive.root(), 'agents', 'pam', 'outbox', 'm.json'));
   hive.routeOnce();
   assert.equal(fs.readFileSync(outside, 'utf8'), before);
+  assert.equal(msgsIn(hive, 'god').filter((m) => /line one/.test(m.body)).length, 0, 'set aside before it is delivered');
+  assert.match(fs.readFileSync(path.join(hive.root(), 'log.jsonl'), 'utf8'), /outbox-not-a-file/);
+});
+
+test('the app never deletes a folder inside Research\'s mail, so no link swapped into it leads a delete elsewhere', posixOnly('symlinks'), async (t) => {
+  // Value: protects=hive files survive a folder named like a message with a link inside it; fails_when=dropResearchEntry removes recursively; why_new=red team, third ship pass 3 (rimraf in Electron's Node walks by path); seam=none
+  const { hive } = await office(t);
+  const root = hive.root();
+  const dir = path.join(root, 'agents', 'research');
+  fs.writeFileSync(path.join(root, 'tasks.json'), JSON.stringify({ tasks: [] }));
+  fs.mkdirSync(path.join(dir, 'inbox', 'x.json'));
+  fs.symlinkSync(root, path.join(dir, 'inbox', 'x.json', 'sub'));
+  hive.routeOnce();
+  hive.returnResearchInbox();
+  assert.ok(fs.existsSync(path.join(root, 'tasks.json')), 'nothing deleted through the link');
+  assert.ok(fs.existsSync(path.join(root, 'registry.json')));
+  assert.ok(fs.lstatSync(path.join(dir, 'inbox', 'x.json')).isDirectory(), 'a folder is left alone');
+});
+
+test('Research\'s answer delivered again after a crash replaces itself instead of arriving twice', async (t) => {
+  // Value: protects=a crash between delivery and archive never doubles an answer; fails_when=the outbound id is random per delivery; why_new=api review, third ship pass 3; seam=fake layer
+  const { hive } = await office(t);
+  const askId = await askFrom(hive, 'pam');
+  const ans = { to: 'pam', act: 'inform', in_reply_to: askId, subject: 'Answer', body: 'Trends are up' };
+  send(hive, 'research', ans, 'ans.json');
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  send(hive, 'research', ans, 'ans.json');
+  hive.routeOnce(); await tick(); hive.routeOnce();
+  assert.equal(msgsIn(hive, 'pam').filter((m) => m.from === 'research').length, 1);
+});
+
+test('the top of Research\'s folder holds no pipe after a start, and its outbox and forged inbox files never count', posixOnly('mkfifo'), async (t) => {
+  // Value: protects=a pipe at the top of its folder never freezes a later app write, and backlog and outbox views ignore Research's own writing; fails_when=makeResearchFolderSafe skips pipes, or inboxBacklog and outbox read raw files; why_new=testing review, third ship pass 3; seam=none
+  const { hive } = await office(t);
+  const dir = path.join(hive.root(), 'agents', 'research');
+  require('node:child_process').execFileSync('mkfifo', [path.join(dir, 'pipe')]);
+  await hive.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(path.dirname(hive.root()), 'research-desk'), isResearch: true });
+  assert.ok(!fs.existsSync(path.join(dir, 'pipe')));
+  fs.writeFileSync(path.join(dir, 'inbox', 'forged.json'), JSON.stringify({ id: 'forged', from: 'god', to: 'research' }, null, 2));
+  fs.writeFileSync(path.join(dir, 'outbox', 'o.json'), JSON.stringify({ to: 'pam', body: 'raw' }));
+  assert.equal(hive.inboxBacklog('research'), 0);
+  assert.deepEqual(hive.outbox('research'), []);
 });

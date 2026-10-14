@@ -182,7 +182,7 @@ test('the settings written at spawn take the internet from a member\'s shell and
   assert.deepEqual([...research.sandbox.filesystem.allowWrite].sort(), [path.join(researchDir, 'inbox'), path.join(researchDir, 'memory'), path.join(researchDir, 'outbox'), o.desk].sort());
   assert.ok(!research.sandbox.filesystem.allowWrite.includes(researchDir), 'not the top of its folder');
   assert.ok(!research.sandbox.filesystem.allowWrite.includes(o.hive.root()), 'never the hive');
-  assert.deepEqual([...research.permissions.additionalDirectories].sort(), [researchDir, o.desk].sort());
+  assert.deepEqual([...research.permissions.additionalDirectories].sort(), [...research.sandbox.filesystem.allowWrite].sort(), 'Claude Code lets the shell write every additional directory too');
   // The home folder is walled for reads, and its riskiest places for edits (D2.5, D2.6).
   assert.ok(research.sandbox.filesystem.denyRead.includes(o.base));
   assert.ok(research.permissions.deny.includes(`Edit(/${path.join(o.base, '.claude')}/**)`), 'an absolute rule, not settings relative');
@@ -271,7 +271,7 @@ test('Research\'s file tools open no temporary folder, and no office agent keeps
   assert.ok(!shell.includes('/tmp') && !shell.includes('/private/tmp'));
   assert.ok(shell.includes('/private/var/folders') && shell.includes('/var/folders/ab/T'));
   const main = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
-  assert.match(main, /const dir = isResearch \? join\(opts\.cwd, RESEARCH_TMP_DIR\) : harness \? join\(expandTilde\(harness\), AGENT_TMP_DIR, agentTmpName\(opts\.hive\.id\)\) : '';/);
+  assert.match(main, /const dir = isResearch \? ownResearchDir\(opts\.cwd, RESEARCH_TMP_DIR\) : harness \? join\(expandTilde\(harness\), AGENT_TMP_DIR, agentTmpName\(opts\.hive\.id\)\) : '';/);
   assert.match(main, /if \(sessionTmp\) opts\.env = \{ \.\.\.opts\.env, CLAUDE_CODE_TMPDIR: sessionTmp \};/);
   assert.match(main, /extraWritableDirs: \[memory\.env\(\)\.MEMPALACE_PALACE_PATH, sessionTmp\]/);
 });

@@ -388,7 +388,7 @@ export function researchInstructions(b: PromptBusiness, michael: string, p: Prom
     '',
     'You see no office files, task board, memory store or company knowledge, by design: everything you know about a question is in its message. Answer from the public internet, and name each source with a link.',
     '',
-    `Act on each message in your inbox (${p.inbox}), then move it to ${p.inboxDone}. Answer the one who asked: write ONE message JSON to your outbox (${p.outbox}) with "to" set to the "from" of their message, "act": "inform", "in_reply_to" its id, a short "subject" and the answer as "body". Write only to the one who asked, or to ${michael} when you need to raise a problem; never to the whole team (the app refuses anything else). Write nowhere but your own folder, attach no files, and never ask the owner: if you cannot answer, say so in your reply.`
+    `Act on each message in your inbox (${p.inbox}), then move it to ${p.inboxDone}. Answer the one who asked: write ONE message JSON to your outbox (${p.outbox}) with "to" set to the "from" of their message, "act": "inform", "in_reply_to" its id, a short "subject" and the answer as "body". Write only to the one who asked, or to ${michael} when you need to raise a problem; never to the whole team (the app refuses anything else). Write only in your inbox, outbox and memory folders and your working folder, attach no files, and never ask the owner: if you cannot answer, say so in your reply.`
   ].join('\n');
 }
 
@@ -1669,7 +1669,7 @@ export class HiveManager {
 
   /** Where Research's shell may write: its mail, its notes and its desk, never
    *  the top of its folder, so it can't put a link where the app writes or
-   *  moves files (red team, third ship). Its file tools keep its whole folder. */
+   *  moves files (red team, third ship). Its file tools are held by the hook. */
   private researchShellWrite(dir: string, cwd: string | undefined): string[] {
     return [join(dir, 'inbox'), join(dir, 'outbox'), join(dir, 'memory'), ...(cwd ? [cwd] : [])];
   }
@@ -1769,7 +1769,10 @@ export class HiveManager {
               }
             },
             permissions: {
-              additionalDirectories: writableDirs,
+              // Claude Code lets the shell write in every additional
+              // directory too, so Research's are only what its shell may
+              // write (verified live, third ship QA).
+              additionalDirectories: shellWrite ?? writableDirs,
               ...(folders?.deny.length || connectorDeny.length ? { deny: [...(folders?.deny ?? []), ...connectorDeny] } : {})
             }
           }
@@ -2355,10 +2358,16 @@ export class HiveManager {
   }
 
   /** Remove one entry of a Research folder, only while that folder is still
-   *  the real one; rm never follows the entry itself if it is a link. */
+   *  the real one. Never a folder: a delete that walks into one Research can
+   *  write could be led through a link it swaps in meanwhile (red team, third
+   *  ship). A file, link or pipe is unlinked, never followed. */
   private dropResearchEntry(dir: string, f: string, ...parts: string[]): void {
     if (!isOwnResearchDir(this.agentDir(RESEARCH_ID), dir, ...parts)) return;
-    try { rmSync(join(dir, f), { recursive: true, force: true }); } catch { /* next tick */ }
+    const full = join(dir, f);
+    try {
+      if (lstatSync(full).isDirectory()) return;
+      unlinkSync(full);
+    } catch { /* next tick */ }
   }
 
   /** Before the app writes in Research's folder: the folder is a real one,
@@ -2627,7 +2636,7 @@ export class HiveManager {
    *  labelled, and a reply that plainly tries to steer its reader is flagged to
    *  Michael only (ship review D2.9, owner rule 2026-10-12). Applies whether or
    *  not Research is on now, so a late reply is treated the same. */
-  private researchOutboundGate(msg: HiveMessage, partial: Partial<HiveMessage>, raw: string): 'hold' | 'denied' | 'sent' {
+  private researchOutboundGate(msg: HiveMessage, partial: Partial<HiveMessage>, raw: string, fileKey = raw): 'hold' | 'denied' | 'sent' {
     const reg = this.registry();
     const godId = reg.godId ?? 'god';
     const recipient = typeof msg.to === 'string' && reg.agents[msg.to] ? msg.to : null;
@@ -2678,6 +2687,9 @@ export class HiveManager {
     // app chooses: Research's id, act, times, flags and thread never pass
     // through unchecked (red team, third ship).
     const out = this.normalize({
+      // The app's id, the same for the same file, so an answer delivered
+      // again after a crash replaces itself instead of arriving twice.
+      id: `research-${createHash('sha256').update(fileKey).digest('hex').slice(0, 24)}`,
       to: msg.to,
       act: 'inform',
       subject: v.subject,
@@ -3156,7 +3168,7 @@ export class HiveManager {
           // Everything to and from Research passes its trust layer first.
           const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to, this.registry().agents, this.researchName());
           if (toResearch || id === RESEARCH_ID) {
-            const gate = toResearch ? this.researchInboundGate(id, msg, partial, raw, researchOn) : this.researchOutboundGate(msg, partial, raw);
+            const gate = toResearch ? this.researchInboundGate(id, msg, partial, raw, researchOn) : this.researchOutboundGate(msg, partial, raw, `${f}\n${raw}`);
             if (gate === 'hold') continue;
             // A denied original is kept apart from .sent, so nothing reads it as sent.
             // Research's raw originals are web text the outbound check has not
@@ -3172,6 +3184,17 @@ export class HiveManager {
             this.archiveOutboxFile(full, dest, f);
             routed++;
             continue;
+          }
+          // A repaired file is written over below, so it must be the agent's
+          // own plain file with one name; anything else is set aside before
+          // it is delivered (red team, third ship).
+          if (repairedText !== null) {
+            const st = lstatSync(full);
+            if (!st.isFile() || st.nlink !== 1) {
+              this.appendLog({ kind: 'drop', reason: 'outbox-not-a-file', from: id, file: logFile });
+              this.archiveOutboxFile(full, badDir, `bad-${f}`);
+              continue;
+            }
           }
           this.routeMessage(msg);
           // Repaired text replaces the original in place, then one rename
@@ -4070,10 +4093,14 @@ export class HiveManager {
     if (!existsSync(p)) return null;
     try {
       const text = (id === RESEARCH_ID ? (readResearchFile(this.agentDir(id), p) ?? '') : readFileSync(p, 'utf8')).trim();
-      // Research's archive only into its real folder, never through a link
-      // it put in its place (red team, third ship).
-      const archive = id === RESEARCH_ID ? this.researchDir('memory', 'handoffs') : join(this.agentDir(id), 'memory', 'handoffs');
-      if (!archive) return text || null;
+      // Research's is taken and removed, never moved: a folder it can write
+      // could be swapped for a link on the way (red team, third ship).
+      if (id === RESEARCH_ID) {
+        const mem = this.researchDir('memory');
+        if (mem) this.dropResearchEntry(mem, 'handoff.md', 'memory');
+        return text || null;
+      }
+      const archive = join(this.agentDir(id), 'memory', 'handoffs');
       mkdirSync(archive, { recursive: true });
       renameSync(p, join(archive, `${new Date().toISOString().replace(/[:.]/g, '-')}.md`));
       return text || null;

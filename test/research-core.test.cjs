@@ -179,6 +179,8 @@ test('Research\'s conversation is Claude Code\'s to write, not its tools\', and 
   assert.equal(write.hookSpecificOutput?.permissionDecision, 'deny', 'Research writes nothing there itself');
   const read = server.handle({ agent_id: 'pam', hook_event_name: 'PreToolUse', cwd: home, tool_name: 'Read', tool_input: { file_path: path.join(rDir, 's1.jsonl') } });
   assert.equal(read.hookSpecificOutput?.permissionDecision, 'deny', 'and a teammate reads none of it');
+  const other = server.handle({ agent_id: 'research', hook_event_name: 'PreToolUse', cwd: desk, tool_name: 'Read', tool_input: { file_path: path.join(projectDir(path.join(home, 'pam')), 's9.jsonl') } });
+  assert.equal(other.hookSpecificOutput?.permissionDecision, 'deny', 'Research reads no other agent\'s conversation there either');
   // The resume copy is called with Research's project left out.
   const idx = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
   assert.match(idx, /: seedSessionTranscript\(opts\.cwd, sid, researchDesk\(\) \? \[projectDir\(researchDesk\(\)!\)\] : \[\]\);/);
@@ -192,6 +194,26 @@ test('the trust layer\'s checks keep no transcript of Research\'s text, and Rese
   assert.match(layer, /join\(app\.getPath\('userData'\), 'trust-check'\)/);
   assert.match(layer, /dropTranscript: true/);
   assert.match(idx, /if \(isResearch\) pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);\n\s+else setTimeout/);
+  assert.match(idx, /const dir = isResearch \? ownResearchDir\(opts\.cwd, RESEARCH_TMP_DIR\) :/, 'its scratch folder only as a real folder');
+  assert.match(layer, /sweepOldCheckTranscripts\(\);/, 'old check transcripts are swept');
+  assert.match(idx, /claudeProjectsRoot\(\), \.\.\.teamFolders,/, 'its shell is walled from the projects folder wherever it is');
+  // The guard itself: a link left in place of the scratch folder is replaced,
+  // and what it pointed at is untouched.
+  const { ownResearchDir } = loadTs('src/main/researchNotes.ts');
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'md-core-tmp-'));
+  try {
+    const desk = path.join(base, 'desk');
+    const victim = path.join(base, 'victim');
+    fs.mkdirSync(desk); fs.mkdirSync(victim);
+    fs.writeFileSync(path.join(victim, 'old.txt'), 'keep');
+    if (process.platform !== 'win32') {
+      fs.symlinkSync(victim, path.join(desk, '.tmp'));
+      const dir = ownResearchDir(desk, '.tmp');
+      assert.equal(dir, path.join(desk, '.tmp'));
+      assert.ok(!fs.lstatSync(dir).isSymbolicLink());
+      assert.equal(fs.readFileSync(path.join(victim, 'old.txt'), 'utf8'), 'keep');
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
   const hidden = src('src/main/hiddenClaude.ts');
   assert.match(hidden, /if \(opts\.dropTranscript\) \{/);
   assert.match(hidden, /for \(const p of \[transcriptFile\(dir, sessionId\), join\(dir, sessionId\)\]\)/);

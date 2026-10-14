@@ -69,8 +69,8 @@ import { checkFocusArea, convertWorkStyle, readConvertRequest, readFocusCheckReq
 import { SafeClearer, type SafeClearDeps } from './safeClearer';
 import { PersistStore } from './db';
 import { makeResearchGoal } from './researchGoal';
-import { readResearchNotes } from './researchNotes';
-import { projectDir, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
+import { ownResearchDir, readResearchNotes } from './researchNotes';
+import { claudeProjectsRoot, projectDir, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
 import {
@@ -632,8 +632,26 @@ const standingFit = standingFitCheck({
  *  check's runner, in an app-only folder of its own, no tools. What it reads
  *  is Research's raw text, so each run's transcript is removed as it ends
  *  (red team, third ship). */
+/** Transcripts the trust layer left in the standing check's folder before it
+ *  had its own, holding Research's raw text: removed once a launch, before
+ *  the first check (third ship review). The standing check's own are kept
+ *  while new, so a check under way is never cut short. */
+let oldCheckTranscriptsSwept = false;
+function sweepOldCheckTranscripts(): void {
+  if (oldCheckTranscriptsSwept) return;
+  oldCheckTranscriptsSwept = true;
+  const dir = projectDir(join(app.getPath('userData'), 'standing-check'));
+  const cutoff = Date.now() - 60 * 60_000;
+  let names: string[] = [];
+  try { names = readdirSync(dir); } catch { return; }
+  for (const n of names) {
+    try { if (lstatSync(join(dir, n)).mtimeMs < cutoff) rmSync(join(dir, n), { recursive: true, force: true }); } catch { /* next launch */ }
+  }
+}
+
 const trustLayer = makeTrustLayer({
   run: async (prompt) => {
+    sweepOldCheckTranscripts();
     const dir = join(app.getPath('userData'), 'trust-check');
     mkdirSync(dir, { recursive: true });
     try { ensureClaudePermissionsAccepted(dir); } catch { /* the check fails closed */ }
@@ -3781,7 +3799,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   const sessionTmp = (() => {
     if (!opts.hive || !claudeProvider || !opts.hive.id) return undefined;
     const harness = readConfig().harnessHome;
-    const dir = isResearch ? join(opts.cwd, RESEARCH_TMP_DIR) : harness ? join(expandTilde(harness), AGENT_TMP_DIR, agentTmpName(opts.hive.id)) : '';
+    // Research's only as a real folder in its desk: its shell writes there and
+    // could leave a link in its place, which the prune and its session's
+    // files would follow (red team, third ship).
+    const dir = isResearch ? ownResearchDir(opts.cwd, RESEARCH_TMP_DIR) : harness ? join(expandTilde(harness), AGENT_TMP_DIR, agentTmpName(opts.hive.id)) : '';
     if (!dir) return undefined;
     try { mkdirSync(dir, { recursive: true }); } catch { return undefined; }
     // Outside the system's own temp cleanup, so files over a week old go here,
@@ -3837,7 +3858,8 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // So is every temporary folder but /tmp, which Claude Code's shell
           // needs; no office agent keeps its session files there (D6.1).
           folderPolicy: researchFolderPolicy(
-            [homedir(), home, businessFolder ?? '', knowledge.env().KG_ROOT ?? '', memory.env().MEMPALACE_PALACE_PATH ?? '', ...teamFolders,
+            // Claude Code's projects folder too, wherever CLAUDE_CONFIG_DIR puts it.
+            [homedir(), home, businessFolder ?? '', knowledge.env().KG_ROOT ?? '', memory.env().MEMPALACE_PALACE_PATH ?? '', claudeProjectsRoot(), ...teamFolders,
               ...shellTempWalls(process.platform, tmpdir())],
             researchFolders(),
             homedir()
