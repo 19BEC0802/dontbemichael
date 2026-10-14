@@ -358,3 +358,10 @@ test('the selected Michael card keeps its outline down the filled stats row (own
   assert.doesNotMatch(/<div style=\{\{\n\s*position: 'relative', \.\.\.style[^]*?\}\}>/.exec(hub)[0], /inset/, 'the card itself draws no inset outline');
   assert.match(hub, /<span aria-hidden style=\{\{\n\s*position: 'absolute', inset: 0, borderRadius: 'inherit', pointerEvents: 'none',\n\s*boxShadow: `inset 0 0 0 1px \$\{selected \? 'var\(--cth-ink\)' : 'var\(--cth-line\)'\}`\n\s*\}\} \/>\n\s*<\/div>\n\s*\);\n\}\n$/, 'the outline is the last layer, over the rows');
 });
+
+test('a flying token stays hidden until its motion has begun, so it never sits at the stage corner (issue #300)', () => {
+  const life = read('src/renderer/src/scene/studio/life.tsx');
+  assert.match(life, /const \[launched, setLaunched\] = useState\(false\);/);
+  assert.match(life, /ref\.current\?\.beginElement\(\); setLaunched\(true\);/, 'shown only after beginElement ran');
+  assert.match(life, /<g visibility=\{launched \? 'visible' : 'hidden'\}>\s*<animateMotion ref=\{ref\}/, 'the moving head is hidden before it launches');
+});
