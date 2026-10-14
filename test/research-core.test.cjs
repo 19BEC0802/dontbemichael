@@ -157,6 +157,47 @@ test('Research\'s Claude Code conversation is walled from everyone else, and nev
   assert.equal(seedSessionTranscript(path.join(home, 'pam'), 'sess-1'), true, 'the copy itself still works for other projects');
 });
 
+test('Research\'s conversation is Claude Code\'s to write, not its tools\', and lives where CLAUDE_CONFIG_DIR says', { skip: process.platform === 'win32' ? 'POSIX paths' : false }, async (t) => {
+  // Value: protects=Research can't plant text in its own transcript folder for others, and every wall and copy follows the owner's Claude config folder; fails_when=the hook gives Research its project folder, or projectDir ignores CLAUDE_CONFIG_DIR; why_new=red team, third ship pass 2; seam=CLAUDE_CONFIG_DIR pointed at a temp folder
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-core-config-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const prev = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, 'claude-config');
+  t.after(() => { if (prev === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prev; });
+  const { projectDir, seedSessionTranscript } = loadTs('src/main/transcript.ts');
+  const desk = path.join(home, 'research-desk');
+  const rDir = projectDir(desk);
+  assert.ok(rDir.startsWith(path.join(home, 'claude-config', 'projects') + path.sep), rDir);
+  fs.mkdirSync(rDir, { recursive: true });
+  fs.writeFileSync(path.join(rDir, 'sess-2.jsonl'), '{}');
+  assert.equal(seedSessionTranscript(path.join(home, 'pam'), 'sess-2', [rDir]), false, 'the skip follows the config folder');
+  assert.equal(seedSessionTranscript(path.join(home, 'pam'), 'sess-2'), true, 'and so does the copy');
+  const hive = new HiveManager(() => home);
+  await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
+  const server = new HookServer(hive, () => null, () => ({ harnessHome: home }));
+  const write = server.handle({ agent_id: 'research', hook_event_name: 'PreToolUse', cwd: desk, tool_name: 'Write', tool_input: { file_path: path.join(rDir, 'planted.jsonl'), content: 'x' } });
+  assert.equal(write.hookSpecificOutput?.permissionDecision, 'deny', 'Research writes nothing there itself');
+  const read = server.handle({ agent_id: 'pam', hook_event_name: 'PreToolUse', cwd: home, tool_name: 'Read', tool_input: { file_path: path.join(rDir, 's1.jsonl') } });
+  assert.equal(read.hookSpecificOutput?.permissionDecision, 'deny', 'and a teammate reads none of it');
+  // The resume copy is called with Research's project left out.
+  const idx = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  assert.match(idx, /: seedSessionTranscript\(opts\.cwd, sid, researchDesk\(\) \? \[projectDir\(researchDesk\(\)!\)\] : \[\]\);/);
+});
+
+test('the trust layer\'s checks keep no transcript of Research\'s text, and Research\'s scratch folder is tidied before it starts', () => {
+  // Value: protects=Research's raw text never stays in Claude Code's projects folder after a check, and no live shell of Research's can steer the tidy; fails_when=the trust layer drops dropTranscript or shares the standing check's folder, or Research's prune runs on a timer; why_new=red team, third ship pass 2; seam=source pins (index.ts needs Electron, runHiddenClaude a real CLI)
+  const src = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const idx = src('src/main/index.ts');
+  const layer = idx.slice(idx.indexOf('const trustLayer = makeTrustLayer({'), idx.indexOf('settings: () => dataClassSettings'));
+  assert.match(layer, /join\(app\.getPath\('userData'\), 'trust-check'\)/);
+  assert.match(layer, /dropTranscript: true/);
+  assert.match(idx, /if \(isResearch\) pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);\n\s+else setTimeout/);
+  const hidden = src('src/main/hiddenClaude.ts');
+  assert.match(hidden, /if \(opts\.dropTranscript\) \{/);
+  assert.match(hidden, /for \(const p of \[transcriptFile\(dir, sessionId\), join\(dir, sessionId\)\]\)/);
+  assert.match(hidden, /setTimeout\(drop, DROP_AGAIN_MS\)/);
+});
+
 test('Research wears Pete, its own face, also in an office that saved it in Ryan\'s', () => {
   // Value: protects=the one agent on the internet never looks like Marketing; fails_when=a spawn or restore keeps Ryan, or Pete becomes a hire's face; why_new=owner, third ship D4; seam=source pins (the renderer modules need Electron)
   const src = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');

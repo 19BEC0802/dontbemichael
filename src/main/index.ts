@@ -5,7 +5,7 @@ import { execFile, spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync,
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
-  readlinkSync, symlinkSync, watch as watchFs
+  readlinkSync, symlinkSync, realpathSync, watch as watchFs
 } from 'node:fs';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
@@ -629,10 +629,12 @@ const standingFit = standingFitCheck({
 });
 
 /** The trust layer around Research (main/trustLayer.ts): the standing
- *  check's runner, in the same app-only folder, no tools. */
+ *  check's runner, in an app-only folder of its own, no tools. What it reads
+ *  is Research's raw text, so each run's transcript is removed as it ends
+ *  (red team, third ship). */
 const trustLayer = makeTrustLayer({
   run: async (prompt) => {
-    const dir = join(app.getPath('userData'), 'standing-check');
+    const dir = join(app.getPath('userData'), 'trust-check');
     mkdirSync(dir, { recursive: true });
     try { ensureClaudePermissionsAccepted(dir); } catch { /* the check fails closed */ }
     // Always Claude, whatever engine the office runs on: the check uses
@@ -648,7 +650,8 @@ const trustLayer = makeTrustLayer({
       settingSources: 'user',
       settingsJson: JSON.stringify({ disableAllHooks: true }),
       thinking: false,
-      timeoutMs: TRUST_TIMEOUT_MS
+      timeoutMs: TRUST_TIMEOUT_MS,
+      dropTranscript: true
     });
     return r.ok && r.text ? r.text : null;
   },
@@ -3782,8 +3785,11 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     if (!dir) return undefined;
     try { mkdirSync(dir, { recursive: true }); } catch { return undefined; }
     // Outside the system's own temp cleanup, so files over a week old go here,
-    // after the start rather than in its way (performance review).
-    setTimeout(() => pruneOldFiles(dir, 7 * 24 * 60 * 60_000), 5_000).unref?.();
+    // after the start rather than in its way (performance review). Research's
+    // before it starts, while no shell of its can swap a folder for a link
+    // (red team, third ship).
+    if (isResearch) pruneOldFiles(dir, 7 * 24 * 60 * 60_000);
+    else setTimeout(() => pruneOldFiles(dir, 7 * 24 * 60 * 60_000), 5_000).unref?.();
     return dir;
   })();
   // Without its own scratch folder a Claude agent's session files would land
@@ -5170,8 +5176,16 @@ ipcMain.handle('research:prepare', () => {
  *  empty. Best effort: a file in use is left for next time. */
 function pruneOldFiles(dir: string, maxAgeMs: number): void {
   const cutoff = Date.now() - maxAgeMs;
+  let top = '';
+  try { top = realpathSync(dir); } catch { return; }
   const walk = (d: string, depth: number): void => {
     if (depth > 8) return;
+    // Each folder must still be the real one inside `dir`: a link put in
+    // its place would lead the removal somewhere else (red team, third ship).
+    try {
+      const real = realpathSync(d);
+      if (real !== top && !real.startsWith(top + sep)) return;
+    } catch { return; }
     let names: string[];
     try { names = readdirSync(d); } catch { return; }
     for (const n of names) {

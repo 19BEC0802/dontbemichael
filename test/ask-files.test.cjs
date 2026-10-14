@@ -123,6 +123,9 @@ test('files are looked for in the office, then the raiser, the assignee and the 
   assert.deepEqual(askFileRootsFor(P('/w/office'), agents, { raisedBy: 'michael', assignee: 'helper' }),
     [P('/w/office'), P('/w/office/Sales'), P('/w/office/Marketing'), P('/w/office/Ops')], 'Michael and his assistant never add a folder');
   assert.deepEqual(askFileRootsFor(undefined, { ada: { cwd: P('/w/office') }, ben: { cwd: P('/w/office') } }, null), [P('/w/office')]);
+  // Research's desk holds raw web pages: it never widens Open (red team, third ship).
+  assert.deepEqual(askFileRootsFor(P('/w/office'), { ada: { cwd: P('/w/office/Sales') }, research: { cwd: P('/w/research-desk') } }, { raisedBy: 'research', assignee: 'research' }),
+    [P('/w/office'), P('/w/office/Sales')], 'never Research\'s desk');
   assert.deepEqual(askFileRootsFor(P('/w/office'), {}, undefined), [P('/w/office')]);
 });
 

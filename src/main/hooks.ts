@@ -20,7 +20,7 @@ import type { HarnessConfig } from './config';
 import type { ControlRegistry } from './control';
 import type { CircuitBreaker } from './breaker';
 import { estimateCostUsd } from './pricing';
-import { projectDir } from './transcript';
+import { claudeProjectsRoot, projectDir } from './transcript';
 import { HOOK_PATH_UNCHECKED, MAX_HOOK_FRAME_BYTES, TERMINAL_PROMPT_TYPES, isTerminalPrompt, validateHookEvent } from '../shared/hookEvents';
 export { TERMINAL_PROMPT_TYPES, isTerminalPrompt };
 import { resolveGodName } from '../shared/godIdentity';
@@ -33,7 +33,7 @@ const PROMPT_RELAY_DEDUPE_MS = 10 * 60_000;
  *  folder (CLAUDE_CONFIG_DIR when set, as Claude Code uses it), where agents
  *  don't write. */
 function isClaudeTranscript(path: string): boolean {
-  const projects = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects') + sep;
+  const projects = claudeProjectsRoot() + sep;
   const real = resolve(path);
   return real.startsWith(projects) && real.endsWith('.jsonl');
 }
@@ -1002,7 +1002,12 @@ export class HookServer {
     // Research's name only for a refusal's words, worked out once (performance review).
     let rNameMemo: string | undefined;
     const rName = (): string => (rNameMemo ??= this.hive.researchName());
-    const researchOwn = [hiveRoot ? join(hiveRoot, 'agents', RESEARCH_ID) : '', home ? join(home, RESEARCH_DESK_DIR) : '', home ? projectDir(join(home, RESEARCH_DESK_DIR)) : ''].filter(Boolean);
+    // What Research may write: its folder and its desk. What everyone else
+    // is kept out of: those and its Claude Code conversation, which holds raw
+    // web text; that one is Claude Code's to write, not Research's tools'
+    // (red team, third ship).
+    const researchOwn = [hiveRoot ? join(hiveRoot, 'agents', RESEARCH_ID) : '', home ? join(home, RESEARCH_DESK_DIR) : ''].filter(Boolean);
+    const researchWall = [...researchOwn, home ? projectDir(join(home, RESEARCH_DESK_DIR)) : ''].filter(Boolean);
     // Judged as asked and as the file it really is; resolved once.
     const real = realPathOf(target);
     const both = [target, real].filter((x): x is string => !!x);
@@ -1022,7 +1027,7 @@ export class HookServer {
       return { deny: false };
     }
     for (const t of both) {
-      const r = researchWallDecision(researchOwn, tool, t, ci, rName());
+      const r = researchWallDecision(researchWall, tool, t, ci, rName());
       if (r.deny) return r;
     }
     // While Research is on, nobody saves into the shared temp folders its

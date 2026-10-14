@@ -155,7 +155,7 @@ test('the running hook keeps Research out of the office\'s files and everyone el
 });
 
 test('the settings written at spawn take the internet from a member\'s shell and fence Research\'s writes', posixOnly('Claude Code has no shell sandbox on Windows, so no network list is written'), async (t) => {
-  // Value: protects=a member's shell reaches no host even with no business folder, and Research's shell writes only its own folders; fails_when=hookSettings drops network or sandbox only, or sandboxWritableDirs gives Research the hive; why_new=no test reads the settings file for network or Research's allowWrite; seam=none; no_claim=Claude Code honouring an empty strict list (verified live by the author, not here)
+  // Value: protects=a member's shell reaches no host even with no business folder, and Research's shell writes only its own folders; fails_when=hookSettings drops network or sandbox only, or sandboxWritableDirs gives Research the hive or the top of its folder; why_new=no test reads the settings file for network or Research's allowWrite; seam=none; no_claim=Claude Code honouring an empty strict list (verified live by the author, not here)
   const o = await office(t, { research: false });
   const settingsOf = (inj) => JSON.parse(fs.readFileSync(inj.args[inj.args.indexOf('--settings') + 1], 'utf8'));
 
@@ -177,7 +177,10 @@ test('the settings written at spawn take the internet from a member\'s shell and
   // Research loads no settings file but this one, so the bypass consent is here too.
   assert.equal(research.skipDangerousModePermissionPrompt, true);
   assert.equal(research.skipAutoPermissionPrompt, true);
-  assert.deepEqual([...research.sandbox.filesystem.allowWrite].sort(), [researchDir, o.desk].sort());
+  // Its shell writes its mail, its notes and its desk, never the top of its
+  // folder, so it can't put a link where the app writes (red team, third ship).
+  assert.deepEqual([...research.sandbox.filesystem.allowWrite].sort(), [path.join(researchDir, 'inbox'), path.join(researchDir, 'memory'), path.join(researchDir, 'outbox'), o.desk].sort());
+  assert.ok(!research.sandbox.filesystem.allowWrite.includes(researchDir), 'not the top of its folder');
   assert.ok(!research.sandbox.filesystem.allowWrite.includes(o.hive.root()), 'never the hive');
   assert.deepEqual([...research.permissions.additionalDirectories].sort(), [researchDir, o.desk].sort());
   // The home folder is walled for reads, and its riskiest places for edits (D2.5, D2.6).

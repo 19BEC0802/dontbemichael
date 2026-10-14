@@ -4,7 +4,7 @@
  * rights, so a link Research made would reach what Research can't (Codex
  * review). Anything else is skipped.
  */
-import { closeSync, constants, fstatSync, lstatSync, opendirSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, opendirSync, openSync, readSync, realpathSync, rmSync, statSync, type Stats } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
 /** The most one note file may hold; a bigger one is skipped, not read whole
@@ -60,6 +60,37 @@ function readOwnIn(root: string, file: string): string | null {
   } catch { return null; } finally {
     if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }
   }
+}
+
+/** A folder inside Research's own, made safe for the app to act in: each
+ *  step down from its folder must be a real folder, not a link Research made
+ *  to somewhere else, since the app moves and deletes there with the owner's
+ *  rights (red team, third ship). A link or file in the way is removed and a
+ *  real folder made. Null when that can't be done. */
+export function ownResearchDir(agentDir: string, ...parts: string[]): string | null {
+  let cur = agentDir;
+  for (const p of ['', ...parts]) {
+    if (p) cur = join(cur, p);
+    let st: Stats | null = null;
+    try { st = lstatSync(cur); } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return null;
+    }
+    if (st && !st.isDirectory()) {
+      // rm never follows a link: only the link itself goes.
+      try { rmSync(cur, { force: true }); } catch { return null; }
+      st = null;
+    }
+    if (!st) { try { mkdirSync(cur); } catch { return null; } }
+  }
+  return isOwnResearchDir(agentDir, cur, ...parts) ? cur : null;
+}
+
+/** True while `dir` is still the real folder `parts` names inside Research's
+ *  own. Checked again right before the app deletes or moves anything there. */
+export function isOwnResearchDir(agentDir: string, dir: string, ...parts: string[]): boolean {
+  try {
+    return lstatSync(dir).isDirectory() && realpathSync(dir) === join(realpathSync(agentDir), ...parts);
+  } catch { return false; }
 }
 
 export function readResearchNotes(agentDir: string): string {

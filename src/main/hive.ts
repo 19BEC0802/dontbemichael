@@ -37,9 +37,10 @@ import { STOP_FAILURE_MATCHER } from '../shared/officeBreak';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
   readdirSync, statSync, lstatSync, realpathSync, rmSync, appendFileSync,
-  symlinkSync, unlinkSync, copyFileSync, cpSync, chmodSync
+  symlinkSync, unlinkSync, copyFileSync, cpSync, chmodSync,
+  openSync, fstatSync, closeSync, ftruncateSync, writeSync, constants
 } from 'node:fs';
-import { join, dirname, basename, isAbsolute, relative } from 'node:path';
+import { join, dirname, basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, createHash, createHmac } from 'node:crypto';
@@ -68,7 +69,7 @@ import {
 import { expandTilde } from './fs';
 import { CONNECTOR_UNDECIDED, MCP_RESOURCE_TOOLS, type SpawnConnectorPlan } from '../shared/claudeConnectors';
 import { HOOK_PATH_UNCHECKED, MAX_HOOK_FRAME_BYTES } from '../shared/hookEvents';
-import { readResearchFile } from './researchNotes';
+import { isOwnResearchDir, ownResearchDir, readResearchFile } from './researchNotes';
 import { resolveGodName } from '../shared/godIdentity';
 import { ALLOW_TEMP_WORKERS } from '../shared/buildFeatures';
 import { OFFICE_ROLES } from '../shared/officeRoles';
@@ -498,6 +499,37 @@ function stamp(): string {
 
 function shortRand(): string {
   return randomBytes(3).toString('hex');
+}
+
+/** The most a message file may hold for the app to read it. */
+const MAX_MESSAGE_FILE_BYTES = 4 * 1024 * 1024;
+
+/** A message file read without following a link or waiting on a pipe: an
+ *  agent's own folder may hold either, and the app reads with the owner's
+ *  rights (red team, third ship). Null for anything but a plain file. */
+function readMessageFile(path: string): string | null {
+  let fd = -1;
+  try {
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const st = fstatSync(fd);
+    if (!st.isFile() || st.size > MAX_MESSAGE_FILE_BYTES) return null;
+    return readFileSync(fd, 'utf8');
+  } catch { return null; } finally {
+    if (fd >= 0) try { closeSync(fd); } catch { /* closed */ }
+  }
+}
+
+/** Write over an agent's own file in place, only when it is a plain file
+ *  with one name: never through a link or a second name it made for a file
+ *  of someone else's (red team, third ship). Throws otherwise. */
+function rewriteOwnFile(path: string, text: string): void {
+  const fd = openSync(path, constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile() || st.nlink !== 1) throw new Error('not a plain file');
+    ftruncateSync(fd, 0);
+    writeSync(fd, text, 0, 'utf8');
+  } finally { closeSync(fd); }
 }
 
 /** Non-memory files `mempalace mine` must not ingest (Claude Code hooks config,
@@ -1118,8 +1150,12 @@ export class HiveManager {
     const role = preferredAgentRole(meta.role, prev?.role, !!meta.isGod);
     meta = { ...meta, role };
 
+    // Research's folder is made safe first: nothing at its top is a link, a
+    // pipe or a second name the app's writes below would go through (red
+    // team, third ship).
+    if (meta.id === RESEARCH_ID) this.makeResearchFolderSafe();
     const identity = join(dir, 'identity.md');
-    writeFileSync(identity, this.identityText(meta), 'utf8'); // refresh on each spawn
+    this.atomicWriteText(identity, this.identityText(meta)); // refresh on each spawn
 
     // W3 — bundled read-only skills: refresh the agent's .claude/skills/ from the
     // app-resources skills/ dir on every spawn (same policy as identity.md), so an
@@ -1130,7 +1166,7 @@ export class HiveManager {
     // The memory index (src/shared/memoryIndex.ts): only the app writes it; the
     // agent adds notes to memory/inbox.md, tidied in by memoryTidy.ts.
     const memory = join(dir, 'memory.md');
-    if (!existsSync(memory)) writeFileSync(memory, renderIndex(meta.name, meta.id, []), 'utf8');
+    if (!existsSync(memory)) this.atomicWriteText(memory, renderIndex(meta.name, meta.id, []));
     mkdirSync(join(dir, 'memory'), { recursive: true });
     ensureMineIgnore(dir); // keep settings.json / cursor / messages out of mempalace's index
     const cursor = join(dir, 'cursor.json');
@@ -1402,7 +1438,7 @@ export class HiveManager {
       const settingsPath = this.settingsPathFor(dir);
       rmSync(join(dir, 'settings.json'), { force: true });
       mkdirSync(dirname(settingsPath), { recursive: true });
-      this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell, opts.network));
+      this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell, opts.network, meta.isResearch ? this.researchShellWrite(dir, meta.cwd) : undefined));
       args.push('--settings', settingsPath);
     }
     if (stripConnectors) {
@@ -1427,7 +1463,8 @@ export class HiveManager {
       agent.role = next;
       agent.lastSeen = Date.now();
       this.writeJson(join(root, 'registry.json'), reg);
-      writeFileSync(join(this.agentDir(id), 'identity.md'), this.identityText(agent), 'utf8');
+      if (id === RESEARCH_ID) this.makeResearchFolderSafe();
+      this.atomicWriteText(join(this.agentDir(id), 'identity.md'), this.identityText(agent));
       this.appendLog({ kind: 'role', agentId: id, role: next });
       this.commit(`hive: role ${id}`);
       return { ok: true };
@@ -1630,7 +1667,14 @@ export class HiveManager {
     return Array.from(new Set(out));
   }
 
-  private hookSettings(shim: string, cwd: string, cfg: McpDefaultsMap, theme?: 'light' | 'dark', writableDirs: string[] = [], folders?: AgentFolderPolicy, connectorDeny: string[] = [], shell: HookShell = 'bash', network?: SandboxNetwork): unknown {
+  /** Where Research's shell may write: its mail, its notes and its desk, never
+   *  the top of its folder, so it can't put a link where the app writes or
+   *  moves files (red team, third ship). Its file tools keep its whole folder. */
+  private researchShellWrite(dir: string, cwd: string | undefined): string[] {
+    return [join(dir, 'inbox'), join(dir, 'outbox'), join(dir, 'memory'), ...(cwd ? [cwd] : [])];
+  }
+
+  private hookSettings(shim: string, cwd: string, cfg: McpDefaultsMap, theme?: 'light' | 'dark', writableDirs: string[] = [], folders?: AgentFolderPolicy, connectorDeny: string[] = [], shell: HookShell = 'bash', network?: SandboxNetwork, shellWrite?: string[]): unknown {
     // Bundled node, NOT bare `node` — see nodeLauncherPath(). Claude runs each of
     // these through a shell with a stripped PATH, where `node` is often absent.
     // On Windows that shell is PowerShell when there is no Git Bash, which can't
@@ -1716,7 +1760,7 @@ export class HiveManager {
               // makes the empty list a rule, not a prompt saver, in auto mode.
               ...(network && process.platform !== 'win32' ? { network } : {}),
               filesystem: {
-                allowWrite: writableDirs,
+                allowWrite: shellWrite ?? writableDirs,
                 // The hook program runs outside the sandbox on every tool call,
                 // so no agent's shell may rewrite its folder (issue 100).
                 denyWrite: Array.from(new Set([dirname(shim), ...(folders?.sandbox.denyWrite ?? [])])),
@@ -2283,30 +2327,96 @@ export class HiveManager {
     return createHmac('sha256', this.researchKey()).update(content).digest('hex');
   }
 
+  /** A folder of Research's the app is about to act in, checked to be the
+   *  real one (researchNotes.ts ownResearchDir), or null. */
+  private researchDir(...parts: string[]): string | null {
+    return this.root() ? ownResearchDir(this.agentDir(RESEARCH_ID), ...parts) : null;
+  }
+
+  /** Exactly what deliver() wrote to Research: the file named by its id,
+   *  carrying the app's stamp, byte for byte. A raw edit that parses the
+   *  same (a duplicate key ahead of the real one) is not. */
+  private isResearchDelivered(f: string, raw: string, m: unknown): m is HiveMessage {
+    const x = m as (Partial<HiveMessage> & { stamp?: unknown }) | null;
+    return !!x && typeof x === 'object' && typeof x.id === 'string' && f === `${x.id}.json`
+      && x.stamp === this.researchStamp(x) && raw === JSON.stringify(x, null, 2);
+  }
+
+  /** A message in Research's inbox or its handled copies, read the safe way,
+   *  only when the app delivered it. Anything else there is Research's own
+   *  writing and is never shown or acted on as mail (red team, third ship). */
+  private researchDelivered(full: string): HiveMessage | null {
+    const raw = readResearchFile(this.agentDir(RESEARCH_ID), full);
+    if (raw === null) return null;
+    try {
+      const m: unknown = JSON.parse(raw);
+      return this.isResearchDelivered(basename(full), raw, m) ? m : null;
+    } catch { return null; }
+  }
+
+  /** Remove one entry of a Research folder, only while that folder is still
+   *  the real one; rm never follows the entry itself if it is a link. */
+  private dropResearchEntry(dir: string, f: string, ...parts: string[]): void {
+    if (!isOwnResearchDir(this.agentDir(RESEARCH_ID), dir, ...parts)) return;
+    try { rmSync(join(dir, f), { recursive: true, force: true }); } catch { /* next tick */ }
+  }
+
+  /** Before the app writes in Research's folder: the folder is a real one,
+   *  its mail and notes folders too, and nothing at its top is a link, a pipe
+   *  or a file with a second name, so a write never lands somewhere else
+   *  (red team, third ship). Its shell can't change the top of its folder. */
+  private makeResearchFolderSafe(): void {
+    const dir = this.researchDir();
+    if (!dir) return;
+    for (const parts of [['inbox'], ['inbox', '.done'], ['outbox'], ['memory']]) this.researchDir(...parts);
+    let names: string[] = [];
+    try { names = readdirSync(dir); } catch { return; }
+    for (const n of names) {
+      try {
+        const st = lstatSync(join(dir, n));
+        if (st.isDirectory() || (st.isFile() && st.nlink === 1)) continue;
+        this.dropResearchEntry(dir, n);
+      } catch { /* gone */ }
+    }
+  }
+
+  /** Where the app's mail readers may look in a folder: Research's inbox and
+   *  its handled copies only as stamped deliveries; the rest of its folder
+   *  never, since that is Research's own writing (third ship D3); everyone
+   *  else's as written. */
+  private mailFolderKind(dir: string): 'stamped' | 'hidden' | 'plain' {
+    if (!this.root()) return 'plain';
+    const base = resolve(this.agentDir(RESEARCH_ID));
+    const d = resolve(dir);
+    if (d === join(base, 'inbox') || d === join(base, 'inbox', '.done')) return 'stamped';
+    return d === base || d.startsWith(base + sep) ? 'hidden' : 'plain';
+  }
+
   /** Remove every file in Research's inbox the app did not deliver, so a
    *  message written straight into it never skips the trust layer. Its sender,
    *  when it is a teammate, is told to ask again. */
   private sweepResearchInbox(on: boolean): void {
     if (!on) return;
-    const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
-    if (!existsSync(inbox)) return;
+    // Its inbox as the real folder, never a link Research put in its place:
+    // removing through one would delete the app's own files (red team, third ship).
+    const inbox = this.researchDir('inbox');
+    if (!inbox) return;
     for (const f of readdirSync(inbox)) {
       if (!f.endsWith('.json')) continue;
       const full = join(inbox, f);
-      let ok = false;
+      // Read the safe way: a link, a pipe or a file with a second name is
+      // never followed or waited on, and is swept.
+      const raw = readResearchFile(this.agentDir(RESEARCH_ID), full);
       let m: Partial<HiveMessage> & { stamp?: unknown } = {};
-      try {
-        const raw = readFileSync(full, 'utf8');
-        m = JSON.parse(raw) as Partial<HiveMessage> & { stamp?: unknown };
-        // The file must be exactly what deliver() wrote: a raw edit that
-        // parses the same (a duplicate key ahead of the real one) is swept too.
-        ok = typeof m.id === 'string' && f === `${m.id}.json` && m.stamp === this.researchStamp(m)
-          && raw === JSON.stringify(m, null, 2);
-      } catch {
-        if (this.stillBeingWritten(full)) continue;
+      if (raw !== null) {
+        let parsed: unknown = null;
+        try { parsed = JSON.parse(raw); } catch {
+          if (this.stillBeingWritten(full)) continue;
+        }
+        if (this.isResearchDelivered(f, raw, parsed)) continue;
+        if (parsed && typeof parsed === 'object') m = parsed as typeof m;
       }
-      if (ok) continue;
-      try { rmSync(full, { force: true }); } catch { /* next tick */ }
+      this.dropResearchEntry(inbox, f, 'inbox');
       this.appendLog({ kind: 'drop', reason: 'unstamped-research-inbox', file: createHash('sha256').update(f).digest('hex').slice(0, 16) });
       if (typeof m.from === 'string' && m.from !== RESEARCH_ID && this.registry().agents[m.from]) {
         this.tellSender(m.from, typeof m.id === 'string' ? m.id : null, m.conversation, NOT_SENT_SUBJECT, REFUSAL_UNSURE);
@@ -2521,22 +2631,25 @@ export class HiveManager {
     const reg = this.registry();
     const godId = reg.godId ?? 'god';
     const recipient = typeof msg.to === 'string' && reg.agents[msg.to] ? msg.to : null;
-    // The log is shared and committed: only an id-shaped recipient goes in,
-    // never a string Research made up (red team, third ship).
-    const logTo = typeof msg.to === 'string' && /^[\w-]{1,64}$/.test(msg.to) ? msg.to : 'invalid';
+    // The log is shared and committed: only a recipient the registry knows,
+    // or Michael's plain aliases, goes in, and Research's own message id only
+    // as a short hash, never a string Research made up (red team, third ship).
+    const lowerTo = typeof msg.to === 'string' ? msg.to.trim().toLowerCase() : '';
+    const logTo = recipient ?? (['god', 'michael', 'human'].includes(lowerTo) ? lowerTo : 'invalid');
+    const logId = createHash('sha256').update(String(msg.id)).digest('hex').slice(0, 16);
     const deny = (): 'denied' => {
-      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: logTo, id: msg.id });
+      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: logTo, id: logId });
       if (recipient && recipient !== RESEARCH_ID) this.tellSender(recipient, null, msg.conversation, ANSWER_UNCHECKED_SUBJECT, ANSWER_UNCHECKED);
       return 'denied';
     };
     // Research writes only to someone whose question it is answering, or to
     // Michael; never to the whole team (owner, D8.1). Anything else is
     // refused before any check, and Research is told why.
-    const to = typeof msg.to === 'string' ? msg.to.trim().toLowerCase() : '';
+    const to = lowerTo;
     // A reply to the app's own senders is dropped quietly, as for everyone,
     // so a refusal note never starts a loop of answers.
     if (['scheduler', 'heartbeat', 'mail', 'system', PRIVACY_CHECK_SENDER].includes(to)) {
-      this.appendLog({ kind: 'drop', reason: 'reply-to-system-sender', from: RESEARCH_ID, to: logTo, id: msg.id });
+      this.appendLog({ kind: 'drop', reason: 'reply-to-system-sender', from: RESEARCH_ID, to: logTo, id: logId });
       return 'denied';
     }
     const toMichael = [godId, 'god', 'michael', 'human', resolveGodName(reg.agents[godId]?.name).toLowerCase()].includes(to);
@@ -2545,7 +2658,7 @@ export class HiveManager {
     const answering = (msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined) ?? this.researchThreads.get(msg.conversation);
     const asked = !!recipient && answering?.from === recipient;
     if (!toMichael && !asked) {
-      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: logTo, id: msg.id, reason: 'not-an-asker' });
+      this.appendLog({ kind: 'trust-denied', from: RESEARCH_ID, to: logTo, id: logId, reason: 'not-an-asker' });
       const note = this.normalize({ to: RESEARCH_ID, act: 'inform', subject: NOT_SENT_SUBJECT_OUT, body: RESEARCH_ONLY_ASKERS }, PRIVACY_CHECK_SENDER);
       this.researchCleared.add(note.id);
       try { this.routeMessage(note); } finally { this.researchCleared.delete(note.id); }
@@ -2562,10 +2675,9 @@ export class HiveManager {
     const byId = msg.in_reply_to ? this.researchThreads.get(msg.in_reply_to) : undefined;
     const back = byId ?? this.researchThreads.get(msg.conversation);
     // What is delivered is built only from the layer's verdict and fields the
-    // app chooses: Research's act, times, flags and thread never pass through
-    // unchecked (red team, third ship).
+    // app chooses: Research's id, act, times, flags and thread never pass
+    // through unchecked (red team, third ship).
     const out = this.normalize({
-      id: msg.id,
       to: msg.to,
       act: 'inform',
       subject: v.subject,
@@ -2596,24 +2708,27 @@ export class HiveManager {
   researchWaiting(): number {
     let n = this.researchQueued;
     for (const [k, c] of this.trustChecks) if (k.startsWith('in:') && !c.done) n++;
-    const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
-    try { n += readdirSync(inbox).filter((f) => f.endsWith('.json')).length; } catch { /* none */ }
+    // Only what the app delivered counts.
+    n += this.listMessages(join(this.agentDir(RESEARCH_ID), 'inbox')).length;
     return n;
   }
 
   /** As Research turns off: every message waiting in its inbox goes back to
    *  its sender with the Research off reason. */
   returnResearchInbox(): number {
-    const inbox = join(this.agentDir(RESEARCH_ID), 'inbox');
-    if (!existsSync(inbox)) return 0;
+    const inbox = this.researchDir('inbox');
+    if (!inbox) return 0;
     const agents = this.registry().agents;
     let n = 0;
     for (const f of readdirSync(inbox)) {
       if (!f.endsWith('.json')) continue;
       const full = join(inbox, f);
       try {
-        const m = JSON.parse(readFileSync(full, 'utf8')) as Partial<HiveMessage>;
-        if (typeof m.from === 'string' && agents[m.from] && m.from !== RESEARCH_ID) {
+        // Only a message the app delivered is answered for; anything else
+        // there is Research's own writing and is only removed (red team,
+        // third ship).
+        const m = this.researchDelivered(full);
+        if (!m) { /* removed below */ } else if (typeof m.from === 'string' && agents[m.from] && m.from !== RESEARCH_ID) {
           // Back into the sender's own thread, about its own ask (Codex review).
           const back = (typeof m.id === 'string' ? this.researchThreads.get(m.id) : undefined)
             ?? (typeof m.conversation === 'string' ? this.researchThreads.get(m.conversation) : undefined);
@@ -2631,7 +2746,7 @@ export class HiveManager {
           n++;
         }
       } catch { /* unreadable: removed below */ }
-      try { rmSync(full, { force: true }); } catch { /* best effort */ }
+      this.dropResearchEntry(inbox, f, 'inbox');
     }
     if (n) this.commit(`hive: returned ${n} research ask(s)`);
     return n;
@@ -2932,9 +3047,9 @@ export class HiveManager {
 
   /** Set an unreadable outbox file aside and tell its sender, who otherwise
    *  believes it was delivered. */
-  private quarantine(id: string, outbox: string, f: string): void {
-    this.appendLog({ kind: 'drop', reason: 'malformed-json', from: id, file: f });
-    this.archiveOutboxFile(join(outbox, f), join(outbox, '.sent'), `bad-${f}`);
+  private quarantine(id: string, outbox: string, f: string, badDir = join(outbox, '.sent'), logFile = f): void {
+    this.appendLog({ kind: 'drop', reason: 'malformed-json', from: id, file: logFile });
+    this.archiveOutboxFile(join(outbox, f), badDir, `bad-${f}`);
     const last = this.quarantineNoticeAt.get(id) ?? 0;
     if (Date.now() - last < HiveManager.QUARANTINE_NOTICE_GAP_MS) return;
     this.quarantineNoticeAt.set(id, Date.now());
@@ -2943,7 +3058,7 @@ export class HiveManager {
         to: id,
         act: 'inform',
         subject: 'Message not delivered',
-        body: `Your outbox file ${f} is not valid JSON, so nobody received it. Write the message again as one valid JSON object, then check it left your outbox. The unreadable copy is in your outbox/.sent as bad-${f}.`
+        body: `Your outbox file ${f} is not valid JSON, so nobody received it. Write the message again as one valid JSON object, then check it left your outbox.${id === RESEARCH_ID ? '' : ` The unreadable copy is in your outbox/.sent as bad-${f}.`}`
       }, 'system'));
     } catch { /* the drop is logged */ }
   }
@@ -2962,20 +3077,33 @@ export class HiveManager {
       // agents/human is the owner's folder, written only by the app; a file an
       // agent drops in its outbox would reach Michael as the owner's own words.
       if (id === 'human') { this.rejectOwnerOutbox(join(agentsDir, id, 'outbox')); continue; }
-      const outbox = join(agentsDir, id, 'outbox');
-      if (!existsSync(outbox)) continue;
+      // Research's outbox only as the real folder, and what it leaves there
+      // is set aside in the app's private folder, never in a folder of its
+      // own it could have swapped for a link (red team, third ship).
+      const research = id === RESEARCH_ID;
+      const home = research ? this.getHome() : null;
+      if (research && !home) continue;
+      const outbox = research ? this.researchDir('outbox') : join(agentsDir, id, 'outbox');
+      if (!outbox || !existsSync(outbox)) continue;
+      const badDir = home ? join(privateRoot(home), 'research-outbox', 'refused') : join(outbox, '.sent');
+      if (home) mkdirSync(badDir, { recursive: true });
       for (const f of readdirSync(outbox)) {
         if (!f.endsWith('.json')) continue;
         const full = join(outbox, f);
+        // Research's file names are its own words: the shared log keeps a hash.
+        const logFile = research ? createHash('sha256').update(f).digest('hex').slice(0, 16) : f;
         try {
           // A link is never read: the app would follow it to a file the agent
           // can't open itself (ship review pass 3). The link is set aside.
-          if (!lstatSync(full).isFile()) {
-            this.appendLog({ kind: 'drop', reason: 'outbox-not-a-file', from: id, file: f });
-            this.archiveOutboxFile(full, join(outbox, '.sent'), `bad-${f}`);
+          // Research's is read the safe way too: no pipe is waited on.
+          const raw = lstatSync(full).isFile()
+            ? (research ? readResearchFile(this.agentDir(RESEARCH_ID), full) : readMessageFile(full))
+            : null;
+          if (raw === null) {
+            this.appendLog({ kind: 'drop', reason: 'outbox-not-a-file', from: id, file: logFile });
+            this.archiveOutboxFile(full, badDir, `bad-${f}`);
             continue;
           }
-          const raw = readFileSync(full, 'utf8');
           let partial: Partial<HiveMessage>;
           // A repaired file is archived as repaired, so everything that reads
           // .sent later (owner requests, the log) parses what was delivered.
@@ -2995,7 +3123,7 @@ export class HiveManager {
               // and still unreadable (2026-10-03: Michael's CLOSING-TIME-COMPLETE
               // was caught mid-write, quarantined, and closing time hung).
               if (this.stillBeingWritten(full)) continue;
-              this.quarantine(id, outbox, f);
+              this.quarantine(id, outbox, f, badDir, logFile);
               continue;
             }
             partial = parsed;
@@ -3003,7 +3131,7 @@ export class HiveManager {
             this.appendLog({
               kind: 'outbox-repair',
               from: id,
-              file: f,
+              file: logFile,
               repair: 'literal-line-break'
             });
           }
@@ -3034,25 +3162,27 @@ export class HiveManager {
             // Research's raw originals are web text the outbound check has not
             // cleaned: they go to the app's private folder, out of every
             // agent's reach (owner, 2026-10-13: its folders are its alone).
-            const home = id === RESEARCH_ID ? this.getHome() : null;
             const dest = home
               ? join(privateRoot(home), 'research-outbox', gate === 'denied' ? 'refused' : 'sent')
               : join(outbox, gate === 'denied' ? '.refused' : '.sent');
             mkdirSync(dest, { recursive: true });
-            if (repairedText !== null) writeFileSync(full, repairedText);
+            // Research's archive is the app's own record: its file is moved as
+            // it is, never written through (red team, third ship).
+            if (repairedText !== null && !research) rewriteOwnFile(full, repairedText);
             this.archiveOutboxFile(full, dest, f);
             routed++;
             continue;
           }
           this.routeMessage(msg);
           // Repaired text replaces the original in place, then one rename
-          // archives it, so a failed step can never deliver it twice.
-          if (repairedText !== null) writeFileSync(full, repairedText);
+          // archives it, so a failed step can never deliver it twice. Only a
+          // plain file of the agent's own is written over (red team, third ship).
+          if (repairedText !== null) rewriteOwnFile(full, repairedText);
           this.archiveOutboxFile(full, join(outbox, '.sent'), f); // archive, don't reprocess
           routed++;
         } catch {
           // malformed file — quarantine so we don't spin on it
-          this.archiveOutboxFile(full, join(outbox, '.sent'), `bad-${f}`);
+          this.archiveOutboxFile(full, badDir, `bad-${f}`);
         }
       }
     }
@@ -3940,7 +4070,10 @@ export class HiveManager {
     if (!existsSync(p)) return null;
     try {
       const text = (id === RESEARCH_ID ? (readResearchFile(this.agentDir(id), p) ?? '') : readFileSync(p, 'utf8')).trim();
-      const archive = join(this.agentDir(id), 'memory', 'handoffs');
+      // Research's archive only into its real folder, never through a link
+      // it put in its place (red team, third ship).
+      const archive = id === RESEARCH_ID ? this.researchDir('memory', 'handoffs') : join(this.agentDir(id), 'memory', 'handoffs');
+      if (!archive) return text || null;
       mkdirSync(archive, { recursive: true });
       renameSync(p, join(archive, `${new Date().toISOString().replace(/[:.]/g, '-')}.md`));
       return text || null;
@@ -3950,17 +4083,23 @@ export class HiveManager {
   /** The last clear: when, the conversation it replaced, and how big it was. */
   clearedState(id: string): { at: number; oldSession: string; tokensBefore: number } | null {
     try {
-      const v = JSON.parse(readFileSync(join(this.agentDir(id), 'memory', 'cleared.json'), 'utf8'));
+      const p = join(this.agentDir(id), 'memory', 'cleared.json');
+      const v = JSON.parse((id === RESEARCH_ID ? readResearchFile(this.agentDir(id), p) : readFileSync(p, 'utf8')) ?? '');
       return typeof v?.at === 'number' && typeof v?.oldSession === 'string' ? v : null;
     } catch { return null; }
   }
 
   recordClear(id: string, state: { at: number; oldSession: string; tokensBefore: number } | null): void {
-    const p = join(this.agentDir(id), 'memory', 'cleared.json');
+    // Research's notes folder only as the real one (red team, third ship).
+    const dir = id === RESEARCH_ID ? this.researchDir('memory') : join(this.agentDir(id), 'memory');
+    if (!dir) return;
+    const p = join(dir, 'cleared.json');
     try {
       if (!state) { rmSync(p, { force: true }); return; }
-      mkdirSync(dirname(p), { recursive: true });
-      writeFileSync(p, JSON.stringify(state), 'utf8');
+      mkdirSync(dir, { recursive: true });
+      // A new file put in place, so a link or second name there is replaced,
+      // never written through.
+      this.atomicWriteText(p, JSON.stringify(state));
     } catch { /* best-effort */ }
   }
 
@@ -4052,17 +4191,18 @@ export class HiveManager {
     const out: VoiceMessage[] = [];
     for (const owner of owners) {
       const base = this.agentDir(owner);
-      // Research's own folders are its to write, so only its inbox, which the
-      // app alone fills with checked copies, is read; what it sent shows as
-      // the copies the trust layer delivered (owner, third ship D3).
+      // Research's own folders are its to write, so only what the app
+      // delivered to it is read, handled or not (listMessages checks each
+      // stamp); what it sent shows as the copies the trust layer delivered
+      // (owner, third ship D3).
       const research = owner === RESEARCH_ID;
       const folders: Array<{ dir: string; direction: 'inbox' | 'outbox'; archived: boolean }> = [
         { dir: join(base, 'inbox'), direction: 'inbox', archived: false },
         ...(research ? [] : [{ dir: join(base, 'outbox'), direction: 'outbox' as const, archived: false }])
       ];
-      if (includeArchived && !research) {
+      if (includeArchived) {
         folders.push({ dir: join(base, 'inbox', '.done'), direction: 'inbox', archived: true });
-        folders.push({ dir: join(base, 'outbox', '.sent'), direction: 'outbox', archived: true });
+        if (!research) folders.push({ dir: join(base, 'outbox', '.sent'), direction: 'outbox', archived: true });
       }
       for (const f of folders) {
         for (const m of this.listMessages(f.dir)) {
@@ -4116,8 +4256,9 @@ export class HiveManager {
     const out: Array<VoiceMessage & { dir: 'in' | 'out' }> = [];
     for (const owner of owners) {
       const base = this.agentDir(owner);
-      // Research's .done is its to write: only the inbox the app fills (D3).
-      const dirs = owner === RESEARCH_ID ? [[join(base, 'inbox'), false] as const] : [[join(base, 'inbox'), false] as const, [join(base, 'inbox', '.done'), true] as const];
+      // Research's mail is its to write: only what the app delivered shows,
+      // handled or not (cachedMessages checks each stamp; D3).
+      const dirs = [[join(base, 'inbox'), false] as const, [join(base, 'inbox', '.done'), true] as const];
       for (const [dir, archived] of dirs) {
         for (const m of this.cachedMessages(dir, live)) {
           if (!m || typeof m.id !== 'string' || seen.has(m.id)) continue;
@@ -4146,6 +4287,8 @@ export class HiveManager {
   private historyCache = new Map<string, { stamp: string; msg: HiveMessage }>();
 
   private cachedMessages(dir: string, live: Set<string>): HiveMessage[] {
+    const kind = this.mailFolderKind(dir);
+    if (kind === 'hidden') return [];
     let files: string[];
     try { files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); } catch { return []; }
     const out: HiveMessage[] = [];
@@ -4158,7 +4301,10 @@ export class HiveManager {
       const hit = this.historyCache.get(path);
       if (hit && hit.stamp === stamp) { out.push(hit.msg); continue; }
       try {
-        const msg = JSON.parse(readFileSync(path, 'utf8')) as HiveMessage;
+        // Read the safe way (no link followed, no pipe waited on), and in
+        // Research's mail only what the app delivered (red team, third ship).
+        const msg = kind === 'stamped' ? this.researchDelivered(path) : JSON.parse(readMessageFile(path) ?? '') as HiveMessage;
+        if (!msg || typeof msg !== 'object') continue;
         this.historyCache.set(path, { stamp, msg });
         out.push(msg);
       } catch { /* half-written or bad: not cached, so the next poll reads it again */ }
@@ -4171,6 +4317,8 @@ export class HiveManager {
     if (!this.root()) return 0;
     const dir = join(this.agentDir(id), 'inbox');
     if (!existsSync(dir)) return 0;
+    // Research's counts only what the app delivered.
+    if (id === RESEARCH_ID) return this.listMessages(dir).length;
     try { return readdirSync(dir).filter((f) => f.endsWith('.json')).length; } catch { return 0; }
   }
   /** Install the Antigravity (`agy`) lifecycle-hook bridge: write the normalizer
@@ -4857,12 +5005,20 @@ export class HiveManager {
   private tailCache: { stamp: string; kind: string; n: number; since: number; out: unknown[] } | null = null;
 
   private listMessages(dir: string): HiveMessage[] {
-    if (!existsSync(dir)) return [];
-    return readdirSync(dir)
+    const kind = this.mailFolderKind(dir);
+    if (kind === 'hidden' || !existsSync(dir)) return [];
+    let names: string[];
+    try { names = readdirSync(dir); } catch { return []; }
+    return names
       .filter((f) => f.endsWith('.json'))
       .sort()
-      .map((f) => { try { return JSON.parse(readFileSync(join(dir, f), 'utf8')) as HiveMessage; } catch { return null; } })
-      .filter((m): m is HiveMessage => m !== null);
+      .map((f) => {
+        const full = join(dir, f);
+        if (kind === 'stamped') return this.researchDelivered(full);
+        const raw = readMessageFile(full);
+        try { return raw === null ? null : JSON.parse(raw) as HiveMessage; } catch { return null; }
+      })
+      .filter((m): m is HiveMessage => !!m && typeof m === 'object');
   }
 
   /**
@@ -4979,9 +5135,20 @@ export class HiveManager {
     writeFileSync(p, JSON.stringify(data, null, 2), 'utf8');
   }
   private atomicWriteJson(p: string, data: unknown): void {
+    this.atomicWriteText(p, JSON.stringify(data, null, 2));
+  }
+  /** A new file, then one rename over the old: a link or a file with a second
+   *  name at `p` is replaced, never written through. The temp name must be
+   *  new, so nothing put there first is followed either. */
+  private atomicWriteText(p: string, text: string): void {
     const tmp = `${p}.tmp-${shortRand()}`;
-    writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
-    renameSync(tmp, p);
+    try {
+      writeFileSync(tmp, text, { encoding: 'utf8', flag: 'wx' });
+      renameSync(tmp, p);
+    } catch (e) {
+      try { rmSync(tmp, { force: true }); } catch { /* none */ }
+      throw e;
+    }
   }
 
   // — git (single committer, retry + stale-lock recovery) —

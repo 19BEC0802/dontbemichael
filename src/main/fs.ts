@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { imageMimeForPath } from '../shared/imageTypes';
 import { OPEN_EXTENSIONS, TAB_EXTENSIONS, extensionOf, kindOf, type AskFileVerdict } from '../shared/askFiles';
 import { isSameOrInside } from './pathInside';
+import { RESEARCH_ID } from '../shared/research';
 
 /**
  * Lexical containment — pure string math, no filesystem access.
@@ -384,7 +385,8 @@ export interface AskFileAgent {
  * (docs/designs/ask-me-open-file.md): the office folder, then the folder of the
  * team member who raised the question, the card's assignee, and every other
  * team member. Michael and his assistant are not team members here, the same
- * rule as the folder access layout, so their folders never widen Open. Ids
+ * rule as the folder access layout, so their folders never widen Open; nor
+ * does Research's desk, which holds raw web pages (red team, third ship). Ids
  * the registry does not know are dropped; each folder appears once.
  */
 export function askFileRootsFor(
@@ -395,7 +397,7 @@ export function askFileRootsFor(
   const w = (who ?? {}) as { raisedBy?: unknown; assignee?: unknown };
   const member = (id: unknown): id is string => {
     const a = typeof id === 'string' ? agents[id] : undefined;
-    return !!a && !a.isGod && !a.isAssistant;
+    return !!a && !a.isGod && !a.isAssistant && id !== RESEARCH_ID;
   };
   const first = [w.raisedBy, w.assignee].filter(member);
   const ids = [...first, ...Object.keys(agents).filter((id) => member(id) && !first.includes(id))];
