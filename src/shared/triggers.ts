@@ -56,22 +56,34 @@ export function isAutoAllowed(mode: TriggerMode, kind: InboundKind): boolean {
  * a directive, because mis-labelling a directive as communication is what lets
  * unapproved work through in `communication-only` mode. Callers who care should
  * send an explicit `kind`.
+ *
+ * Chatter is one question and nothing else (owner, 2026-10-14): it opens with a
+ * question word, ends with its only "?", has no second sentence, names none of the
+ * action words, and asks nobody to do anything. "Any chance you could pay the
+ * invoice?", "Do you mind paying it?", "Is it possible to transfer $500?" and
+ * "What do you think? Also, wire the money." are requests, so they are held.
  */
 export function classifyInboundKind(text: string): InboundKind {
   const t = text.trim().toLowerCase();
   if (!t) return 'communication';
 
-  // "Can you …", "Could you please …", etc. are requests — treat as directive.
+  // "Can you ...", "Could you please ..." and the like are requests, whatever the verb.
   if (/^(can|could|would|will)\s+you\s+(please\s+)?/.test(t)) return 'directive';
 
-  // Standalone "please" anywhere also signals a request.
+  // "Please" anywhere is a request too.
   if (/\bplease\b/.test(t)) return 'directive';
 
-  // A leading question word with no imperative verb reads as asking, not tasking.
-  const asksOnly = /^(what|how|when|where|who|why|is|are|do|does|did|status|any)\b/.test(t)
-    && t.endsWith('?')
+  // One question: a single "?" at the very end, and no other sentence before it
+  // (a full stop, "!", "?" or ";" followed by more text, or a new line).
+  const oneQuestion = t.endsWith('?') && !/[.!?;]\s+\S|\n/.test(t.slice(0, -1));
+  // A question word up front, and none of the action words.
+  const asks = /^(what|how|when|where|who|why|is|are|do|does|did|status|any)\b/.test(t)
     && !/\b(fix|build|ship|deploy|run|write|create|add|remove|delete|refactor|implement|update|merge|revert)\b/.test(t);
-  return asksOnly ? 'communication' : 'directive';
+  // Polite ways of asking someone to act: "you" with more words after it ("you
+  // could", "you pay", "don't you"; a closing "how are you?" is only asking),
+  // "mind", "chance", "possible", "how about".
+  const asksToAct = /\byou\b(?!\s*\?$)|\b(mind|chance|possible)\b|\bhow about\b/.test(t);
+  return oneQuestion && asks && !asksToAct ? 'communication' : 'directive';
 }
 
 /* ──────────────────────────── context trigger ────────────────────────────── */

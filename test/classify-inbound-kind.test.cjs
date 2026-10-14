@@ -102,3 +102,46 @@ test('a bare imperative is a directive', () => {
 test('a statement (no ?) is a directive', () => {
   assert.equal(classifyInboundKind('The build is broken, fix it now.'), 'directive');
 });
+
+/* ── polite requests that open with a question word → directive ───────── */
+// Owner, 2026-10-14: after #180 these still read as chatter and skipped approval
+// in communication-only mode. Chatter is one question that asks nobody to act.
+
+test('polite requests that open with a question word are held', () => {
+  // Value: protects=polite requests are held for approval; fails_when=the you, mind, chance, possible or how about markers are dropped; why_new=only can/could/would/will you and please were covered; seam=none; no_claim=none beyond protects
+  for (const text of [
+    'Any chance you could pay the invoice?',
+    'Do you mind paying the invoice?',
+    "Why don't you pay the invoice?",
+    'How about you email the client the quote?',
+    'Is it possible to transfer $500 to the vendor?',
+    'Did you pay the invoice yet?'
+  ]) assert.equal(classifyInboundKind(text), 'directive', text);
+});
+
+test('a second sentence makes it a request, whatever the first one asks', () => {
+  // Value: protects=only a single question flows; fails_when=a message with a question and then an instruction reads as chatter; why_new=two sentence bypass; seam=none; no_claim=none beyond protects
+  for (const text of [
+    'Did you pay the invoice yet? Pay it now?',
+    'What do you think? Also, wire the money to the vendor.',
+    'What is the status? Also wire the money to the vendor?',
+    'Is the report ready; send it to the client?',
+    'Any news?\nTransfer the funds to the vendor?'
+  ]) assert.equal(classifyInboundKind(text), 'directive', text);
+});
+
+test('status questions still flow', () => {
+  // Value: protects=plain questions are not held; fails_when=the request markers or the one sentence rule catch ordinary status questions; why_new=the tightened rule; seam=none; no_claim=none beyond protects
+  for (const text of [
+    'What is the status of the release?',
+    'Is the test suite green?',
+    'When is the meeting?',
+    'Did the tests pass?',
+    'Any news on the invoice?',
+    'Is v0.2.0 out yet?',
+    'Is it ready??',
+    'How are you?'
+  ]) assert.equal(classifyInboundKind(text), 'communication', text);
+  // One of the original action words still holds it, as before (owner, #180 review).
+  assert.equal(classifyInboundKind('Did the build pass?'), 'directive');
+});
