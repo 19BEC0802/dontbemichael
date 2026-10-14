@@ -39,11 +39,11 @@ own memory, working on your computer.
 > brings you only the calls that need you.
 
 > [!TIP]
-> **New in 0.1.9: Michael alone keeps the task board, and Done is final.**
-> Team members file what they need once and Michael works it in order. Only you reopen a Done
-> card, with a short reason. A To do card shows when its next step is due, and its person is
-> reminded then. One activity's questions arrive as one numbered ask. In 0.1.8, the office took
-> a break at your Claude plan limit and files opened inside it.
+> **New in 0.2.0: Pete, the one team member on the internet.**
+> In every office only Pete, the Research team member, opens web pages and searches; everyone else
+> asks them, and on a Mac nobody else's commands reach the internet. A trust layer checks every
+> message to Pete against what you keep private, and cleans Pete's answers. Pete is off until you
+> turn them on. In 0.1.9, Michael alone kept the task board and Done became final.
 
 ## Contents
 
