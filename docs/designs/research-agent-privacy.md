@@ -203,9 +203,35 @@ reach in a business office (latent: Slack is off in this build).
 
 Research is called **Pete**, from The Office (it was "Research", design review D15). His
 role and the Settings section stay Research (Research & privacy); his id stays `research`,
-so agents still write "to": "research". Every text that names him uses `RESEARCH_NAME`. His
-name is fixed in Edit agent (the app's messages to the team name him), and an office that
-saved the old name shows Pete from its next start.
+so agents still write "to": "research". Pete is the default: the owner may rename the
+Research team member in Edit agent (ship 2 D17), and every app text names it by its current
+name (`hive.researchName()`, `researchText`); a name another member has falls back to the
+role. It wears its own character, Pete, never a hire's (third ship D4).
+
+### Third ship review: the app and Research's own folders (owner, 2026-10-13)
+
+The app acts in Research's folders with the owner's rights, so Research's own writing there
+is treated as untrusted:
+
+- Its shell writes only `inbox/`, `outbox/`, `memory/` and its desk, never the top of its
+  folder, and its additional directories are the same list, since Claude Code lets the
+  shell write each one (verified live). Its file tools write the same places and read its
+  whole folder.
+- Before the app reads, moves or deletes there, each folder is checked to be the real one
+  (`ownResearchDir`); a planted link is replaced. Files are read without following a link
+  or waiting on a pipe; deletes never recurse; writes are a new file renamed into place.
+- Only stamp verified messages are shown (Messages tab, voice, search), counted, answered
+  for or fed back to Research; its handled asks stay on its Messages tab.
+- Its answers go out under an id the app makes from the file; the log keeps only hashes of
+  its ids and file names.
+- Trust checks run in their own folder, keep no transcript, and are keyed by the owner's
+  privacy settings, so a change applies to checks already done, queued notes and the
+  team's mined copy of its notes.
+- Ask me never opens a file in its desk. Claude Code's projects folder follows
+  `CLAUDE_CONFIG_DIR` for every wall and copy.
+
+Known limit (owner D6): the review hit its cycle cap with converged false; a P1 TODO moves
+its mail to folders only the app writes.
 
 ## The guard (superseded by the trust layer above)
 
@@ -257,6 +283,8 @@ Every message addressed to the Research agent is checked before delivery.
 - Messages to Research can be returned by the guard with a reason.
 - Every agent is told the new rule in its prompt: ask Research for anything from the
   internet; never paste private data.
+- Research's shell and file tools can no longer write at the top of its own folder, and
+  its rules say it writes only in its inbox, outbox, memory and working folders (third ship).
 
 ## Upgrade impact
 

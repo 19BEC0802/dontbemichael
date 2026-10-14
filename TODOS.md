@@ -38,6 +38,72 @@
 **Priority:** P2
 **Depends on:** Decision 8 (product-owned connections) and the Connector Center screen; only bites once the product holds credentials itself, from Phase 2.
 
+## Research agent (deferred from the third ship of mit/named-links, 2026-10-13)
+
+### Give Pete mail folders it can only read
+
+**What:** Keep the Research team member's inbox and the outbox the app reads in folders only the app writes, and give Pete a way to mark a message handled and to hand in an answer that does not need its shell to write there.
+
+**Why:** Three review passes and two Codex passes each found a new way for a steered Pete to trick the app through its own folders: links, pipes, hard links, forged messages, swapped folders. Each is fixed and tested (`src/main/hive.ts` researchDir, researchDelivered, dropResearchEntry; `src/main/researchNotes.ts` ownResearchDir), and its shell now writes only inbox, outbox, memory and its desk (verified live). The review still ended with converged false (owner, third ship D6): the class of attack stays as long as the app acts in folders Pete writes.
+
+**Context:** The app delivers stamped copies already (`researchStamp`), so an app owned inbox Pete reads is a small step; marking handled could be a message to the app instead of a move into `.done`. The outbox needs a drop folder the app moves out of at once, or a hook on Pete's Write tool that hands the file to the app.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
+### Keep Claude Code's transcripts and history out of agents' reach
+
+**What:** Wall every agent's file tools and shell from Claude Code's projects folder and `history.jsonl` (under `CLAUDE_CONFIG_DIR` or `~/.claude`), apart from what the app itself needs.
+
+**Why:** Any team member can read the other team members' Claude Code conversations there, and the prompts hidden checks send, which can quote what a teammate asked Pete before the trust layer cleaned it. The trust layer now removes each check's transcript as it ends and sweeps leftovers at launch (`src/main/hiddenClaude.ts` dropTranscript), but a check's prompt may also be kept in Claude Code's history.
+
+**Context:** Found by the security review and Codex in the third ship. Pete is already walled from both. Adding `claudeProjectsRoot()` to every agent's read walls needs care: Michael reads his own transcript through the app, not his tools.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Check Pete's notes in parts
+
+**What:** Send Pete's notes to the trust layer in parts small enough for one check, instead of as one batch that a check refuses when it is too long.
+
+**Why:** A refused batch removes the team's cleaned copy of Pete's notes (`researchNotesForPalace` in `src/main/index.ts`), so one long note a web page talks Pete into writing empties what the team can search.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Take the internet from team members' shells on Windows
+
+**What:** Hold team members' shell commands off the internet on Windows, where Claude Code has no sandbox, or say on the Research screen that it only holds on a Mac.
+
+**Why:** On Windows only the web tools are refused; a shell command can still reach the internet, so the rule that only Pete uses the internet is not enforced there. The CHANGELOG names this.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** A Windows shell sandbox, or a firewall rule per team member.
+
+### End a credit or sign in stop only on a finished turn
+
+**What:** When the office stopped because the Claude account ran out of credit or its sign in stopped working, end the stop when a turn finishes, never because a check heard nothing for ten minutes.
+
+**Why:** After a restart, or with no Claude session alive to take Michael's check, silence ends the stop (`CHECK_TIMEOUT_MS` in `src/main/officeBreak.ts`) and the team is given work on an account that still cannot run it, then stops again.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Read the registry once per router tick
+
+**What:** In `routeOnce`, read the registry and Pete's name once per tick, not once per outbox file.
+
+**Why:** Each outbox file asks `addressedToResearch` with a fresh `registry()` read, so a busy tick reads registry.json once per message (performance review, third ship).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Named links (from the eng review of docs/designs/named-links.md, 2026-10-11)
 
 ### Copy a link's address from a card
