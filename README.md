@@ -377,7 +377,7 @@ If `node-pty` fails to load after an Electron upgrade, run `npm install` again.
 ### What this build leaves out
 
 Setup offers only Claude Code, signed in with a Claude account or an Anthropic API key. The code
-still carries presets for other agent CLIs (Codex, Gemini, Grok, Kimi, Qwen, OpenCode, Crush, pi,
+still carries presets for other agent CLIs (Codex, Gemini, Antigravity, Grok, Kimi, Qwen, OpenCode, Crush, pi,
 Copilot and Cursor), API keys for other providers and local models,
 but this build doesn't offer them. Some developer features are switched off because business
 owners don't use them: git views, the built in code editor, temporary helper agents, voice, and
