@@ -234,7 +234,9 @@ test('Research wears Pete, its own face, also in an office that saved it in Ryan
   // Value: protects=the one agent on the internet never looks like Marketing; fails_when=a spawn or restore keeps Ryan, or Pete becomes a hire's face; why_new=owner, third ship D4; seam=source pins (the renderer modules need Electron)
   const src = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   assert.match(src('src/renderer/src/shell/research.ts'), /character: RESEARCH_CHARACTER,/);
-  assert.match(src('src/renderer/src/hooks/useRestoreTeam.ts'), /\.\.\.\(a\.id === RESEARCH_ID \? \{ character: RESEARCH_CHARACTER \} : \{\}\),/);
+  assert.match(src('src/renderer/src/hooks/useRestoreTeam.ts'), /\.\.\.\(a\.id === RESEARCH_ID \? \{ character: RESEARCH_CHARACTER, \.\.\.\(res\.name \? \{ name: res\.name \} : \{\}\) \} : \{\}\),/, 'and the name the app gave it, also in an office that saved it as Research');
+  assert.match(src('src/main/index.ts'), /\.\.\.\(isResearch \? \{ name: hive\.researchName\(\) \} : \{\}\) \};/, 'the start reports the name from the app\'s settings');
+  assert.match(src('src/renderer/src/shell/research.ts'), /name: res\.name \|\| name,/, 'turning it on uses that name too');
   assert.match(src('src/renderer/src/scene/office/cast.ts'), /export const HIREABLE_CAST: CastMember\[\] = OFFICE_CAST\.filter\(\(c\) => c\.name !== RESEARCH_CHARACTER\);/);
   assert.match(src('src/renderer/src/components/AddAgentModal.tsx'), /const hit = HIREABLE_CAST\.find/);
   assert.match(src('src/renderer/src/scene/office/props.tsx'), /\n  pete: <>/);

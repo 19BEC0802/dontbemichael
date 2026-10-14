@@ -67,7 +67,8 @@ export async function startResearch(config: HarnessConfig): Promise<{ ok: true }
   const cwd = res.cwd || prep.cwd;
   store.addAgent({
     id: RESEARCH_ID,
-    name,
+    // The name the app gave it (its settings), over the one this floor kept.
+    name: res.name || name,
     character: RESEARCH_CHARACTER,
     accent: teamAccent(store.agents.length),
     description: RESEARCH_DESCRIPTION,
