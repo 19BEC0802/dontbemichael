@@ -3099,6 +3099,9 @@ export class HiveManager {
     try { this.tellLostResearchPending(); } catch { /* next start */ }
     try { this.sweepResearchInbox(researchOn); } catch { /* next tick */ }
     this.pruneTrustChecks();
+    // Read once per tick, when the first message needs them, not once per file.
+    let reg: Registry | undefined;
+    let researchName: string | undefined;
     let routed = 0;
     for (const id of readdirSync(agentsDir)) {
       // agents/human is the owner's folder, written only by the app; a file an
@@ -3181,7 +3184,7 @@ export class HiveManager {
             continue;
           }
           // Everything to and from Research passes its trust layer first.
-          const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to, this.registry().agents, this.researchName());
+          const toResearch = id !== RESEARCH_ID && addressedToResearch(partial.to, (reg ??= this.registry()).agents, researchName ??= this.researchName());
           if (toResearch || id === RESEARCH_ID) {
             const gate = toResearch ? this.researchInboundGate(id, msg, partial, raw, researchOn) : this.researchOutboundGate(msg, partial, raw, `${f}\n${raw}`);
             if (gate === 'hold') continue;
