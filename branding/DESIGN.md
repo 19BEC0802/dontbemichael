@@ -1447,6 +1447,53 @@ first (no wider than the app's 520 px right column), then the file, and the tab 
 Needs you pill under 600 px and Tasks under 480 px, so the selected file tab keeps its whole
 name. Under 400 px the table steps down to 11 / 16. The section never scrolls sideways.
 
+
+### 9.15 Privacy section (web)
+
+A home page section right after the refund story's Sending block (§9.11) and before the task
+board (§9.13), owner 2026-10-14 (site design review, direction C2). In place of the eyebrow, a
+"Privacy first" badge: a pill in `indigo` soft with `indigo-text`, 15/20 700, an 18 px shield
+icon. Heading "A trust layer built to stop agents going rogue and leaking your business data."
+with "trust layer" in `indigo-text`; the lead says only Pete, the Research team member, goes
+online, every question to Pete is checked against what the owner keeps private, and every
+answer is cleaned of instructions before the team reads it. Two columns (5fr 7fr) at 980 px
+and up. Left: h3 "You decide what stays private.", one line, the three segment switch of
+§9.11 (As written, Cleaned, Not sent; Cleaned pressed first), its live line, then the example
+as message cards (`card`, padding 14, the story's cast): Kelly's question to Pete; for Cleaned
+and Not sent, a message from "Privacy check" to Kelly (a shield avatar on `indigo` soft, the
+sender the app uses) carrying the app's note word for word, "Sent to Pete as" with the cleaned
+question in a `neutral-soft` box, or "Not sent to Pete: it contains an account number or ID,
+which the owner keeps private. Ask again without it."; for As written, no message and one
+line saying Kelly gets no note. Then Pete's answer to Kelly: the app's reply label word for
+word in a `neutral-soft` box, the answer, and one struck line (`ink-3`, line through) marked
+"removed". Right: a read only picture of Settings, Research & privacy (§7.26): the "Research"
+head, a green dot and "On. Pete looks things up for the team." with Turn off, then "What your
+team may send to Pete" with "4 allowed, 8 private" and the twelve kinds in the app's fixed
+order, each with a segmented Allowed | Private, Passwords and keys "Always private". Under the
+columns, three plain notes: Keeps your business data in; Built to stop agents going rogue;
+Off until you turn them on. No card gets a coloured edge stripe. Pete's avatar is the globe
+and magnifier icon on `dept-team` l, m and acc (`.d-research`), never a letter, here and in
+the setup inset (§9.12), where Pete is the last row, unchecked, tagged "uses the internet".
+Pete is "they". The settings picture is one `role="img"` whose label names all twelve kinds;
+the switch is buttons with `aria-pressed` and an `aria-live` line. Without scripts the switch
+is hidden and the three outcomes stack under their labels. Under 980 px one column: the left
+column, then the picture, then the notes. Under 480 px the picture shows the four Allowed
+rows, Passwords and keys and "and 7 more kinds kept private", linking to /security. The site
+states no limit notes for this feature (owner, 2026-10-14). The section never scrolls
+sideways.
+
+### 9.16 Security page (web)
+
+`/security`, a page to read, not to sell (owner, 2026-10-14): the site nav and footer, no
+hero, no cards, Download the only call to action. One column at about 70 characters: h1
+"Privacy and security", a one line summary, a link back to the home page's privacy section,
+then five sections under h2s: Who reaches what (one table: your team, Michael and Pete
+against web pages and search, your files and mailboxes, and connectors), The trust layer
+(out: as written, cleaned or not sent; in: instructions removed, the answer labelled, an answer
+that tries to steer flagged to Michael; nothing goes through when the check can't run), What
+stays private (the twelve kinds with their defaults), What goes to Claude, and Where your data
+lives. Every sentence holds on Mac and Windows; the page states no limit notes. Headings sit
+closer to their text than to the section above; the page never scrolls sideways at 320 px.
 ---
 
 ## 10. Iconography [Both]
@@ -1677,6 +1724,7 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-09-30 | **v2 Studio adopted.** Pixel floor, bottom strip, Command Center layout, pixel UI, pixel type and the arcade web palette retired. One token set for app and web (§1.3). Sora and IBM Plex Mono replace Inter, VT323, Press Start 2P and Pixelify Sans. Wordmark in Sora; the Struck M mark kept. Studio illustration system (§8). Contrast corrected against the mockups: `ink-3` `#6C6884`, accent text colors, `coral-strong` for coral fills with text, `line-input` for control boundaries. v1 archived at `archive/DESIGN-v1-pixel.md`. Decisions and the functional map: `docs/designs/studio-home.md`. |
 | 2026-09-28 | (v1) Web: Pro offering removed; nav cut to four links plus Download. |
 | 2026-09-24 | (v1) One spec for app and web, moved into `branding/` with the brand kit. |
+| 2026-10-14 | Web: the privacy section after the Sending block, a Privacy first badge, a three position trust layer switch with the app's Privacy check notes and Pete's labelled answer, and Settings, Research & privacy as a read only picture; Pete's globe avatar; the /security page to read (§9.15, §9.16). |
 
 ---
 
