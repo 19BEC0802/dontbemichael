@@ -110,6 +110,7 @@ import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { pastesDir, savePaste, sweepOldPastes } from './pastes';
+import { eraseOfficeData } from './factoryReset';
 import { buildWorkerLaunch } from './workerLaunch';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
@@ -6167,20 +6168,28 @@ ipcMain.handle('app:resetAll', () => {
   try { persist.close(); } catch (e) { console.error('[reset] persist.close:', e); }
   try { ptyManager.killAll(); } catch (e) { console.error('[reset] killAll:', e); }
   try { hive.removeExposedCodexData(); } catch (e) { console.error('[reset] removeExposedCodexData:', e); }
-  // Erase the hive (Michael's + every agent's memory, inboxes, tasks, board,
-  // git history) and the semantic-memory palace. Only these harness-created
-  // subdirs are removed — never the user's whole harnessHome folder.
-  for (const dir of [hive.root(), memory.palacePath()]) {
-    if (!dir) continue;
-    try { rmSync(dir, { recursive: true, force: true }); }
-    catch (e) { console.error('[reset] rm', dir, e); }
-  }
   // The roster is the renderer's half of the same state, so it retires with the
   // hive — archived into roster-backups/ rather than deleted, and cleared as the
   // active file so re-selecting this folder later doesn't resurrect agents whose
   // sessions and memory are gone.
   try { roster.archive(); }
   catch (e) { console.error('[reset] roster.archive:', e); }
+  // Erase everything else the app made for this office (factoryReset.ts): the
+  // hive (every agent's memory, inboxes, tasks, board, git history), the
+  // palace, Research's desk and threads, Company knowledge, saved keys and
+  // history, so setup starts as a new owner sees it. Only app-made entries
+  // go, never the whole office folder. Read before resetConfig() forgets it.
+  const resetHome = readConfig().harnessHome;
+  const userData = app.getPath('userData');
+  const failed = eraseOfficeData({
+    home: resetHome ? expandTilde(resetHome) : null,
+    userData,
+    extra: [
+      hive.root() ?? '', memory.palacePath() ?? '', ...researchFolders(),
+      ...['standing-check', 'trust-check'].map((f) => projectDir(join(userData, f)))
+    ]
+  });
+  if (failed.length) console.error('[reset] could not remove:', failed);
   // Back to first-run defaults, then relaunch clean so all in-memory services
   // re-bootstrap from scratch and the renderer lands on onboarding.
   resetConfig();

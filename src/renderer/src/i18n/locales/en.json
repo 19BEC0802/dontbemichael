@@ -248,7 +248,7 @@
       "couldNotOpen": "Couldn't open that office."
     },
     "resetConfirm": {
-      "body": "This permanently erases all of {{godName}}'s memories and the entire hive, and cannot be undone. Any running sessions will be terminated and the app will relaunch into onboarding. Are you sure?"
+      "body": "This erases your office for good: the team, everyone's memory, your settings, Company knowledge, saved keys and history. Files in your business folder and your Claude sign in stay. Everyone stops working and the app opens setup again. This cannot be undone."
     },
     "general": {
       "homeFolder": "Office folder",
