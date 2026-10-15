@@ -1580,6 +1580,7 @@
     "askWithdrawn": "سُحب دون إجابة.",
     "askWithdrawnBecause": "سُحب دون إجابة: {{reason}}",
     "askWithdrawnCardClosed": "سُحب عند إغلاق البطاقة.",
+    "askWithdrawnMemberDeleted": "سُحب عند حذف عضو الفريق الذي طرحه.",
     "empty": "لا شيء هنا",
     "showFewer": "عرض أقل",
     "more": "{{count}} أخرى",

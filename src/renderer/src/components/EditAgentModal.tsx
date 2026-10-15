@@ -209,6 +209,7 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
       killPty: (ptyId) => window.cth.killPty(ptyId),
       disposeTerminal,
       archiveInRegistry: (id) => window.cth.hiveSetArchived(id, true),
+      settleWork: (id) => window.cth.memberDeleted(id),
       forget: (id) => { st.archiveAgent(id); st.removeArchivedAgent(id); st.removeRestorableAgent(id); }
     });
     setDeleting(false);

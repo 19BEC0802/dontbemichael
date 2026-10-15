@@ -6425,6 +6425,14 @@ ipcMain.handle('agent:closedByOwner', (_evt, id: unknown): { ok: boolean; paused
   return closeAgentByOwner(id);
 });
 
+/** The owner deleted this team member for good (Edit agent's Danger zone):
+ *  their open Ask me questions are withdrawn and Michael is told about their
+ *  open cards (hive.memberDeleted). */
+ipcMain.handle('agent:deleted', (_evt, id: unknown): { withdrawn: number; cards: number } => {
+  if (typeof id !== 'string' || !/^[\w-]+$/.test(id) || !hive.enabled()) return { withdrawn: 0, cards: 0 };
+  try { return hive.memberDeleted(id); } catch (e) { console.error('[hive] memberDeleted failed:', e); return { withdrawn: 0, cards: 0 }; }
+});
+
 // ─── IPC: full-text search across hive files (board, tasks, memory) ──────────
 ipcMain.handle('hive:textSearch', (_evt, query: unknown) => {
   if (typeof query !== 'string' || !query.trim()) return { ok: false, results: [] };

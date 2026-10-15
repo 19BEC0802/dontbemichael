@@ -1413,6 +1413,9 @@ const api = {
   /** The owner is closing this agent: pause its schedules and mark it closed. */
   closeAgentByOwner: (id: string): Promise<{ ok: boolean; paused: number }> =>
     ipcRenderer.invoke('agent:closedByOwner', id),
+  /** The owner deleted this team member for good: withdraw their open asks and tell Michael. */
+  memberDeleted: (id: string): Promise<{ withdrawn: number; cards: number }> =>
+    ipcRenderer.invoke('agent:deleted', id),
   /** Fires when the scheduler stamps a mission's lastFiredAt (a beat/dispatch),
    *  so the SCHEDULES panel can refresh "last fired" without a reload. */
   onMissionsUpdated: (cb: () => void): (() => void) => {

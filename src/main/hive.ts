@@ -61,7 +61,7 @@ import { selectBroadcastTargets } from '../shared/broadcast';
 import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
 import {
-  answersWithoutRequest, asksToTidy, blockedWithNothingAsked, closesOwnerQuestion, openOwnerQuestions, openOwnerRequests, ownerChangeNote, reopenedNote, restoredDoneNote, untriagedNote, nextStepDueNote, nextStepBackstopNote, ownerConversation,
+  answersWithoutRequest, asksToTidy, blockedWithNothingAsked, closesOwnerQuestion, memberDeletedNote, openOwnerQuestions, openOwnerRequests, ownerChangeNote, reopenedNote, restoredDoneNote, untriagedNote, nextStepDueNote, nextStepBackstopNote, ownerConversation,
   ownerDock, ownerQuestionOf, OWNER_ALIASES, OWNER_NUDGE_EVERY_MS, OWNER_REQUESTS_FLOOR, unmatchedReplyNote,
   type CardLike, type MessageLike, type OpenOwnerQuestion, type OwnerCardChange, type OwnerDock, type OwnerDockState, type OwnerRequest,
   type OwnerRequestFlags, type StuckCard, type ThreadMessage
@@ -173,8 +173,9 @@ export interface HumanQA {
   /** Withdrawn without an answer, by Michael or by the owner closing the card. */
   dismissedAt?: string;
   dismissedReason?: string;
-  /** Set when the card closing withdrew it (the owner's close, or the app's). */
-  dismissedBy?: 'card-closed';
+  /** Set when the card closing withdrew it (the owner's close, or the app's),
+   *  or when the owner deleted the team member who raised it. */
+  dismissedBy?: 'card-closed' | 'member-deleted';
   /** The agent whose work needs the answer: the one that learns from it
    *  (owner, 2026-09-25). "god" when Michael raised it himself. Falls back to
    *  the card's assignee, then Michael. */
@@ -3415,6 +3416,42 @@ export class HiveManager {
     if (!this.patchTask(id, patch)) return false;
     this.tellGodOwnerChange(card, { kind: 'closed', reason: patch.closedReason });
     return true;
+  }
+
+  /**
+   * The owner deleted a team member for good (owner, 2026-10-14). Their open
+   * Ask me questions leave Ask me, withdrawn and kept on the card as history,
+   * like a closed card's. Their cards stay theirs on the board: Michael owns
+   * every card, so he hears once, with the open ones, and gives each to
+   * someone else or closes it.
+   */
+  memberDeleted(id: string): { withdrawn: number; cards: number } {
+    const reg = this.registry();
+    const godId = reg.godId;
+    if (!id || id === godId || id === RESEARCH_ID || !reg.agents[id] || reg.agents[id].isAssistant) return { withdrawn: 0, cards: 0 };
+    const ledger = this.tasks() as { tasks?: HiveTask[] };
+    const tasks = Array.isArray(ledger?.tasks) ? ledger.tasks : [];
+    const now = new Date().toISOString();
+    let withdrawn = 0;
+    const theirs: HiveTask[] = [];
+    for (const t of tasks) {
+      if (!t?.id) continue;
+      // Who raised an ask: the same rule as openQuestionsRaisedBy.
+      const mine = openAskIndexes(t.humanQA).filter((i) => (t.humanQA![i].raisedBy ?? t.assignee) === id);
+      if (mine.length) {
+        const humanQA = t.humanQA!.map((e, i) => (mine.includes(i) ? { ...e, dismissedAt: now, dismissedBy: 'member-deleted' as const } : e));
+        if (this.patchTask(t.id, { humanQA })) withdrawn += mine.length;
+      }
+      if (t.status !== 'done' && (t.assignee === id || mine.length)) theirs.push(t);
+    }
+    if (godId && (theirs.length || withdrawn)) {
+      const note = memberDeletedNote({ id, name: reg.agents[id]?.name }, theirs, withdrawn);
+      try {
+        this.send({ to: godId, act: 'inform', subject: note.subject, body: note.body }, 'human');
+      } catch { /* the questions are withdrawn; Michael sees the cards on the board */ }
+    }
+    this.appendLog({ kind: 'member-deleted', agentId: id, withdrawn, cards: theirs.length });
+    return { withdrawn, cards: theirs.length };
   }
 
   private tellGodOwnerChange(card: HiveTask, change: OwnerCardChange): void {

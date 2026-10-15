@@ -20,7 +20,7 @@ export interface HumanQA {
   /** Why it was withdrawn, in a few words. */
   dismissedReason?: string;
   /** Set when the card closing withdrew it; shown in the owner's language. */
-  dismissedBy?: 'card-closed';
+  dismissedBy?: 'card-closed' | 'member-deleted';
   /** The agent whose work needs the answer, and which learns from it; "god"
    *  when Michael raised it himself. */
   raisedBy?: string;
@@ -128,7 +128,7 @@ export function parseTasks(raw: unknown): HiveTask[] {
             // resurface on the next poll (openQuestion would see it as open).
             dismissedAt: typeof e.dismissedAt === 'string' ? e.dismissedAt : undefined,
             dismissedReason: typeof e.dismissedReason === 'string' ? e.dismissedReason : undefined,
-            dismissedBy: e.dismissedBy === 'card-closed' ? 'card-closed' as const : undefined,
+            dismissedBy: e.dismissedBy === 'card-closed' || e.dismissedBy === 'member-deleted' ? e.dismissedBy : undefined,
             raisedBy: typeof e.raisedBy === 'string' ? e.raisedBy : undefined
           }))
         : undefined,

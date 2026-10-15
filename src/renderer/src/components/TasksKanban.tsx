@@ -558,6 +558,8 @@ export function TaskDetail({ task, all, assigneeName, onMove, onReopen, onAssign
                         <div dir={rtl ? 'auto' : undefined} style={{ marginTop: 6, fontSize: 12, color: 'var(--cth-ink-3)' }}>
                           {e.dismissedBy === 'card-closed'
                             ? t('kanban.askWithdrawnCardClosed')
+                            : e.dismissedBy === 'member-deleted'
+                            ? t('kanban.askWithdrawnMemberDeleted')
                             : e.dismissedReason?.trim()
                               ? t('kanban.askWithdrawnBecause', { reason: `\u2068${e.dismissedReason.trim()}\u2069` })
                               : t('kanban.askWithdrawn')}

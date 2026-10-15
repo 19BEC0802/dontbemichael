@@ -25,6 +25,9 @@ export interface DeleteTeamMemberDeps {
   disposeTerminal: (ptyId: string) => void;
   /** Archive them in the registry when no terminal is running to do it. */
   archiveInRegistry: (id: string) => Promise<unknown>;
+  /** Withdraw their open Ask me questions and tell Michael about their open
+   *  cards (hive.memberDeleted). */
+  settleWork: (id: string) => Promise<unknown>;
   /** Take them off the floor, the archived list and the restore list. */
   forget: (id: string) => void;
 }
@@ -32,7 +35,8 @@ export interface DeleteTeamMemberDeps {
 /**
  * Stop the member and take them off the team. The registry keeps an archived
  * record, the same one every closed member leaves, so Michael's roster skips
- * them and reminders for their cards go to him. Each step is best effort:
+ * them; their open questions leave Ask me and Michael hears which cards to
+ * give to someone else or close. Each step is best effort:
  * one failing never leaves them half on the floor.
  */
 export async function deleteTeamMember(agent: Pick<Agent, 'id' | 'ptyId' | 'isGod' | 'isAssistant'>, deps: DeleteTeamMemberDeps): Promise<boolean> {
@@ -46,6 +50,8 @@ export async function deleteTeamMember(agent: Pick<Agent, 'id' | 'ptyId' | 'isGo
   } else {
     await deps.archiveInRegistry(agent.id).catch(() => undefined);
   }
+  // After the stop, so they raise nothing more.
+  await deps.settleWork(agent.id).catch(() => undefined);
   deps.forget(agent.id);
   return true;
 }

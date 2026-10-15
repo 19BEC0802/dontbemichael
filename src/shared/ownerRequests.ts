@@ -247,6 +247,30 @@ export function ownerChangeNote(task: { id: string; title?: string }, change: Ow
   };
 }
 
+/** The owner deleted a team member for good (owner, 2026-10-14): Michael
+ *  hears once, with their open cards, so he gives each one to someone else or
+ *  closes it. Their open Ask me questions were withdrawn by the app. */
+export function memberDeletedNote(
+  member: { id: string; name?: string },
+  cards: ReadonlyArray<{ id: string; title?: string; status?: string }>,
+  withdrawn: number
+): { subject: string; body: string } {
+  const who = cardText(member.name?.trim() || member.id, 60);
+  const shown = cards.slice(0, 20);
+  return {
+    subject: `OWNER DELETED ${who} from the team`,
+    body: [
+      `The owner deleted ${who} (${cardText(member.id, 60)}) from the team for good. Never route work to them again.`,
+      ...(shown.length ? [
+        'Their open cards. Give each one to a teammate who fits, or close it when the work is no longer needed:',
+        ...shown.map((c) => `- card ${cardText(c.id, 60)}${c.title ? `: ${cardText(c.title)}` : ''}${c.status ? ` (${ownValue(STATUS_WORDS, c.status) ?? cardText(c.status, 20)})` : ''}`),
+        ...(cards.length > shown.length ? [`- and ${cards.length - shown.length} more`] : [])
+      ] : []),
+      ...(withdrawn > 0 ? [`The app withdrew their ${withdrawn === 1 ? 'open question' : `${withdrawn} open questions`} on Ask me. When the work still needs an answer, ask it again on the card.`] : [])
+    ].join('\n')
+  };
+}
+
 /** The app put back a Done card an agent reopened (card-lifecycle.md section
  *  10): only the owner takes a card out of Done. Status only: a question asked
  *  on it meanwhile is still open, so Michael moves it to a new card. */

@@ -1580,6 +1580,7 @@
     "askWithdrawn": "未经回答即撤回。",
     "askWithdrawnBecause": "未经回答即撤回：{{reason}}",
     "askWithdrawnCardClosed": "卡片关闭时已撤回。",
+    "askWithdrawnMemberDeleted": "提出它的团队成员被删除时已撤回。",
     "empty": "暂无",
     "showFewer": "收起",
     "more": "还有 {{count}} 个",
