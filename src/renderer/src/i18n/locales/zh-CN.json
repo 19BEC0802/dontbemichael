@@ -2518,7 +2518,7 @@
     "perPiece": "每项",
     "perPieceTip": "估算：定时运行按其自身成本，其他工作分摊其余部分。",
     "asksCount": "{{count}} 个问题",
-    "waited": "等你 {{time}} 分钟",
+    "waited": "等你 {{time}}",
     "keptAsIs": "原样保留",
     "keptLine": "{{decisions}} 份草稿和卡片中有 {{kept}} 份",
     "keptTip": "你原样发出的草稿，以及从未重新打开的已完成卡片。",

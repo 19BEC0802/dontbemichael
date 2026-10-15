@@ -2518,7 +2518,7 @@
     "perPiece": "Per piece",
     "perPieceTip": "An estimate: scheduled runs by their own cost, other work sharing the rest.",
     "asksCount": "{{count}} asks",
-    "waited": "waited {{time}} minutes on you",
+    "waited": "waited {{time}} on you",
     "keptAsIs": "Kept as is",
     "keptLine": "{{kept}} of {{decisions}} drafts and cards",
     "keptTip": "Drafts you sent as written and finished cards you never reopened.",

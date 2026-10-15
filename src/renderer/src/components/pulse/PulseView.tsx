@@ -429,7 +429,7 @@ function MemberDetail({ id, data, name, onClose, money }: { id: string; data: Pu
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
             {fact(t('pulse.value'), money(m.usd), t('pulse.shareOfOffice', { pct: Math.round(m.share * 100) }), t('pulse.valueTip'))}
             {fact(t('pulse.perPiece'), m.costForWork.perPiece !== null ? `$${m.costForWork.perPiece.toFixed(2)}` : '…', m.costForWork.kind ? t(`pulse.per.${m.costForWork.kind}`) : t('pulse.tooFew'), t('pulse.perPieceTip'))}
-            {fact(t('pulse.yourTime'), t('pulse.asksCount', { count: m.asks }), m.askWaitMs !== null ? t('pulse.waited', { time: Math.round(m.askWaitMs / 60_000) }) : '', t('pulse.yourTimeTip'))}
+            {fact(t('pulse.yourTime'), t('pulse.asksCount', { count: m.asks }), m.askWaitMs !== null ? t('pulse.waited', { time: duration(m.askWaitMs, t) }) : '', t('pulse.yourTimeTip'))}
             {fact(t('pulse.keptAsIs'), m.kept.share !== null ? `${Math.round(m.kept.share * 100)}%` : `${m.kept.kept}/${m.kept.decisions}`, t('pulse.keptLine', { kept: m.kept.kept, decisions: m.kept.decisions }), t('pulse.keptTip'))}
             {fact(t('pulse.speed'), m.speedMs !== null ? `${Math.round(m.speedMs / 3_600_000)}h` : '…', t('pulse.speedLine'), t('pulse.speedTip'))}
             {fact(t('pulse.whileAway'), m.awayShare !== null ? `${Math.round(m.awayShare * 100)}%` : '…', t('pulse.awayMine'), t('pulse.awayTip'))}
