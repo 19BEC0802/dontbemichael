@@ -14,7 +14,8 @@ const os = require('node:os');
 const path = require('node:path');
 const loadTs = require('./load-ts.cjs');
 
-const { eraseOfficeData, OFFICE_FOLDER_ENTRIES, APP_DATA_ENTRIES } = loadTs('src/main/factoryReset.ts');
+const { eraseOfficeData, OFFICE_FOLDER_ENTRIES, PRIVATE_ENTRIES, APP_DATA_ENTRIES } = loadTs('src/main/factoryReset.ts');
+const { writeOfficeRecord } = loadTs('src/main/officeFile.ts');
 
 function seed(dir, names) {
   for (const n of names) {
@@ -35,6 +36,9 @@ test('reset erases everything the app made for the office, and keeps the owner\'
   fs.mkdirSync(userData, { recursive: true });
   fs.mkdirSync(elsewhere, { recursive: true });
   seed(home, OFFICE_FOLDER_ENTRIES);
+  fs.mkdirSync(path.join(home, 'private'));
+  seed(path.join(home, 'private'), PRIVATE_ENTRIES);
+  writeOfficeRecord(home, { version: 1, businessName: 'Northside Bakery', team: [] });
   seed(userData, APP_DATA_ENTRIES);
   // What must stay: the owner's own file in the office folder, the archived
   // rosters, and what describes this install rather than the office.
@@ -46,6 +50,8 @@ test('reset erases everything the app made for the office, and keeps the owner\'
 
   assert.deepEqual(failed, []);
   for (const n of OFFICE_FOLDER_ENTRIES) assert.equal(fs.existsSync(path.join(home, n)), false, `office folder: ${n}`);
+  assert.equal(fs.existsSync(path.join(home, 'private')), false, 'the emptied private folder goes too');
+  assert.equal(fs.existsSync(path.join(home, 'office.json')), false, 'the app\'s office record');
   for (const n of APP_DATA_ENTRIES) assert.equal(fs.existsSync(path.join(userData, n)), false, `app data: ${n}`);
   assert.equal(fs.existsSync(elsewhere), false, 'a folder passed in extra');
   assert.equal(fs.readFileSync(path.join(home, 'my notes.txt'), 'utf8'), 'mine');
@@ -53,9 +59,44 @@ test('reset erases everything the app made for the office, and keeps the owner\'
   for (const keep of ['config.json', 'updater.log', 'last-run-version', 'model-catalog.json']) assert.ok(fs.existsSync(path.join(userData, keep)), keep);
 });
 
+test('in a folder the owner chose, their own private folder and office.json stay', (t) => {
+  // Value: protects=a reset never deletes the owner's files that share a plain name with the app's; fails_when=private/ or office.json is removed whole; why_new=ship coverage audit: these names are generic; seam=fs; no_claim=names the app does not use
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-own-'));
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-own-data-'));
+  t.after(() => { fs.rmSync(home, { recursive: true, force: true }); fs.rmSync(userData, { recursive: true, force: true }); });
+  fs.mkdirSync(path.join(home, 'private'));
+  fs.writeFileSync(path.join(home, 'private', 'tax return.pdf'), 'mine');
+  seed(path.join(home, 'private'), ['card-guard.json', 'owner']);
+  fs.writeFileSync(path.join(home, 'office.json'), JSON.stringify({ desks: 4, plants: 2 }));
+  assert.deepEqual(eraseOfficeData({ home, userData }), []);
+  assert.equal(fs.readFileSync(path.join(home, 'private', 'tax return.pdf'), 'utf8'), 'mine');
+  assert.equal(fs.existsSync(path.join(home, 'private', 'card-guard.json')), false, 'the app\'s own file in it goes');
+  assert.equal(fs.existsSync(path.join(home, 'private', 'owner')), false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'office.json'), 'utf8')), { desks: 4, plants: 2 }, 'not the app\'s record, so it stays');
+});
+
+test('a path it cannot remove is reported and the rest is still erased', { skip: process.platform === 'win32' ? 'POSIX permissions' : false }, (t) => {
+  // Value: protects=a reset never stops half way; fails_when=the per target try/catch is removed or failures are not returned; why_new=new helper (ship coverage audit); seam=fs permissions; no_claim=Windows (POSIX only)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-locked-'));
+  const locked = path.join(userData, 'locked');
+  fs.mkdirSync(locked);
+  const stuck = path.join(locked, 'inside');
+  fs.mkdirSync(stuck);
+  fs.writeFileSync(path.join(stuck, 'a.txt'), 'x');
+  fs.chmodSync(locked, 0o555);
+  t.after(() => { fs.chmodSync(locked, 0o755); fs.rmSync(userData, { recursive: true, force: true }); });
+  seed(userData, ['knowledge']);
+  const failed = eraseOfficeData({ home: null, userData, extra: [stuck] });
+  if (process.getuid && process.getuid() === 0) return; // root ignores the permission
+  assert.deepEqual(failed, [stuck]);
+  assert.equal(fs.existsSync(path.join(userData, 'knowledge')), false, 'the others still went');
+});
+
 test('the lists name the office\'s private and Research folders, Company knowledge and saved keys', () => {
   // Value: protects=the entries an owner would see carry over; fails_when=one is dropped from the list; why_new=new lists; seam=none; no_claim=entries the app adds later (grep app.getPath('userData'))
-  for (const n of ['hive', 'palace', 'office.json', 'private', 'research-desk', 'agent-settings']) assert.ok(OFFICE_FOLDER_ENTRIES.includes(n), n);
+  for (const n of ['hive', 'palace', 'research-desk', 'agent-settings']) assert.ok(OFFICE_FOLDER_ENTRIES.includes(n), n);
+  for (const n of ['research-threads.json', 'research-pending.json', 'agent-mcp', 'owner']) assert.ok(PRIVATE_ENTRIES.includes(n), n);
+  for (const n of ['private', 'office.json']) assert.ok(!OFFICE_FOLDER_ENTRIES.includes(n), `${n} is never removed whole`);
   for (const n of ['harness.db', 'knowledge', 'integration-secrets.json', 'mail-proposals.json', 'pastes']) assert.ok(APP_DATA_ENTRIES.includes(n), n);
   assert.ok(!OFFICE_FOLDER_ENTRIES.includes('roster-backups'), 'archived rosters are kept');
   assert.ok(!APP_DATA_ENTRIES.includes('config.json'), 'config is reset to defaults, not deleted');
