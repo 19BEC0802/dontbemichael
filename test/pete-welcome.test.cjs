@@ -59,3 +59,10 @@ test('only a real turn on re-arms the welcome, and only the timer plays it', () 
   assert.match(stage, /welcomeArmed\(browserStorage\(\), ROSTER_BOOT_HOME\)/, 'read each tick, per office');
   assert.match(stage, /podOfId\(b\.id\) !== podOfId\(pete\.id\)/, 'partners from other pods, as all banter');
 });
+
+test('the welcome is marked played only once its first beat is in the air, on both paths', () => {
+  // Value: protects=the welcome plays once instead of on every tick; fails_when=the first beat callback or a markWelcomed call is dropped; why_new=ship testing review; seam=none; no_claim=runtime timing (source pins)
+  const stage = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', 'src', 'scene', 'studio', 'StudioStage.tsx'), 'utf8');
+  assert.match(stage, /if \(i === 0\) thrown\?\.\(\);/, 'marked once a beat is thrown');
+  assert.equal((stage.match(/\(\) => markWelcomed\(browserStorage\(\), ROSTER_BOOT_HOME\)/g) || []).length, 2, 'both welcome paths mark it');
+});
