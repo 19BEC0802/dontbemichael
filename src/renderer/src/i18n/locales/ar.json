@@ -161,7 +161,17 @@
     "mailNote": "ما الذي يجب تغييره؟",
     "mailSendNote": "أرسل الملاحظة",
     "mailCancel": "إلغاء",
-    "mailStanding": "من الآن، أرسل رسائل كهذه دون أن تسألني"
+    "mailStanding": "من الآن، أرسل رسائل كهذه دون أن تسألني",
+    "recommended": "موصى به",
+    "ownAnswer": "أو اكتب إجابتك الخاصة",
+    "addNote": "أضف ملاحظة (اختياري)",
+    "replyOption": "رد بالخيار {{n}}",
+    "replyOptionNote": "رد بالخيار {{n}} مع ملاحظة",
+    "replyOptionAria": "رد بالخيار {{n}}: {{label}}",
+    "replyPartial": "رد على {{n}} من {{total}}",
+    "partAnswer": "إجابتك",
+    "partOwn": "أو إجابتك الخاصة",
+    "anythingElse": "أي شيء آخر (اختياري)"
   },
   "agentStrip": {
     "notePlaceholder": "سطر واحد لكل نقطة…",

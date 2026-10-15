@@ -639,6 +639,28 @@ stands on its own.
   when the card holds more than the question: a background, a result, or other
   questions and answers (owner, 2026-10-12: it opened to a repeat of the question). Cmd or Ctrl+Enter sends; Enter
   respects IME composition.
+- Options and several questions (owner, 2026-10-15; `docs/designs/ask-me-options.md`).
+  An ask whose entry carries `options` is a choice; one with `parts` is several questions,
+  each maybe with its own `options`. Anything the app can't read shows the plain card
+  above. Picking never sends: the box is full width under the options, and Reply sits
+  on its own row, end aligned, 8 px below it, its label following the pick ("Reply with
+  option 1", "Reply with option 1 and note", "Reply to 2 of 5"). Nothing starts picked.
+  - Option row (a radio group): `card` fill, 1 px `line-2` ring, `r-md`, padding 8 × 10,
+    gap 9; a 16 px radio dot (1.5 px `line-input` ring); the option number at 11 / 600
+    `ink-3`, then the label at 12.5 / 18 `ink` as card markdown. Rows 6 px apart, 10 px
+    above the box. Hover: `card-2` fill, `line-input` ring. Picked: `indigo-soft` fill,
+    1.5 px `indigo` ring, dot filled `indigo` (8 px). Focus: 2 px `indigo` ring. Arrows
+    move and pick, Space picks, clicking the picked row unpicks it.
+  - Recommended tag: pill, `green-soft` fill, `green-text`, 10.5 / 600, 18 px tall, at
+    the row's end. Text "Recommended".
+  - Question line: the number at 11 / 600 `ink-3` in a 20 px column, end aligned; the
+    question at 12.5 / 18; a part's options as choice chips (26 px pill, `card` fill,
+    1 px `line-2` ring, 11.5 px `ink`, 5 px apart; pressed like a picked row, the
+    Recommended tag inside at 16 px and 10 px); then its field, `.cth-input` at 30 px.
+    Parts 10 px apart. Any part may be left blank; Reply settles the whole ask and the
+    blank ones go to the team member through Michael.
+  - Placeholders: "Or write your own answer", "Add a note (optional)" once an option is
+    picked, and "Anything else (optional)" under several questions.
 - "Holding up N tasks", when tasks wait on the answer, opens to their titles in `ink-2`
   (a status dot each, up to 6, then "+N more").
 - Files the question names (owner, 2026-10-04 and 2026-10-10; `docs/designs/open-file-tab.md`)

@@ -32,6 +32,10 @@ export type StationKind =
   | 'shelf' | 'terminal' | 'web' | 'board' | 'mailbox' | 'mcp' | 'desk';
 
 /** Why an agent waits for a restart (store.pendingRestart). */
+/** An unsent Ask me pick: the option picked on a choice, or each question's
+ *  chip and typed line on an ask with several (docs/designs/ask-me-options.md). */
+export interface AnswerPick { pick?: number; parts?: ({ chip?: number; text?: string } | undefined)[] }
+
 export interface PendingRestart {
   at: number;
   /** engine: Claude Code was just set up (docs/designs/get-michael-ready.md). */
@@ -340,6 +344,10 @@ interface State {
    *  unmounts the ask-me view) doesn't eat a half-typed answer. */
   answerDrafts: Record<string, string>;
   setAnswerDraft: (taskId: string, text: string) => void;
+  /** The picked option and each question's chip and line on an Ask me card,
+   *  kept like a typed draft (docs/designs/ask-me-options.md, decision 3A). */
+  answerPicks: Record<string, AnswerPick>;
+  setAnswerPick: (key: string, pick: AnswerPick) => void;
   /** Unsent composer drafts, per agent — so switching agents (which remounts the
    *  composer) doesn't eat what the user was typing. */
   drafts: Record<string, string>;
@@ -1181,6 +1189,9 @@ export const useStore = create<State>((set, get) => ({
   answerDrafts: {},
   setAnswerDraft: (taskId, text) =>
     set((s) => ({ answerDrafts: { ...s.answerDrafts, [taskId]: text } })),
+  answerPicks: {},
+  setAnswerPick: (key, pick) =>
+    set((s) => ({ answerPicks: { ...s.answerPicks, [key]: pick } })),
   drafts: {},
   setDraft: (agentId, text) =>
     set((s) => ({ drafts: { ...s.drafts, [agentId]: text } })),

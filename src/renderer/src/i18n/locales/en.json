@@ -161,7 +161,17 @@
     "mailNote": "What should change?",
     "mailSendNote": "Send note",
     "mailCancel": "Cancel",
-    "mailStanding": "From now on, send emails like this without asking"
+    "mailStanding": "From now on, send emails like this without asking",
+    "recommended": "Recommended",
+    "ownAnswer": "Or write your own answer",
+    "addNote": "Add a note (optional)",
+    "replyOption": "Reply with option {{n}}",
+    "replyOptionNote": "Reply with option {{n}} and note",
+    "replyOptionAria": "Reply with option {{n}}: {{label}}",
+    "replyPartial": "Reply to {{n}} of {{total}}",
+    "partAnswer": "Your answer",
+    "partOwn": "Or your own answer",
+    "anythingElse": "Anything else (optional)"
   },
   "agentStrip": {
     "notePlaceholder": "One line per bullet…",

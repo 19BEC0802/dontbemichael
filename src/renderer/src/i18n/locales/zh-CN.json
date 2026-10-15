@@ -161,7 +161,17 @@
     "mailNote": "需要改什么？",
     "mailSendNote": "发送意见",
     "mailCancel": "取消",
-    "mailStanding": "以后这类邮件不用问我，直接发送"
+    "mailStanding": "以后这类邮件不用问我，直接发送",
+    "recommended": "推荐",
+    "ownAnswer": "或写下你自己的回答",
+    "addNote": "添加备注（可选）",
+    "replyOption": "用选项 {{n}} 回复",
+    "replyOptionNote": "用选项 {{n}} 和备注回复",
+    "replyOptionAria": "用选项 {{n}} 回复：{{label}}",
+    "replyPartial": "回复 {{total}} 个中的 {{n}} 个",
+    "partAnswer": "你的回答",
+    "partOwn": "或你自己的回答",
+    "anythingElse": "其他补充（可选）"
   },
   "agentStrip": {
     "notePlaceholder": "每行一条…",

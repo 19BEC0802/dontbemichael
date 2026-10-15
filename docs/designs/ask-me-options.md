@@ -1,6 +1,6 @@
 # Ask me: answering options and several questions
 
-Status: design reviewed and approved (owner, 2026-10-15). Not built. Eng review next.
+Status: design and eng reviewed (owner, 2026-10-15); built on `mit/delete-team-member` the same day.
 
 ## Problem
 
