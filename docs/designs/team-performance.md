@@ -170,16 +170,17 @@ none; the `advice-applied` audit event (Section 3) and the shared cost fold (Sec
 | Data point | Source | Notes |
 |---|---|---|
 | `run-dispatch` (mission id, agent) | `sendMission` | dispatch jobs only; heartbeat and compact are left out |
-| `prompt`, `tool` (tool name), `stop` | hook events in main (`hooks.ts`) | no prompt text or tool input is stored, only the kind, time and tool name |
+| `prompt`, `tool` (tool name), `stop` | hook events in main (`hooks.ts`) | no prompt text or tool input is stored, only the kind, time and tool name; a model change is applied through the renderer roster (eng review correction 3) |
 | `cost` (value, tokens, model) | `runBreakerBeat` sample | the same running totals as the ledger |
 | `card-status` (id, from, to), doneAt | main, diffing tasks.json each tick (Michael writes the file) | 8 s granularity: a change reverted within one tick is missed, fine for medians; doneAt is set each time the card reaches Done |
 | `card-reopen` (id, by) | main, in the reopen path (`hive.ts:3406`) | today a reopen leaves no trace |
 | `mail-decision` (agent, decision) | `mailApprovals.decide()` and where a proposal is cancelled | no subject or body; the mapping below |
 | `presence` (away, back) | main, `powerMonitor.getSystemIdleTime()` each minute plus suspend and resume | owner only; never sent to agents |
 
-A **run** starts at the `prompt` whose text is that run's scheduler message (matched
-in main before the text is dropped, so a run queued behind other work starts when it
-really starts). It ends at the first `stop` after which the agent stays idle for 2
+A **run** starts at the agent's first turn (`prompt` event) after the scheduler message
+reaches its inbox (`run-dispatch`); runs arrive as inbox mail and the agent is woken
+later (`index.ts:1152`, `hooks.ts:521`), so a run queued behind other work starts when
+it really starts (eng review E1). It ends at the first `stop` after which the agent stays idle for 2
 minutes (no prompt, no tool), at that agent's next run, or after 60 minutes (outcome
 unknown). Its value is the agent's cost delta inside the window [estimated: 30 s
 samples; other work in the window counts]. Work count = messages sent, triage
@@ -737,17 +738,335 @@ PLAN_REALITY: phase=ceo rows=7/7 missing=none unverified=0 verdict=complete
 
 None.
 
+# Eng review (plan-eng-review, 2026-10-15)
+
+Target: docs/designs/team-performance.md (this file), after the CEO review.
+
+## Scope challenge
+
+- Complexity: about 26 files [estimated] and 2 new services (TelemetryWriter,
+  TelemetryProcessor): the gate trips. No feature cut proposed (scope settled in the
+  CEO review, D1 to D18). Structure question not asked: owner rule, no code
+  arrangement questions (memory); arrangement kept as planned.
+- Search [Layer 1]: SQLite WAL grows without bound under a never closing reader, and
+  DELETE frees pages without shrinking the file; VACUUM in WAL mode roughly doubles
+  disk use until a TRUNCATE checkpoint. The processor must not hold a read open, and
+  retention needs a plan (Section 4).
+- TODOS cross reference: "Authenticate hook events" (#61, P2) touches this plan (E2 below).
+
+Findings:
+
+1. [P1] (confidence: 9/10) src/main/index.ts:1152 — a run is not a prompt. `sendMission`
+   does `hive.send({ to: payload.to, act: 'inform', subject: payload.subject, body:
+   payload.body }, 'scheduler')`: the run lands as an inbox file, and `hooks.ts:521`
+   says "Inbox files remain durable; the renderer wakes the agent later through its
+   guarded idle-only delivery path". The prompt the agent submits is the wake nudge,
+   not the scheduler message, so the plan's run start rule ("the prompt whose text is
+   that run's scheduler message") never matches. Decision E1.
+2. [P2] (confidence: 9/10) src/main/hooks.ts (the hook socket reads the agent from the
+   frame; TODOS.md "Authenticate hook events", #61) — telemetry is fed by hook frames
+   any agent could forge for itself or another, which undercuts D16's "agents cannot
+   steer their numbers". Decision E2.
+3. Correction (confidence: 9/10) src/main/index.ts:4940 `ipcMain.handle('roster:write'`
+   — the model lives in the renderer roster, so applying a model runs through the same
+   store action Edit agent uses (renderer), with main validating and recording
+   `advice-applied`. No behavior change.
+4. Correction (confidence: 8/10) src/main/modelCatalog.ts (the remote catalog replaces
+   the baked one after `parseModelCatalog`) — `tier` must be added to
+   `modelCatalogPayload` parsing and to `docs/model-catalog.json`, or a refresh drops
+   it. No behavior change.
+
+## Eng decision ledger
+
+### E1: when a scheduled run starts
+Finding: 1, P1, 9/10, src/main/index.ts:1152, eng review
+Plan baseline: run starts at the prompt whose text is the scheduler message (Design, run rule; D10 inferred outcomes, D12)
+Runtime evidence: runs arrive as inbox files from "scheduler"; the agent is woken later by a nudge (hooks.ts:521)
+Comparison grid:
+| Commitment | Current | A | B |
+|---|---|---|---|
+| Run start | prompt equals scheduler text (never matches) | the agent's first turn after the scheduler file reaches its inbox | the moment the agent moves the scheduler file to inbox/.done |
+| Run end, outcome, value rules | approved (D10) | unchanged | unchanged |
+| Agent behavior | none (D10) | none | none |
+Question D1: When does a scheduled run start, given runs arrive as inbox mail? (P1, 9/10; recommendation A)
+Header: Run start
+Options:
+A) First turn after delivery (recommended): a run starts at the agent's first turn after the scheduler mail lands in its inbox; end, outcome and value rules stay as approved; other mail woken in the same turn shares the window (estimate).
+B) When the mail is filed: a run starts when the agent moves the scheduler mail to its done folder; often late, since agents file at the end of a turn.
+State: approved
+Actual answer: A, "First turn after delivery" (owner, D1 of the eng review, 2026-10-15)
+Accepted scope: replace the run start rule with "the agent's first turn (prompt event) after the scheduler message reaches its inbox (`run-dispatch` time)"; tests: a run woken by a nudge starts at that turn; a turn before delivery does not start it.
+History: none
+
+### E2: hook events are not authenticated (#61)
+Finding: 2, P2, 9/10, src/main/hooks.ts (agent read from the frame), TODOS.md "Authenticate hook events", eng review
+Plan baseline: telemetry fed by hook frames as they arrive (D16)
+Runtime evidence: any agent can send a frame naming any agent (TODOS.md, #61)
+Comparison grid:
+| Commitment | Current | A (ship, #61 later) | B (do #61 here) |
+|---|---|---|---|
+| Hook auth | none | none until #61 | per agent secret at spawn; frames with a wrong or missing secret ignored and counted |
+| Owner dock out of the hive (#61 part 2) | in hive/agents/human | unchanged | moved as #61 specifies |
+| Ship timing | n/a | n/a | owner: nothing ships until the whole feature works locally |
+Question D2: Hook events aren't authenticated yet; does that block this build? (recommendation A)
+Owner answer to D2: "do not ship anything yet. build all that is needed to finish this in this branch locally. once all works i will ship and deploy"
+Question D3 (follow-up): Since nothing ships until it all works, should this branch also build hook authentication (#61)? (recommendation A: build it here)
+Header: #61 in branch
+Options:
+A) Build #61 here too (recommended): per agent secret at spawn, events with a wrong or missing secret ignored and counted, the owner's dock moved out of the hive as #61 specifies.
+B) View only; #61 stays a TODO: document the forgeable input gap.
+State: approved
+Actual answer: A, "Build #61 here too" (owner, D3 of the eng review, 2026-10-15), after D2's instruction to build everything locally before shipping
+Accepted scope: implement TODOS.md "Authenticate hook events and keep the owner's messages out of the agents' folder" (#61) in this branch; telemetry drops and counts unauthenticated frames; the TODOS entry is removed when done. Delivery: build the whole feature on the running branch; nothing ships or deploys until the owner says so.
+History: D2 answered with a delivery instruction rather than an option; D3 confirmed the reading.
+
+## Eng Section 1: Architecture
+
+1. [P2] (confidence: 8/10) src/main/index.ts (runBreakerBeat appends a ledger row only
+   "if (sample?.sessionId)", issue #358) — Codex and other transcript fallback members
+   produce samples with an empty session id, so they would write no cost points and
+   show $0, against the approved edge case "Codex or other engines: value from their
+   own pricing" (D14 documents). Necessary implementation of that approved behavior,
+   no question: the telemetry writer stores every sample, keyed by agent and a source
+   id when the session id is empty. (The ledger file's own gate stays as is; D17.)
+2. Distribution: no new artifact; better-sqlite3 already ships for macOS and Windows
+   (`db.ts`), so the build and installer paths are unchanged.
+3. Production failure per new path: harness.db cannot open (native module) -> view says
+   "Team numbers are unavailable" (Section 2 map); hook socket down -> no turn events,
+   view shows the last update time; processor throws -> batch not committed, retried
+   next tick. All handled in the plan.
+
+Dispositions: 1 accepted as necessary implementation of D14's approved edge case.
+
+## Eng Section 2: Code quality
+
+1. [P3] (confidence: 8/10) tools/agent-metrics.cjs:17 (`const fs = require('node:fs');`,
+   plain CommonJS with only node: requires) — the CLI cannot import TypeScript from
+   `src/shared`, so it is not a caller of the extracted cost fold. Shared fold callers:
+   `costLifetime.ts:60` and the new processor (proposed). The CLI keeps its copy; a
+   fixture test pins both to the same numbers (Section 3). Correction to T3.
+2. [P3] (confidence: 8/10) src/main/hive.ts:3310 (`readTasks` returns tasks.json) — the
+   8 s tick that refreshes owner requests already reads tasks.json; the card status diff
+   reuses that read instead of a second file read. Correction, no behavior change.
+3. [P3] (confidence: 7/10) per the search check — the processor must never hold a read
+   open between ticks (WAL cannot be recycled under a long lived reader) and must do
+   its reads and rollup writes inside one short transaction. Correction.
+
+Dispositions: 1 to 3 accepted as corrections (no behavior change).
+
+### E3: regression contract for hook authentication (#61)
+Finding: Section 3, regression risk (IRON RULE), 9/10, 41 test files exercise the hook path (test/hive-hook-node.test.cjs, test/hook-frame-paths.test.cjs, test/windows-hook-shell.test.cjs, ...), eng review
+Plan baseline: E2 approved building #61 here; contract unset
+Comparison grid:
+| Commitment | A strict everywhere | B strict for telemetry only |
+|---|---|---|
+| Agents the app starts | carry a secret; behave exactly as today | same |
+| Frame with missing or wrong secret | dropped for every consumer, counted per agent | reaches breaker, notes, wake as today; never telemetry |
+Question D4: what happens to a hook event without a valid secret? (recommendation A)
+Header: Auth contract
+State: approved
+Actual answer: A, "Strict: drop and count" (owner, D4 of the eng review, 2026-10-15)
+Accepted scope: every existing hook test passes unchanged except that its frames carry the spawned agent's secret; frames with a missing, wrong or another agent's secret are dropped for every consumer and counted per agent in telemetry:health; tests cover accepted, missing, wrong, cross agent and the Windows shim.
+History: none
+
+## Eng Section 3: Tests
+
+Framework: `node --test` through `tools/run-tests.cjs` (package.json "test"); pure modules
+load with `test/load-ts.cjs`.
+
+```
+CODE PATHS (all proposed)                                   USER FLOWS
+[+] main TelemetryWriter                                    [+] Owner opens Team view
+  ├── [GAP] insert per kind, no prompt text stored            ├── [GAP] rows and office line render from a snapshot
+  ├── [GAP] insert fails -> D15 failure counted               ├── [GAP] empty office: "Collecting since"
+  ├── [GAP] cost point only when changed; Codex no session    ├── [GAP] store unavailable message
+  └── [GAP] unauthenticated frame dropped and counted (E3)    └── [GAP] live push updates an open view
+[+] hooks.ts auth (#61)                                     [+] Owner applies advice
+  ├── [GAP] legit frame accepted (all 41 existing suites)     ├── [GAP] schedule applied, compare and set
+  ├── [GAP] missing / wrong / cross agent secret rejected     ├── [GAP] model applied through the roster
+  └── [GAP] Windows shim carries the secret                   ├── [GAP] double click does nothing twice
+[+] main TelemetryProcessor                                   └── [GAP] stale advice refused with the new one
+  ├── [GAP] run starts at first turn after delivery (E1)    [+] Owner dismisses advice
+  ├── [GAP] idle 2 min end; next run; 60 min cap            └── [GAP] returns only at the next evidence band
+  ├── [GAP] crash mid batch -> no double count
+  ├── [GAP] batch across midnight
+  └── [GAP] never holds a read open between ticks
+[+] shared teamPerformance / teamAdvice / costFold
+  ├── [GAP] each measure; report cards and owner closed cards left out
+  ├── [GAP] each rule at and below its minimum; no data no advice
+  ├── [GAP] Michael never cheaper; never across providers; Fable none
+  └── [GAP] costFold = costLifetime numbers; CLI parity fixture
+[+] tasks diff on the existing tick
+  └── [GAP] status change, doneAt each finish, reopen logged, malformed skipped
+[+] presence
+  └── [GAP] away builder from idle samples, suspend and resume
+
+COVERAGE: 0/33 paths tested (all proposed)  |  every path above needs a test in the build
+QUALITY: all new tests must be ★★★ (behavior + edge + error)
+```
+
+Regression (IRON RULE): the 41 existing hook suites are the regression contract for
+E3; they must pass with only the secret added to their frames. `test/agent-metrics.test.cjs`
+and the cost lifetime tests guard the fold extraction. No LLM or prompt change: no eval.
+
+Test files (match naming): `test/telemetry-store.test.cjs`, `test/telemetry-processor.test.cjs`,
+`test/hook-auth.test.cjs`, `test/team-performance.test.cjs`, `test/team-advice.test.cjs`,
+`test/team-apply.test.cjs`, `test/team-view.test.cjs`. Each carries a Value line.
+
+Dispositions: E3 approved (D4). Test plan artifact written (path in the completion summary).
+
+### E4: raw event retention
+Finding: Section 4, P3, 7/10, Design "Retention. Events kept 400 days" plus the search check (DELETE does not shrink SQLite; VACUUM in WAL doubles disk use), eng review
+Plan baseline: raw events 400 days, then pruned (Design, D14 documents)
+Runtime evidence: [measured: hive/cost-ledger.jsonl] 404,157 of 408,918 rows repeat the previous value; 4,761 changes in ~19 days. Hook event volume unknown [estimated: thousands a day].
+Comparison grid:
+| Commitment | A | B |
+|---|---|---|
+| Raw retention | 35 days | 400 days |
+| Rollups and runs | forever | forever |
+| Pruning | small nightly chunks, incremental auto vacuum | small chunks, vacuum when mostly free space |
+Question D5: How long does the telemetry store keep raw data points? (recommendation A)
+Header: Retention
+State: approved
+Actual answer: B, "400 days raw, as planned" (owner, D5 of the eng review, 2026-10-15)
+Accepted scope: raw events kept 400 days, pruned in small chunks by the processor; a VACUUM followed by a TRUNCATE checkpoint runs only when free pages exceed half the file, during an idle period; rollups and runs kept forever. Lossless correction kept: a cost point identical to the agent's previous one is not stored (running totals; no information lost).
+History: none
+
+## Eng Section 4: Performance
+
+1. [P3] (confidence: 8/10) Design "cost samples ... every 30 s" with src/main/index.ts
+   runBreakerBeat — storing every beat would write ~37,000 identical rows a day; store
+   a cost point only when it differs from that agent's last one [measured: 98.8% repeat].
+   Lossless correction.
+2. [P3] (confidence: 7/10) TelemetryWriter on the hook path — one synchronous insert per
+   hook frame on the main thread. Buffer frames and insert them in one transaction at
+   most once a second (and at quit); D15 counts a failed batch. Correction.
+3. Retention and vacuum: decided in E4 (owner kept 400 days).
+4. View reads: rollups only, members x 28 rows; no query in a loop.
+
+Dispositions: 1 and 2 accepted as corrections; E4 approved (D5, option B).
+
+## Outside voice
+
+Skipped by owner policy (memory, 2026-10-01): Codex only for the adversarial code pass,
+no Claude fallback. No completed external review.
+
+## TODO choices
+
+No new TODO. The existing "Authenticate hook events" entry (#61) is now built in this
+branch (E2) and is removed from TODOS.md when it lands.
+
+Approval readiness: PASS. Checked E1 (D1, A), E2 (D2 instruction and D3, A), E3 (D4, A),
+E4 (D5, B). Corrections 3 and 4 (scope challenge), Section 1 item 1, Section 2 items
+1 to 3 and Section 4 items 1 and 2 change no behavior and implement approved D14 or D16
+commitments. Delivery: nothing ships or deploys until the owner says so (D2).
+
+## Eng NOT in scope
+
+- Shipping or deploying anything from this branch before the owner says so (D2).
+- Moving the cost ledger file into the store (D17, TODOS.md).
+- Fable's tier and price (D18, TODOS.md).
+- Making the CLI tool import the shared fold (it stays plain CommonJS; parity test instead).
+
+## Eng what already exists
+
+Reused as is: `db.ts` migrations and WAL store, `hooks.ts` event flow, the 8 s tick's
+tasks read (`hive.ts:3310`), `costLifetime.ts` restart rule (extracted to
+`src/shared/costFold.ts`), `missions:upsert`, `roster:write` through the renderer store,
+`modelCatalog` parsing (gains `tier`), `factoryReset.ts` (harness.db already erased).
+Rebuilt: none.
+
+## Eng failure modes
+
+| Path | Realistic failure | Test | Handling | User sees |
+|---|---|---|---|---|
+| run start | wake nudge never sent (agent busy for hours) | yes | run starts at the real first turn | run counted when it happens |
+| hook auth | engine bridge drops the secret | yes | frames dropped and counted (E3) | that member's activity stops updating; health shows drops |
+| writer batch | disk full during a batch | yes | D15 failure counted | day flagged; advice skips it |
+| processor | long read keeps WAL growing | yes | no read held between ticks | nothing |
+| vacuum | runs during heavy work | yes | only when idle and free pages > half | nothing |
+| apply model | roster save fails in renderer | yes | refused, reason shown | model unchanged |
+
+Critical gaps: 0.
+
+## Worktree parallelization
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| S1 hook auth (#61) | src/main (hooks, hive spawn, hookShell), test/ hook suites | none |
+| S2 pure measures and advice, cost fold | src/shared, test/ | none |
+| S3 telemetry store, writer, processor | src/main (db, index, hooks writer calls) | S1 (hooks.ts), S2 |
+| S4 Team view and apply | src/renderer, src/preload, i18n | S3 (snapshot contract) |
+
+Lane A: S1 then S3 (both touch hooks.ts). Lane B: S2 (independent). Then S4.
+Execution: launch A (S1) and B (S2) together; merge both; then S3; then S4.
+Conflict flag: hooks.ts is shared by S1 and S3; keep them in one lane.
+
+## Eng implementation tasks
+
+Synthesized from this review's findings, on top of the CEO tasks T1 to T10 above.
+Ratios: features ~30x, tests ~50x, security ~10x.
+
+- [ ] **E-T1 (P1, human: ~3d / CC: ~1h)** — hooks — authenticate hook events (#61), strict contract
+  - Surfaced by: Scope challenge 2, E2 (D3), E3 (D4)
+  - Files: src/main/hooks.ts, src/main/hive.ts, src/main/hookShell.ts, test/hook-auth.test.cjs, the 41 hook suites
+  - Verify: node --test test/hook-auth.test.cjs and npm test (all hook suites green with the secret)
+- [ ] **E-T2 (P1, human: ~2h / CC: ~10min)** — processor — run start at the first turn after delivery
+  - Surfaced by: Scope challenge 1, E1 (D1)
+  - Files: src/main/telemetryProcessor.ts
+  - Verify: node --test test/telemetry-processor.test.cjs (nudge woken run, turn before delivery ignored)
+- [ ] **E-T3 (P2, human: ~2h / CC: ~10min)** — writer — cost points for every engine, only on change; one batch per second
+  - Surfaced by: Section 1 item 1, Section 4 items 1 and 2
+  - Files: src/main/telemetryStore.ts, src/main/index.ts
+  - Verify: node --test test/telemetry-store.test.cjs (Codex sample stored, repeat skipped, failed batch counted)
+- [ ] **E-T4 (P2, human: ~2h / CC: ~10min)** — processor — retention 400 days, chunked prune, idle vacuum
+  - Surfaced by: E4 (D5)
+  - Files: src/main/telemetryProcessor.ts
+  - Verify: node --test test/telemetry-processor.test.cjs (prune by age, vacuum only past half free)
+- [ ] **E-T5 (P3, human: ~1h / CC: ~5min)** — catalog — `tier` in the payload parser and docs/model-catalog.json
+  - Surfaced by: Scope challenge 4
+  - Files: src/shared/modelCatalogPayload.ts, src/shared/modelCatalog.json, docs/model-catalog.json
+  - Verify: a catalog refresh keeps tier (unit test)
+
+## Eng completion summary
+
+- Step 0: Scope Challenge — scope accepted as-is
+- Reality rows: 7/7 applicable rows emitted (PLAN_REALITY complete), 0 unverified premises
+- Architecture Review: 1 issue found (Codex cost points)
+- Code Quality Review: 3 issues found (all corrections)
+- Test Review: diagram produced, 33 gaps identified (all proposed paths), regression contract set (E3)
+- Performance Review: 2 issues found (repeat cost points, per frame inserts), retention decided (E4)
+- NOT in scope: written
+- What already exists: written
+- TODOS.md updates: 0 items proposed (the #61 entry moves into this branch)
+- Failure modes: 0 critical gaps flagged
+- Unresolved decisions: 0 in this review
+- Outside voice: codex, skipped (owner policy)
+- Parallelization: 2 lanes, 2 parallel (S1, S2) / 2 sequential (S3, S4)
+- Lake Score: 3/4 answers picked the 10/10 option (E1, E3 yes; E2 follow up yes; E4 chose B)
+- Test plan: ~/.gstack/projects/agentvivekkumar-dontbemichael/moblizeit-mit-local-instance-version-de4202-eng-review-test-plan-20261015-144821.md
+
+REALITY: premise-table pass every scope challenge finding quoted with file:line, unverified=0 src/main/index.ts:1152
+REALITY: already-done pass nothing on origin/main since 2026-10-15 touches these modules src/main/db.ts:1
+REALITY: surface-check pass npm test runs tools/run-tests.cjs; IPC names checked (roster:write, missions:upsert) src/main/index.ts:4940
+REALITY: binding-decisions pass CEO D1 to D18 and owner rules (no code arrangement questions, Codex policy, one running branch) honored docs/designs/team-performance.md:1
+REALITY: numbers pass ledger rows repeating the previous value 98.8% (counted over hive/cost-ledger.jsonl:1-408918); hook event volume is [estimated]
+REALITY: deferred-asks pass #61's requests (secret per agent, owner dock out of the hive) both in scope (E2) TODOS.md:1
+REALITY: pr-count pass one branch, nothing ships until the owner says so (D2) docs/designs/team-performance.md:1
+
+PLAN_REALITY: phase=eng rows=7/7 missing=none unverified=0 verdict=complete
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 7 proposals, 6 accepted, 0 deferred (2 review TODOs deferred) |
-| Outside Review | codex, plan review | Independent 2nd opinion | 0 | skipped | owner policy (Codex only for the adversarial code pass, no Claude fallback); no completed external review |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 for this plan | not run | the 2026-10-15 run covered the Ask me plan, not this one |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 7 proposals, 6 accepted, 0 deferred |
+| Outside Review | codex, plan review (CEO and eng) | Independent 2nd opinion | 0 | skipped | owner policy (Codex only for the adversarial code pass, no Claude fallback); no completed external review |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | ISSUES OPEN | 39 issues (1 architecture, 3 code quality, 2 performance, 33 test gaps for proposed paths), 0 critical gaps; all mapped to tasks, 4 decisions approved |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 for this plan | not run | recommended: the Team view is a new screen |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | not run | not applicable |
 
-- **OUTSIDE COVERAGE:** codex, plan-review phase, skipped by owner policy, no findings; no native fallback by the same policy.
-- **VERDICT:** CEO CLEARED; eng review required.
+- **OUTSIDE COVERAGE:** codex, plan-review phase (CEO and eng), skipped by owner policy, no findings; no native fallback by the same policy.
+- **VERDICT:** CEO CLEARED; eng review ISSUES OPEN (findings mapped to tasks E-T1 to E-T5 and T1 to T10, no unresolved decisions); eng review required.
 
 NO UNRESOLVED DECISIONS
