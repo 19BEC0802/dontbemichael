@@ -333,8 +333,10 @@ export function App() {
   // column stays mounted there, only hidden, so a person's terminal and a half
   // written reply survive the switch; opening it goes back to the office.
   // A file tab keeps it beside the file, so an Ask me card stays answerable
-  // while its file is read (docs/designs/open-file-tab.md, F1).
-  const columnShown = columnOpen && (floorView === 'office' || floorView === 'file' || floorView === 'pulse');
+  // while its file is read (docs/designs/open-file-tab.md, F1). Pulse keeps it
+  // too, so Needs you answers beside the numbers (design D14).
+  const columnView = floorView === 'office' || floorView === 'file' || floorView === 'pulse';
+  const columnShown = columnOpen && columnView;
   const columnRef = useRef<HTMLDivElement>(null);
   const lastColumnMode = useRef<'board' | 'person'>('board');
   // An ask arriving, or waiting at launch, opens the board. Focus stays put.
@@ -531,7 +533,7 @@ export function App() {
             className={columnOpen ? 'cth-col-in' : 'cth-col-out'}
             style={{
               width: sidebarWidth, flexShrink: 0, minHeight: 0, zIndex: 60,
-              display: floorView === 'office' || floorView === 'file' ? 'flex' : 'none', flexDirection: 'column', overflow: 'hidden',
+              display: columnView ? 'flex' : 'none', flexDirection: 'column', overflow: 'hidden',
               ...(columnOpen
                 ? { position: 'relative', margin: '4px 6px 0 0' }
                 : { position: 'absolute', top: 4, bottom: 0, insetInlineEnd: 6 })

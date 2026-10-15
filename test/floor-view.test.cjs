@@ -117,9 +117,9 @@ test('Tasks and Who talks to whom take the whole window: the right column hides 
   const app = read('src/renderer/src/App.tsx');
   // A file tab keeps the column beside it (open-file-tab.md, F1); Tasks and the graph still hide it.
   // Pulse keeps the column beside it too (team-performance.md, design D14).
-  assert.match(app, /const columnShown = columnOpen && \(floorView === 'office' \|\| floorView === 'file' \|\| floorView === 'pulse'\);/);
+  assert.match(app, /const columnView = floorView === 'office' \|\| floorView === 'file' \|\| floorView === 'pulse';\s*const columnShown = columnOpen && columnView;/);
   assert.match(app, /\{columnShown && \(\n\s+<SidebarSplitter/);
-  assert.match(app, /display: floorView === 'office' \|\| floorView === 'file' \? 'flex' : 'none', flexDirection: 'column'/);
+  assert.match(app, /display: columnView \? 'flex' : 'none', flexDirection: 'column'/);
   assert.match(app, /\{\(columnOpen \|\| exiting\) && \(/, 'the column stays mounted while hidden');
   const store = read('src/renderer/src/store/store.ts');
   assert.match(store, /function officeView\(view: FloorView\): \{ floorView\?: FloorView \} \{\n(?:\s+\/\/[^\n]*\n)?\s+if \(view === 'office' \|\| view === 'file' \|\| view === 'pulse'\) return \{\};\n\s+try \{ window\.localStorage\.setItem\(LS_FLOOR_VIEW, 'office'\); \}/);

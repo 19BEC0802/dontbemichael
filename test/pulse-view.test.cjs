@@ -23,7 +23,9 @@ test('Pulse is a fixed view tab between Tasks and Who talks to whom, and keeps t
   const top = read('src/renderer/src/shell/TopBar.tsx');
   assert.match(top, /tab\('tasks', t\('floorView\.tasks'\)\)\}\s*\{tab\('pulse', t\('floorView\.pulse'\)\)\}\s*\{tab\('graph'/);
   assert.equal(en.floorView.pulse, 'Pulse');
-  assert.match(read('src/renderer/src/App.tsx'), /columnShown = columnOpen && \(floorView === 'office' \|\| floorView === 'file' \|\| floorView === 'pulse'\)/);
+  const app = read('src/renderer/src/App.tsx');
+  assert.match(app, /const columnView = floorView === 'office' \|\| floorView === 'file' \|\| floorView === 'pulse';\s*const columnShown = columnOpen && columnView;/);
+  assert.match(app, /display: columnView \? 'flex' : 'none'/, 'the column shows on Pulse, not only stays mounted');
   assert.match(read('src/renderer/src/store/store.ts'), /if \(view === 'office' \|\| view === 'file' \|\| view === 'pulse'\) return \{\};/);
 });
 
