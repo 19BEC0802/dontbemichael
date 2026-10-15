@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 Don't Be Michael keeps its own version line, starting at 0.0.1.
 
+## [Unreleased]
+
+### Added
+
+- **Delete a team member for good.** Edit agent has a Danger zone under the engine with a Delete button. After one confirm, the team member stops, their schedules pause, work bound to them goes back to the teammates it was taken from, and they leave the floor with no way back. Michael's roster skips them from then on, and reminders for their cards go to him. Michael, his assistant and Research have no Delete (Research is turned off in Settings). Before this, no hire could leave the team: the old close button was hidden on 2026-09-24. (Agent behavior: who Michael can route to.)
+
 ## [0.2.1] (2026-10-14)
 
 ### Added

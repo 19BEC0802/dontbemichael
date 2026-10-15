@@ -688,7 +688,14 @@
     "modelCurrent": "{{model}}（当前）",
     "engineNote": "新的引擎或模型会在该成员下次启动时生效。",
     "researchEngine": "{{name}} 只在 Claude 上运行，隐私防护只在那里有效。",
-    "researchName": "名字随你取。无论叫什么，它都是你团队的研究成员，也是唯一使用互联网的成员。"
+    "researchName": "名字随你取。无论叫什么，它都是你团队的研究成员，也是唯一使用互联网的成员。",
+    "danger": "危险区域",
+    "delete": "删除 {{name}}",
+    "deleting": "正在删除…",
+    "deleteInfo": "立即停止 {{name}} 并将其永久移出团队。其日程会暂停，由你的办公室经理跟进其卡片。此操作无法撤销。",
+    "deleteConfirm": "永久删除 {{name}}？对方会立即停止并离开团队。此操作无法撤销。",
+    "deleteConfirmSchedules": "永久删除 {{name}}？对方会立即停止并离开团队，其 {{count}} 个日程会暂停。此操作无法撤销。",
+    "deleteConfirmSchedulesPlural": "永久删除 {{name}}？对方会立即停止并离开团队，其 {{count}} 个日程会暂停。此操作无法撤销。"
   },
   "onboarding": {
     "damagedConfig": "无法读取你保存的设置，因此需要重新设置。旧文件保存在",

@@ -688,7 +688,14 @@
     "modelCurrent": "{{model}} (current)",
     "engineNote": "A new engine or model takes effect the next time this team member starts.",
     "researchEngine": "{{name}} runs only on Claude, where the privacy protection works.",
-    "researchName": "Name them anything. Whatever you call them, they stay your Research team member, the one who uses the internet."
+    "researchName": "Name them anything. Whatever you call them, they stay your Research team member, the one who uses the internet.",
+    "danger": "Danger zone",
+    "delete": "Delete {{name}}",
+    "deleting": "Deleting…",
+    "deleteInfo": "Stops {{name}} now and takes them off the team for good. Their schedules pause and your office manager follows up on their cards. This can't be undone.",
+    "deleteConfirm": "Delete {{name}} for good? They stop now and leave the team. This can't be undone.",
+    "deleteConfirmSchedules": "Delete {{name}} for good? They stop now and leave the team, and their {{count}} schedule pauses. This can't be undone.",
+    "deleteConfirmSchedulesPlural": "Delete {{name}} for good? They stop now and leave the team, and their {{count}} schedules pause. This can't be undone."
   },
   "onboarding": {
     "damagedConfig": "Your saved settings could not be read, so setup starts again. The old file is kept at",
