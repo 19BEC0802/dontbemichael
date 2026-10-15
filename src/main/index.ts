@@ -6172,6 +6172,10 @@ ipcMain.handle('app:resetAll', () => {
   try { memory.stop(); } catch (e) { console.error('[reset] memory.stop:', e); }
   try { memoryTidy.stop(); } catch (e) { console.error('[reset] memoryTidy.stop:', e); }
   try { persist.close(); } catch (e) { console.error('[reset] persist.close:', e); }
+  // The same stops as quitting (teardownAndQuit): proxy sidecars and the
+  // webhook server would otherwise outlive the relaunch.
+  try { hive.stopAllProxyBridges(); } catch (e) { console.error('[reset] stopAllProxyBridges:', e); }
+  try { stopWebhookServer(); } catch (e) { console.error('[reset] webhook.stop:', e); }
   try { ptyManager.killAll(); } catch (e) { console.error('[reset] killAll:', e); }
   try { hive.removeExposedCodexData(); } catch (e) { console.error('[reset] removeExposedCodexData:', e); }
   // The roster is the renderer's half of the same state, so it retires with the

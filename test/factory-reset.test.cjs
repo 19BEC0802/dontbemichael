@@ -121,9 +121,10 @@ test('every file the app keeps in an office\'s private folder is erased by a res
   const dir = path.join(__dirname, '..', 'src', 'main');
   const names = new Set(['agent-mcp', 'owner']); // through agentPrivatePaths.ts helpers
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.ts'))) {
-    for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/privateRoot\([^)]*\),\s*'([^']+)'/g)) names.add(m[1]);
+    for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/privateRoot\((?:[^()]|\([^()]*\))*\),\s*'([^']+)'/g)) names.add(m[1]);
   }
   assert.ok(names.size >= 8, `the scan finds the private files (${[...names].join(', ')})`);
+  assert.ok(names.has('research-mined'), 'a call nested in privateRoot() is seen too');
   for (const n of names) assert.ok(PRIVATE_ENTRIES.includes(n), `${n} is not erased`);
 });
 
@@ -172,5 +173,6 @@ test('app:resetAll erases the office data before it resets the config', () => {
   assert.ok(erase > 0, 'the reset calls eraseOfficeData');
   assert.ok(erase < body.indexOf('\n  resetConfig();'), 'before the config forgets the office folder');
   assert.match(body, /\.\.\.\(researchDesk\(\) \? \[projectDir\(researchDesk\(\)!\)\] : \[\]\),/, 'Research\'s conversation too');
+  assert.ok(body.indexOf('hive.stopAllProxyBridges()') > 0 && body.indexOf('stopWebhookServer()') > 0, 'proxy sidecars and the webhook server stop, as on quit');
   assert.doesNotMatch(body, /hive\.root\(\)|memory\.palacePath\(\)|researchFolders\(\)/, 'office folder paths come only through the office check');
 });

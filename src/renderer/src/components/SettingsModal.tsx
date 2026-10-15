@@ -2337,7 +2337,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           {t('settings.general.dangerZone')}
                         </div>
                         <p style={{ margin: 0, fontSize: 13, lineHeight: '20px', color: 'var(--cth-ink)' }}>
-                          {t('settings.general.dangerDesc', { godName })}
+                          {t('settings.general.dangerDesc')}
                         </p>
                         <div style={{ marginTop: 6 }}>
                           <button type="button" onClick={() => setConfirming(true)} style={{
