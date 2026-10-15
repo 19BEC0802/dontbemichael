@@ -128,10 +128,26 @@ function readJson(answer: string): Record<string, unknown> | null {
     const v = JSON.parse(obj) as unknown;
     if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
     const o = v as Record<string, unknown>;
-    const another = /"decision"\s*:/i.test(a.slice(obj.length));
-    if (another && String(o.decision ?? '').toUpperCase() !== 'DENY') return null;
+    if (String(o.decision ?? '').toUpperCase() !== 'DENY' && laterVerdict(a.slice(obj.length))) return null;
     return o;
   } catch { return null; }
+}
+
+/** Does `rest` hold another JSON object with a "decision" key? Each "{" is tried
+ *  as the start of a whole object, so prose that only mentions the field (a
+ *  schema in an explanation) is not mistaken for a second verdict. */
+function laterVerdict(rest: string): boolean {
+  let n = 0;
+  for (let i = rest.indexOf('{'); i >= 0; i = rest.indexOf('{', i + 1)) {
+    if (++n > 50) return true; // too many to check: fail closed
+    const obj = leadingObject(rest.slice(i));
+    if (!obj) continue;
+    try {
+      const v = JSON.parse(obj) as unknown;
+      if (v && typeof v === 'object' && !Array.isArray(v) && 'decision' in v) return true;
+    } catch { /* not an object; keep looking */ }
+  }
+  return false;
 }
 
 /** The balanced {...} that `text` starts with, or null. */

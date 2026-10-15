@@ -192,3 +192,11 @@ test('a code fence inside the checked text is kept, and a verdict that lets some
   assert.deepEqual(await layer(corrected).l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
   assert.equal((await layer('{"decision":"PASS","flag":false} then {"decision":"PASS"}').l.outbound({ subject: 's', body: 'b' })).decision, 'deny', 'outbound too');
 });
+
+test('an explanation that only mentions the decision field is not a second verdict', async () => {
+  // Value: protects=a PASS with an explanation quoting the schema still passes, and a real later object still blocks; fails_when=the later verdict check goes back to a substring scan or stops parsing objects; why_new=Codex adversarial pass 2; seam=fake runner; no_claim=other model output shapes
+  assert.equal((await layer('{"decision":"PASS"} The schema says use "decision": "PASS" when nothing is private.').l.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'pass');
+  assert.equal((await layer('{"decision":"PASS"} Braces {like these} are fine.').l.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'pass');
+  assert.deepEqual(await layer('{"decision":"PASS"} Actually: {"decision": "DENY", "kinds": ["names"]}').l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
+  assert.deepEqual(await layer('{"decision":"PASS"} ' + '{x} '.repeat(60)).l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, 'too many to check fails closed');
+});
