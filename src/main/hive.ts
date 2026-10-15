@@ -2451,7 +2451,7 @@ export class HiveManager {
       this.dropResearchEntry(inbox, f, 'inbox');
       this.appendLog({ kind: 'drop', reason: 'unstamped-research-inbox', file: createHash('sha256').update(f).digest('hex').slice(0, 16) });
       if (typeof m.from === 'string' && m.from !== RESEARCH_ID && this.registry().agents[m.from]) {
-        this.tellSender(m.from, typeof m.id === 'string' ? m.id : null, m.conversation, NOT_SENT_SUBJECT, REFUSAL_UNSURE);
+        this.tellSender(m.from, typeof m.id === 'string' ? m.id : null, m.conversation, NOT_SENT_SUBJECT, REFUSAL_CHECK_FAILED);
       }
     }
   }
@@ -2484,13 +2484,14 @@ export class HiveManager {
     const next = reason === REFUSAL_CHECK_FAILED
       ? 'This is an app problem. If it keeps happening, tell the owner.'
       : reason === REFUSAL_OFF
-        ? `${n} is off; the owner turns ${n} on in Settings, Research & privacy.`
+        ? `The owner turns ${n} on in Settings, Research & privacy.`
         : 'If this holds up work the owner should know about, tell them what was stopped and why: what stays private is set in Settings, Research & privacy.';
     this.deliver(this.normalize({
       to: godId, act: 'inform', subject: researchText(NOT_SENT_SUBJECT, n),
-      // The subject is the sender's words: quotes and line breaks are dropped so
-      // it can't close the quote and add text in the app's voice.
-      body: `${what} for ${n} ("${String(subject ?? '').replace(/["\u201c\u201d\s]+/g, ' ').trim().slice(0, 80)}") was not sent. ${researchText(reason, n)} ${next}`
+      // The subject is the sender's words: every kind of quote mark and line
+      // break is dropped so it can't close the quote and add text in the app's
+      // voice. The reason's own "Not sent..." opening is not repeated.
+      body: `${what} for ${n} ("${String(subject ?? '').replace(/[\p{Pi}\p{Pf}"\u201e\u201f\u2033\uff02\s]+/gu, ' ').trim().slice(0, 80)}") was not sent: ${researchText(reason, n).replace(/^Not sent( to [^:]+)?: /, '')} ${next}`
     }, PRIVACY_CHECK_SENDER), godId);
   }
 
