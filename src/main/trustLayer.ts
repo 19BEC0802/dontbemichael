@@ -137,6 +137,9 @@ function readJson(answer: string): Record<string, unknown> | null {
  *  as the start of a whole object, so prose that only mentions the field (a
  *  schema in an explanation) is not mistaken for a second verdict. */
 function laterVerdict(rest: string): boolean {
+  // A brace that opens on a decision key, in any case, counts even when what
+  // follows is not valid JSON (a trailing comma, a cut off object).
+  if (/\{[^{}]*"decision"\s*:/i.test(rest)) return true;
   let n = 0;
   for (let i = rest.indexOf('{'); i >= 0; i = rest.indexOf('{', i + 1)) {
     if (++n > 50) return true; // too many to check: fail closed
@@ -144,7 +147,7 @@ function laterVerdict(rest: string): boolean {
     if (!obj) continue;
     try {
       const v = JSON.parse(obj) as unknown;
-      if (v && typeof v === 'object' && !Array.isArray(v) && 'decision' in v) return true;
+      if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).some((k) => k.toLowerCase() === 'decision')) return true;
     } catch { /* not an object; keep looking */ }
   }
   return false;

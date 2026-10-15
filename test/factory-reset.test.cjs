@@ -181,14 +181,12 @@ test('app:resetAll erases the office data before it resets the config', () => {
   assert.doesNotMatch(body, /hive\.root\(\)|memory\.palacePath\(\)|researchFolders\(\)/, 'office folder paths come only through the office check');
 });
 
-test('a moved knowledge store is matched by its own entries, and both transcript folder spellings are found', () => {
+test('the knowledge store layout the reset relies on, and both transcript folder spellings', () => {
   // Value: protects=a reset erases knowledge kept outside the app's data folder and every transcript folder for a path; fails_when=the store entries or the legacy spelling are dropped; why_new=Codex adversarial review; seam=CLAUDE_CONFIG_DIR; no_claim=the real Claude Code layout beyond these two spellings
-  const { KNOWLEDGE_STORE_ENTRIES } = loadTs('src/main/factoryReset.ts');
   const kg = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'kg-core.cjs'), 'utf8');
   assert.match(kg, /path\.join\(kgRoot, 'docs'\)/);
   assert.match(kg, /path\.join\(kgRoot, 'index\.jsonl'\)/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'knowledge.ts'), 'utf8'), /const dir = join\(root, 'meaning'\);/);
-  assert.deepEqual([...KNOWLEDGE_STORE_ENTRIES], ['docs', 'index.jsonl', 'meaning']);
   const saved = process.env.CLAUDE_CONFIG_DIR;
   process.env.CLAUDE_CONFIG_DIR = '/tmp/cc';
   try {
@@ -206,7 +204,12 @@ test('a moved knowledge store is erased only when it really is one, and a damage
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-kg-data-'));
   t.after(() => { for (const d of [root, userData]) fs.rmSync(d, { recursive: true, force: true }); });
   const store = path.join(root, 'store');
-  seed(store, ['docs', 'meaning']);
+  fs.mkdirSync(path.join(store, 'docs', 'd1'), { recursive: true });
+  fs.writeFileSync(path.join(store, 'docs', 'd1', 'meta.json'), '{}');
+  fs.mkdirSync(path.join(store, 'docs', 'd2'), { recursive: true });
+  fs.writeFileSync(path.join(store, 'docs', 'd2', 'meta.json'), '{}');
+  fs.mkdirSync(path.join(store, 'meaning'));
+  fs.writeFileSync(path.join(store, 'meaning', 'd1.md'), 'x');
   fs.writeFileSync(path.join(store, 'index.jsonl'), JSON.stringify({ docId: 'd1', title: 't', source: 's', modality: 'text', chunkIdx: 0, text: 'x' }) + '\n');
   fs.writeFileSync(path.join(store, 'mine.txt'), 'mine');
   const notStore = path.join(root, 'project');
@@ -216,12 +219,27 @@ test('a moved knowledge store is erased only when it really is one, and a damage
   assert.equal(isKnowledgeStore(notStore), false);
   assert.deepEqual(eraseOfficeData({ home: null, userData, knowledgeRoot: notStore }), []);
   assert.ok(fs.existsSync(path.join(notStore, 'docs', 'inside.txt')), 'not a store, so its docs stay');
+  // A store set up inside the owner's own folder that already held files in docs/ and meaning/.
+  fs.writeFileSync(path.join(store, 'docs', 'contract.pdf'), 'mine');
+  fs.writeFileSync(path.join(store, 'meaning', 'notes.txt'), 'mine');
   assert.deepEqual(eraseOfficeData({ home: null, userData, knowledgeRoot: store }), []);
-  for (const n of ['docs', 'index.jsonl', 'meaning']) assert.equal(fs.existsSync(path.join(store, n)), false, n);
+  for (const n of ['index.jsonl', 'docs/d1', 'docs/d2', 'meaning/d1.md']) assert.equal(fs.existsSync(path.join(store, n)), false, n);
+  assert.equal(fs.readFileSync(path.join(store, 'docs', 'contract.pdf'), 'utf8'), 'mine', 'only the store\'s own documents go');
+  assert.equal(fs.readFileSync(path.join(store, 'meaning', 'notes.txt'), 'utf8'), 'mine');
   assert.equal(fs.readFileSync(path.join(store, 'mine.txt'), 'utf8'), 'mine', 'the folder it sits in keeps everything else');
+  fs.rmSync(path.join(store, 'docs', 'contract.pdf')); fs.rmSync(path.join(store, 'meaning', 'notes.txt'));
+  fs.mkdirSync(path.join(store, 'docs', 'd3')); fs.writeFileSync(path.join(store, 'docs', 'd3', 'meta.json'), '{}');
+  fs.writeFileSync(path.join(store, 'index.jsonl'), '');
+  assert.deepEqual(eraseOfficeData({ home: null, userData, knowledgeRoot: store }), []);
+  assert.equal(fs.existsSync(path.join(store, 'docs')), false, 'an emptied docs folder goes');
+  assert.equal(fs.existsSync(path.join(store, 'meaning')), false);
   const damaged = path.join(root, 'office');
-  seed(damaged, ['roster-backups', 'agent-settings', 'worktrees']);
+  seed(damaged, ['roster-backups', 'agent-settings']);
+  fs.mkdirSync(path.join(damaged, 'worktrees', 'pam'), { recursive: true });
+  fs.writeFileSync(path.join(damaged, 'worktrees', 'pam', '.git'), 'gitdir: /x/.git/worktrees/pam');
+  fs.mkdirSync(path.join(damaged, 'worktrees', 'my-repo', '.git'), { recursive: true });
   assert.deepEqual(eraseOfficeData({ home: damaged, userData }), []);
   assert.equal(fs.existsSync(path.join(damaged, 'agent-settings')), false, 'no registry, but the reset just archived its roster');
-  assert.equal(fs.existsSync(path.join(damaged, 'worktrees')), false, 'agents\' worktrees go too');
+  assert.equal(fs.existsSync(path.join(damaged, 'worktrees', 'pam')), false, 'an agent\'s worktree goes');
+  assert.ok(fs.existsSync(path.join(damaged, 'worktrees', 'my-repo', '.git')), 'a real repository the owner keeps there stays');
 });

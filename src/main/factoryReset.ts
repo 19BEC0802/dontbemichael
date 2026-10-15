@@ -31,9 +31,7 @@ export const OFFICE_FOLDER_ENTRIES = [
   AGENT_TMP_DIR,
   RESEARCH_DESK_DIR,
   'hallways.json',
-  'tunnels.json',
-  // Isolated agents' git worktrees (index.ts), with any work left in them.
-  'worktrees'
+  'tunnels.json'
 ] as const;
 
 /** What the app keeps in `<office>/private/` (shared/agentPrivatePaths.ts and
@@ -73,10 +71,6 @@ export const APP_DATA_ENTRIES = [
   'pastes',
   ...CHECK_FOLDERS
 ] as const;
-
-/** What the Company knowledge store keeps in its folder (kg-core.cjs, knowledge.ts),
- *  removed by name when the owner moved the store out of the app's data folder. */
-export const KNOWLEDGE_STORE_ENTRIES = ['docs', 'index.jsonl', 'meaning'] as const;
 
 /** In the app's data folder and kept by a reset: they describe this install,
  *  not the office (test/factory-reset.test.cjs checks every name is in one list). */
@@ -125,7 +119,9 @@ export function eraseOfficeData(p: { home: string | null; userData: string; extr
   // own entries, and only when it really is one.
   const kg = p.knowledgeRoot && isKnowledgeStore(p.knowledgeRoot) ? p.knowledgeRoot : null;
   const targets = [
-    ...(kg ? KNOWLEDGE_STORE_ENTRIES.map((n) => join(kg, n)) : []),
+    ...(kg ? knowledgeStoreEntries(kg) : []),
+    // Isolated agents' git worktrees (index.ts), each with any work left in it.
+    ...(home ? appWorktrees(home) : []),
     ...(home ? OFFICE_FOLDER_ENTRIES.map((n) => join(home, n)) : []),
     ...(home ? PRIVATE_ENTRIES.map((n) => join(privateRoot(home), n)) : []),
     // Only the app's own office record, never an owner's file of that name.
@@ -140,9 +136,45 @@ export function eraseOfficeData(p: { home: string | null; userData: string; extr
     // to let go, without freezing the window for long.
     try { rmSync(t, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch { failed.push(t); }
   }
-  if (home) {
-    const priv = privateRoot(home);
-    try { if (readdirSync(priv).length === 0) rmdirSync(priv); } catch { /* absent, or the owner's things stay */ }
+  // A folder the app made goes once nothing of the owner's is left in it.
+  const emptied = [
+    ...(home ? [privateRoot(home), join(home, 'worktrees')] : []),
+    ...(kg ? [join(kg, 'docs'), join(kg, 'meaning')] : [])
+  ];
+  for (const dir of emptied) {
+    try { if (readdirSync(dir).length === 0) rmdirSync(dir); } catch { /* absent, or the owner's things stay */ }
   }
   return failed;
+}
+
+/** The store's own entries: its index, and each document folder and meaning
+ *  file it names (or that holds kg-core's meta.json). Nothing else in docs/ or
+ *  meaning/ is touched, so an owner's own files there stay. */
+function knowledgeStoreEntries(kg: string): string[] {
+  const ids = new Set<string>();
+  try {
+    for (const line of readFileSync(join(kg, 'index.jsonl'), 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try { const row = JSON.parse(line) as { docId?: unknown }; if (typeof row.docId === 'string') ids.add(row.docId); } catch { /* not a row */ }
+    }
+  } catch { /* no index */ }
+  try { for (const d of readdirSync(join(kg, 'docs'))) if (existsSync(join(kg, 'docs', d, 'meta.json'))) ids.add(d); } catch { /* no docs */ }
+  const safe = [...ids].filter((id) => /^[A-Za-z0-9_-]+$/.test(id));
+  return [
+    join(kg, 'index.jsonl'),
+    ...safe.map((id) => join(kg, 'docs', id)),
+    ...safe.map((id) => join(kg, 'meaning', `${id}.md`))
+  ];
+}
+
+/** The git worktrees the app made for isolated agents: each child of
+ *  `<office>/worktrees` whose `.git` is a file (a worktree's pointer), never a
+ *  folder the owner keeps there. */
+function appWorktrees(home: string): string[] {
+  const root = join(home, 'worktrees');
+  try {
+    return readdirSync(root).map((d) => join(root, d)).filter((d) => {
+      try { return statSync(join(d, '.git')).isFile(); } catch { return false; }
+    });
+  } catch { return []; }
 }

@@ -200,3 +200,13 @@ test('an explanation that only mentions the decision field is not a second verdi
   assert.deepEqual(await layer('{"decision":"PASS"} Actually: {"decision": "DENY", "kinds": ["names"]}').l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
   assert.deepEqual(await layer('{"decision":"PASS"} ' + '{x} '.repeat(60)).l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, 'too many to check fails closed');
 });
+
+test('a malformed or differently cased later verdict still blocks a PASS', async () => {
+  // Value: protects=a correction the model writes badly can't leave a PASS standing; fails_when=the decision key check stops ignoring case or needs valid JSON; why_new=ship verification pass; seam=fake runner; no_claim=other model output shapes
+  for (const answer of [
+    '{"decision":"PASS"} Actually: {"decision":"DENY","kinds":["names"],}',
+    '{"decision":"PASS"} Actually: {"Decision":"DENY"}',
+    '{"decision":"PASS"} Actually: {"decision":"DENY","kinds":[names]}',
+    '{"decision":"PASS"} Actually: {"decision": "DENY"'
+  ]) assert.deepEqual(await layer(answer).l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, answer);
+});
