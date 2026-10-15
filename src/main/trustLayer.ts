@@ -114,21 +114,23 @@ export function outboundPrompt(subject: string, body: string, nonce: string): st
  *  must start with it, bare or in a code fence; text after it is ignored, so a
  *  verdict followed by a sentence of explanation still counts (seen live: every
  *  check in an office failed that way). Nothing later in the answer is ever
- *  read as the verdict, so a quoted object can't stand in for it. */
+ *  read as the verdict, so a quoted object can't stand in for it, and a
+ *  verdict that lets something through is not trusted when another verdict
+ *  follows it (a self correction, or one copied from the text checked).
+ *  leadingObject reads strings, so a code fence inside the text is kept. */
 function readJson(answer: string): Record<string, unknown> | null {
   let a = answer.trim();
   const fenced = /^```[a-z]*[ \t]*\n?/i.exec(a);
-  if (fenced) {
-    a = a.slice(fenced[0].length);
-    const end = a.indexOf('```');
-    if (end >= 0) a = a.slice(0, end);
-    a = a.trim();
-  }
+  if (fenced) a = a.slice(fenced[0].length).trim();
   const obj = leadingObject(a);
   if (obj === null) return null;
   try {
     const v = JSON.parse(obj) as unknown;
-    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const o = v as Record<string, unknown>;
+    const another = /"decision"\s*:/i.test(a.slice(obj.length));
+    if (another && String(o.decision ?? '').toUpperCase() !== 'DENY') return null;
+    return o;
   } catch { return null; }
 }
 

@@ -92,10 +92,10 @@ test('unsure, unreadable, failed or slow checks deny, saying the check could not
     assert.deepEqual(await layer(answer).l.inbound({ subject: 'x', body: 'Pizza trends' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, String(answer));
   }
   const thrower = T.makeTrustLayer({ run: async () => { throw new Error('no model'); }, settings: () => dataClassSettings(undefined) });
-  assert.equal((await thrower.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'deny');
+  assert.deepEqual(await thrower.inbound({ subject: 'x', body: 'Pizza trends' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
   const slow = T.makeTrustLayer({ run: () => new Promise(() => {}), settings: () => dataClassSettings(undefined), timeoutMs: 20 });
-  assert.equal((await slow.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'deny');
-  assert.equal((await slow.outbound({ subject: 'x', body: 'An answer' })).decision, 'deny');
+  assert.deepEqual(await slow.inbound({ subject: 'x', body: 'Pizza trends' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
+  assert.deepEqual(await slow.outbound({ subject: 'x', body: 'An answer' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
 });
 
 test('outbound cleans instructions aimed at agents and says when to flag', async () => {
@@ -136,7 +136,7 @@ test('unreadable or overlong outbound answers deny, and so do unreadable setting
   }
   assert.deepEqual(await layer(json({ decision: 'PASS', flag: false })).l.outbound({ subject: 's', body: 'w '.repeat(T.TRUST_MAX_CHARS) }), { decision: 'deny', reason: R.REFUSAL_TOO_LONG });
   const bad = T.makeTrustLayer({ run: async () => json({ decision: 'PASS' }), settings: () => { throw new Error('mid write'); } });
-  assert.equal((await bad.inbound({ subject: 'x', body: 'y' })).decision, 'deny');
+  assert.deepEqual(await bad.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
 });
 
 test('zero width and fullwidth characters do not hide a key or an email', async () => {
@@ -180,4 +180,15 @@ test('an escaped quote stays inside the text, an unclosed fence is read, and a c
   assert.equal((await layer(quoted + ' Done.').l.inbound({ subject: 'Q', body: 'x' })).body, 'Ask about the "hi}" sign');
   assert.equal((await layer('```json\n{"decision":"PASS"}').l.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'pass', 'no closing fence');
   assert.deepEqual(await layer('{"decision":"PASS"').l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, 'a cut off verdict');
+});
+
+test('a code fence inside the checked text is kept, and a verdict that lets something through is not trusted when another follows', async () => {
+  // Value: protects=Research findings with code are not dropped, and a PASS followed by a corrected DENY never reads as PASS; fails_when=the fence cut returns or the later-verdict rule is dropped; why_new=ship red team and security review; seam=fake runner; no_claim=other model output shapes
+  const body = 'Run:\n```\nnpm ci\n```';
+  const fencedClean = '```json\n' + json({ decision: 'CLEAN', subject: 'Q', body, removed: ['names'] }) + '\n```\nI removed the name.';
+  assert.equal((await layer(fencedClean).l.inbound({ subject: 'Q', body: 'x' })).body, body);
+  assert.equal((await layer('```json\n{"decision":"PASS","flag":false}\n```').l.outbound({ subject: 's', body: 'b' })).decision, 'pass');
+  const corrected = '{"decision":"PASS"}\nWait, it names a person: {"decision":"DENY","kinds":["names"]}';
+  assert.deepEqual(await layer(corrected).l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED });
+  assert.equal((await layer('{"decision":"PASS","flag":false} then {"decision":"PASS"}').l.outbound({ subject: 's', body: 'b' })).decision, 'deny', 'outbound too');
 });
