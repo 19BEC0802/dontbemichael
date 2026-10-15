@@ -110,7 +110,7 @@ import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { pastesDir, savePaste, sweepOldPastes } from './pastes';
-import { CHECK_FOLDERS, eraseOfficeData } from './factoryReset';
+import { CHECK_FOLDERS, STANDING_CHECK_DIR, TRUST_CHECK_DIR, eraseOfficeData } from './factoryReset';
 import { buildWorkerLaunch } from './workerLaunch';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
@@ -617,7 +617,7 @@ const standingFit = standingFitCheck({
   // An empty folder only the app writes, never the office folder agents work
   // in, so no CLAUDE.md or project settings an agent left can sway the check.
   cwd: () => {
-    const dir = join(app.getPath('userData'), 'standing-check');
+    const dir = join(app.getPath('userData'), STANDING_CHECK_DIR);
     mkdirSync(dir, { recursive: true });
     // Trusted up front, as agent folders are at spawn, so the check never
     // stops on Claude Code's "trust this folder" question.
@@ -655,7 +655,7 @@ function sweepOldCheckTranscripts(): void {
 const trustLayer = makeTrustLayer({
   run: async (prompt) => {
     sweepOldCheckTranscripts();
-    const dir = join(app.getPath('userData'), 'trust-check');
+    const dir = join(app.getPath('userData'), TRUST_CHECK_DIR);
     mkdirSync(dir, { recursive: true });
     try { ensureClaudePermissionsAccepted(dir); } catch { /* the check fails closed */ }
     // Always Claude, whatever engine the office runs on: the check uses
@@ -6190,8 +6190,10 @@ ipcMain.handle('app:resetAll', () => {
   const failed = eraseOfficeData({
     home: resetHome ? expandTilde(resetHome) : null,
     userData,
+    // Only folders outside the office folder: the hive, palace and Research's
+    // desk are in its own entries, removed only when it really is an office.
     extra: [
-      hive.root() ?? '', memory.palacePath() ?? '', ...researchFolders(),
+      ...(researchDesk() ? [projectDir(researchDesk()!)] : []),
       ...CHECK_FOLDERS.map((f) => projectDir(join(userData, f)))
     ]
   });

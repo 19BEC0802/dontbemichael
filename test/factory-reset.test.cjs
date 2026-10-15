@@ -81,14 +81,20 @@ test('a folder that is not an office, or is the home folder, keeps everything in
   // Value: protects=a reset with a broad or wrong office folder never deletes the owner's own folders of the same names; fails_when=isOfficeFolder is dropped or the home folder check goes; why_new=ship security review; seam=HOME env; no_claim=Windows home resolution
   const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-plain-'));
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-plain-data-'));
-  const savedHome = process.env.HOME;
-  t.after(() => { process.env.HOME = savedHome; for (const d of [plain, userData]) fs.rmSync(d, { recursive: true, force: true }); });
+  const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+  t.after(() => {
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    for (const d of [plain, userData]) fs.rmSync(d, { recursive: true, force: true });
+  });
   seed(plain, ['agent-tmp', 'research-desk']);
   assert.deepEqual(eraseOfficeData({ home: plain, userData }), []);
   assert.ok(fs.existsSync(path.join(plain, 'agent-tmp', 'inside.txt')), 'no office in it, so nothing goes');
   seed(plain, ['hive']);
   fs.writeFileSync(path.join(plain, 'hive', 'registry.json'), '{}');
+  // HOME on a Mac and Linux, USERPROFILE on Windows.
   process.env.HOME = plain;
+  process.env.USERPROFILE = plain;
+  assert.equal(os.homedir(), plain);
   assert.deepEqual(eraseOfficeData({ home: plain, userData }), []);
   assert.ok(fs.existsSync(path.join(plain, 'agent-tmp', 'inside.txt')), 'the home folder is never cleared, office or not');
   assert.ok(fs.existsSync(path.join(plain, 'hive', 'registry.json')));
@@ -102,7 +108,23 @@ test('every app data file the main process names is erased by a reset or kept on
     for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/getPath\('userData'\),\s*'([^']+)'/g)) names.add(m[1]);
   }
   assert.ok(names.size >= 10, 'the scan finds the app data files');
+  // Files reached through a helper or a variable, which the scan can't see.
+  for (const n of ['pastes', 'updater.log', 'last-run-version', 'telemetry-install-id', 'telemetry-last-version']) names.add(n);
+  assert.match(fs.readFileSync(path.join(dir, 'pastes.ts'), 'utf8'), /return join\(userData, 'pastes'\);/);
+  assert.match(fs.readFileSync(path.join(dir, 'analytics.ts'), 'utf8'), /join\(stateDir, 'telemetry-install-id'\)/);
+  assert.match(fs.readFileSync(path.join(dir, 'analytics.ts'), 'utf8'), /const VERSION_STAMP_FILE = 'telemetry-last-version';/);
   for (const n of names) assert.ok(APP_DATA_ENTRIES.includes(n) || APP_DATA_KEPT.includes(n), `${n} is neither erased nor kept`);
+});
+
+test('every file the app keeps in an office\'s private folder is erased by a reset', () => {
+  // Value: protects=a new private file can't silently carry across a reset; fails_when=a join(privateRoot(...), name) is added without a PRIVATE_ENTRIES row; why_new=ship maintainability review; seam=none; no_claim=names built at run time
+  const dir = path.join(__dirname, '..', 'src', 'main');
+  const names = new Set(['agent-mcp', 'owner']); // through agentPrivatePaths.ts helpers
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.ts'))) {
+    for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/privateRoot\([^)]*\),\s*'([^']+)'/g)) names.add(m[1]);
+  }
+  assert.ok(names.size >= 8, `the scan finds the private files (${[...names].join(', ')})`);
+  for (const n of names) assert.ok(PRIVATE_ENTRIES.includes(n), `${n} is not erased`);
 });
 
 test('a path it cannot remove is reported and the rest is still erased', { skip: process.platform === 'win32' ? 'POSIX permissions' : false }, (t) => {
@@ -149,5 +171,6 @@ test('app:resetAll erases the office data before it resets the config', () => {
   const erase = body.indexOf('eraseOfficeData(');
   assert.ok(erase > 0, 'the reset calls eraseOfficeData');
   assert.ok(erase < body.indexOf('\n  resetConfig();'), 'before the config forgets the office folder');
-  assert.match(body, /researchFolders\(\)/, 'Research\'s conversation too');
+  assert.match(body, /\.\.\.\(researchDesk\(\) \? \[projectDir\(researchDesk\(\)!\)\] : \[\]\),/, 'Research\'s conversation too');
+  assert.doesNotMatch(body, /hive\.root\(\)|memory\.palacePath\(\)|researchFolders\(\)/, 'office folder paths come only through the office check');
 });

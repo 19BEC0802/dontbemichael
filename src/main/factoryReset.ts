@@ -50,7 +50,9 @@ export const PRIVATE_ENTRIES = [
 ] as const;
 
 /** The privacy and standing approval checks' own empty folders (index.ts). */
-export const CHECK_FOLDERS = ['standing-check', 'trust-check'] as const;
+export const STANDING_CHECK_DIR = 'standing-check';
+export const TRUST_CHECK_DIR = 'trust-check';
+export const CHECK_FOLDERS = [STANDING_CHECK_DIR, TRUST_CHECK_DIR] as const;
 
 /** Created by the app in its own data folder for the office it runs. */
 export const APP_DATA_ENTRIES = [
@@ -72,7 +74,11 @@ export const APP_DATA_ENTRIES = [
 
 /** In the app's data folder and kept by a reset: they describe this install,
  *  not the office (test/factory-reset.test.cjs checks every name is in one list). */
-export const APP_DATA_KEPT = ['config.json', 'hero.json', 'model-catalog.json', 'skill-catalog.json', 'last-run-version', 'updater.log'] as const;
+export const APP_DATA_KEPT = [
+  'config.json', 'hero.json', 'model-catalog.json', 'skill-catalog.json', 'last-run-version', 'updater.log',
+  // The anonymous usage id and its version stamp (analytics.ts).
+  'telemetry-install-id', 'telemetry-last-version'
+] as const;
 
 /** Is this folder an office the app made, and not the owner's home folder or a
  *  disk's root? Only then are its app-made entries removed. */
@@ -98,9 +104,10 @@ export function eraseOfficeData(p: { home: string | null; userData: string; extr
   ];
   const failed: string[] = [];
   for (const t of targets) {
-    // Retried for about a second: a file a stopping process still holds open
-    // (Windows) or is closing gets the time to let go.
-    try { rmSync(t, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { failed.push(t); }
+    // Retried for up to about half a second (100, 200, 300 ms): a file a
+    // stopping process still holds open (Windows) or is closing gets the time
+    // to let go, without freezing the window for long.
+    try { rmSync(t, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch { failed.push(t); }
   }
   if (home) {
     const priv = privateRoot(home);
