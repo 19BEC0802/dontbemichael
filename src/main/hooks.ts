@@ -28,6 +28,12 @@ import { APP_NAME } from '../shared/appName';
 
 /** The same terminal prompt is relayed to Michael at most once in this window. */
 const PROMPT_RELAY_DEDUPE_MS = 10 * 60_000;
+/** A member stopped on a prompt again within this long after the app restarted
+ *  them is stuck for real: Michael asks the owner, in plain words. */
+export const STUCK_AGAIN_MS = 30 * 60_000;
+/** Prompts within this long after an automatic restart are the same prompt,
+ *  still on screen while the restart runs, not a new one. */
+export const STUCK_SETTLE_MS = 60_000;
 
 /** A Claude Code session transcript: a .jsonl file in Claude's own projects
  *  folder (CLAUDE_CONFIG_DIR when set, as Claude Code uses it), where agents
@@ -182,6 +188,9 @@ export class HookServer {
   private lastIdleAt: number | null = null;
   /** The clock, swappable so tests can step past the idle gap. */
   now: () => number = Date.now;
+  /** Restart a member whose session stopped on a prompt (the same restart as
+   *  Restart & Continue, in the window). False when there is no window to do it. */
+  restartStuck?: (agentId: string) => boolean;
 
   /** When Michael's last turn ended, for the notes fallback (R8). Starts at
    *  launch, so his first turn never files words for an older question. */
@@ -909,13 +918,14 @@ export class HookServer {
     }
 
     // A team member's session stopped on a prompt only a person can answer in
-    // that terminal (a permission, a sign-in, a trust dialog). Tell Michael
-    // what it says; he can't type there, so he puts it on ASK ME for the owner
-    // to answer in a 1:1 (docs/designs/owner-talks-via-michael.md).
-    // Not in 1:1: the owner is already at that terminal to answer it. The cheap
-    // prompt check runs first; the registry is read only for a real prompt.
+    // it (a permission, a sign-in, a trust dialog). Business owners don't work
+    // in terminals or 1:1 chats (owner, 2026-10-15): the app restarts the
+    // member, which clears the prompt, and Michael asks the owner only if it
+    // comes back right after. Not in 1:1: the owner is already there to answer
+    // it. The cheap prompt check runs first; the registry is read only for a
+    // real prompt.
     if (event === 'Notification' && agentId && isTerminalPrompt(p) && !this.isGod(agentId) && !this.onHold(agentId)) {
-      this.relayPromptToMichael(agentId, (p.message ?? '').trim());
+      this.stuckOnPrompt(agentId, (p.message ?? '').trim());
     }
 
     // Forward everything else to the renderer so avatars reflect real activity.
@@ -953,22 +963,45 @@ export class HookServer {
 
   /** agentId → last prompt relayed, so one prompt isn't relayed twice. */
   private relayedPrompts = new Map<string, { text: string; at: number }>();
+  /** agentId → when the app last restarted it for a prompt. */
+  private stuckRestartAt = new Map<string, number>();
 
-  private relayPromptToMichael(agentId: string, text: string): void {
+  /** A member stopped on a prompt: restart them, or, when it came back soon
+   *  after a restart (or no window can restart them), Michael asks the owner. */
+  private stuckOnPrompt(agentId: string, text: string): void {
+    const now = this.now();
+    const last = this.stuckRestartAt.get(agentId);
+    // The same prompt, still on screen while the restart runs.
+    if (last !== undefined && now - last < STUCK_SETTLE_MS) return;
+    if (last === undefined || now - last > STUCK_AGAIN_MS) {
+      let restarted = false;
+      try { restarted = this.restartStuck?.(agentId) === true; } catch { /* the plain ask below */ }
+      if (restarted) {
+        this.stuckRestartAt.set(agentId, now);
+        this.tellMichael(agentId, `${this.displayName(agentId)} was restarted`, `${this.displayName(agentId)}'s session stopped on a prompt only a person could answer${text ? ` ("${text}")` : ''}, so the app restarted ${this.displayName(agentId)}. They continue where they left off, so this is not for the owner's Ask me board. If you already asked the owner about it, withdraw that question.`);
+        return;
+      }
+    }
+    this.relayStuckToMichael(agentId, text);
+  }
+
+  private relayStuckToMichael(agentId: string, text: string): void {
     const last = this.relayedPrompts.get(agentId);
-    if (last && last.text === text && Date.now() - last.at < PROMPT_RELAY_DEDUPE_MS) return;
+    if (last && last.text === text && this.now() - last.at < PROMPT_RELAY_DEDUPE_MS) return;
+    const name = this.displayName(agentId);
+    const sent = this.tellMichael(agentId, `${name} is stuck`,
+      `${name}'s session stopped on a prompt only a person could answer${text ? ` ("${text}")` : ''}, and restarting ${name} did not clear it. The owner can't answer it either: never ask them to, and never mention terminals, prompts, sessions or a 1:1 chat. Move ${name}'s open work to a teammate who fits. Then put one plain question on the owner's Ask me board (a card for ${agentId}, status "blocked", one humanQA ask with "raisedBy": "${agentId}") saying ${name} is stuck and can't work until it is looked into, with options that fit, such as "Leave ${name} for now".`);
+    // Stamped only once it went out, so a failed send is retried on the next
+    // prompt event (adversarial review, 2026-09-25).
+    if (sent) this.relayedPrompts.set(agentId, { text, at: this.now() });
+  }
+
+  /** One note to Michael from the app; false when it could not be sent. */
+  private tellMichael(agentId: string, subject: string, body: string): boolean {
     try {
-      const name = this.displayName(agentId);
-      this.hive.send({
-        to: this.hive.registry().godId ?? 'god',
-        act: 'inform',
-        subject: `${name} is waiting on something in their terminal`,
-        body: `${name}'s session stopped on a prompt only the owner can answer in that terminal${text ? `: "${text}"` : '.'} You can't answer it there. Put it on the owner's ASK ME board (a card for ${agentId}, status "blocked", one humanQA ask with "raisedBy": "${agentId}") saying what it is waiting on and to talk 1:1 with ${name} to answer it.`
-      }, 'system');
-      // Stamped only once it went out, so a failed send is retried on the
-      // next prompt event (adversarial review, 2026-09-25).
-      this.relayedPrompts.set(agentId, { text, at: Date.now() });
-    } catch { /* best-effort: the panel offers Talk 1:1 meanwhile */ }
+      this.hive.send({ to: this.hive.registry().godId ?? 'god', act: 'inform', subject, body }, 'system');
+      return true;
+    } catch { return false; }
   }
 
   private isGod(agentId: string): boolean {

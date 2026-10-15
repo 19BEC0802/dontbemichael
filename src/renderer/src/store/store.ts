@@ -38,8 +38,9 @@ export interface AnswerPick { pick?: number; parts?: ({ chip?: number; text?: st
 
 export interface PendingRestart {
   at: number;
-  /** engine: Claude Code was just set up (docs/designs/get-michael-ready.md). */
-  reason: 'email' | 'connectors' | 'engine';
+  /** engine: Claude Code was just set up (docs/designs/get-michael-ready.md).
+   *  stuck: the session stopped on a prompt (hooks.ts stuckOnPrompt). */
+  reason: 'email' | 'connectors' | 'engine' | 'stuck';
   /** The owner pressed Restart now: do not wait for idle. */
   now?: boolean;
   /** The last restart attempt failed; it is tried again on the next tick. */

@@ -165,6 +165,14 @@ export interface VoiceMessage {
 
 /** One question→answer exchange with the human, recorded ON the task card so
  *  the decision trail stays with the work it unblocked. */
+/** The tools Research may use without a permission prompt. Its session runs in
+ *  default mode (see hookSettings), so each needs an allow rule; deny rules win
+ *  over these, and nothing outside the sandbox and the app's hook is opened. */
+export const RESEARCH_ALLOWED_TOOLS = [
+  'Bash', 'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'NotebookEdit',
+  'WebFetch', 'WebSearch', 'TodoWrite', 'Task'
+] as const;
+
 export interface HumanQA {
   q: string;
   a?: string;
@@ -1804,6 +1812,13 @@ export class HiveManager {
               // directory too, so Research's are only what its shell may
               // write (verified live, third ship QA).
               additionalDirectories: shellWrite ?? writableDirs,
+              // Research loads none of the owner's settings (--setting-sources ''),
+              // and Claude Code (2.1.300) turns bypass mode into default for a
+              // session whose bypass consent is not in the user's own settings.
+              // Pete then stopped on a permission prompt for every shell command
+              // (owner, 2026-10-15). Its tools are allowed here instead; the deny
+              // rules, the sandbox and the app's own hook still hold them.
+              ...(shellWrite ? { allow: [...RESEARCH_ALLOWED_TOOLS] } : {}),
               ...(folders?.deny.length || connectorDeny.length ? { deny: [...(folders?.deny ?? []), ...connectorDeny] } : {})
             }
           }

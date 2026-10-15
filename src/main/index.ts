@@ -456,6 +456,13 @@ const hookServer = new HookServer(
   memberPresent,
   (signal) => onPlanSignal(signal)
 );
+// A member stopped on a prompt is restarted by the window, the same restart as
+// Restart & Continue (owner, 2026-10-15: no terminals or 1:1 for the owner).
+hookServer.restartStuck = (agentId) => {
+  const wc = liveWebContents();
+  if (!wc) return false;
+  try { wc.send('agent:restartStuck', { agentId }); return true; } catch { return false; }
+};
 const memory = new MemoryManager(
   () => readConfig().harnessHome,
   () => { const c = readConfig(); return { enabled: c.semanticMemory !== false, model: c.embeddingModel ?? 'minilm' }; },

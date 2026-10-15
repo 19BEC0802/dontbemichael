@@ -1830,7 +1830,7 @@
     "aboutPrefix": "关于 {{name}}：",
     "regionAria": "联系 {{name}}",
     "explain": "{{name}} 从 {{godName}} 那里接收工作。想让 {{name}} 做什么，请告诉 {{godName}}，或与 {{name}} 一对一交谈。",
-    "stuck": "{{name}} 的终端里有事在等待处理。进入一对一即可回答。",
+    "stuck": "{{name}} 的会话被某个提示停住了。应用会重启它来清除这个提示。",
     "message": "就 {{name}} 给 {{godName}} 发消息",
     "talk": "一对一交谈",
     "holdFailed": "无法开始一对一，请重试。",

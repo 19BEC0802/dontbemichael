@@ -45,17 +45,51 @@ test('Michael may still ask the owner in his own session', async (t) => {
   assert.notEqual(res?.hookSpecificOutput?.permissionDecision, 'deny');
 });
 
-test('a team member stuck on a terminal prompt is relayed to Michael once, never for idle', async (t) => {
+test('a team member stuck on a prompt is restarted by the app; Michael asks the owner plainly only if it comes back', async (t) => {
+  // Value: protects=the owner is never told to open a terminal or 1:1, and a stuck member gets going again; fails_when=the relay asks for a 1:1 again, or a prompt never restarts the member; why_new=owner 2026-10-15 (Pete's permission card); seam=HookServer.restartStuck
   const { hive, server } = await office(t);
+  let clock = 1_000_000;
+  server.now = () => clock;
+  const restarted = [];
+  server.restartStuck = (id) => { restarted.push(id); return true; };
   const prompt = { agent_id: 'pam', session_id: 's', hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' };
   await server.handle(prompt);
-  await server.handle(prompt);
+  clock += 5_000;
+  await server.handle(prompt); // the same prompt, still on screen while the restart runs
   await server.handle({ agent_id: 'pam', session_id: 's', hook_event_name: 'Notification', notification_type: 'idle_prompt', message: 'Claude is waiting for your input' });
+  assert.deepEqual(restarted, ['pam'], 'one restart, none for idle');
+  let inbox = hive.inbox('god');
+  assert.equal(inbox.length, 1);
+  assert.match(inbox[0].subject, /Pam was restarted/);
+  assert.match(inbox[0].body, /this is not for the owner's Ask me board\. If you already asked the owner about it, withdraw that question\./);
+  // Back again soon after the restart: stuck for real, a plain ask through Michael.
+  clock += 10 * 60_000;
+  await server.handle(prompt);
+  await server.handle(prompt);
+  assert.deepEqual(restarted, ['pam'], 'no restart loop');
+  inbox = hive.inbox('god');
+  assert.equal(inbox.length, 2, 'one ask, no duplicate');
+  const ask = inbox.find((m) => /Pam is stuck/.test(m.subject));
+  assert.ok(ask);
+  assert.match(ask.body, /never ask them to, and never mention terminals, prompts, sessions or a 1:1 chat/);
+  assert.match(ask.body, /Move Pam's open work to a teammate who fits\./);
+  for (const m of inbox) {
+    assert.doesNotMatch(m.body, /talk 1:1 with|answer it there|in that terminal/i);
+    assert.doesNotMatch(m.body, /[\u2013\u2014]/);
+  }
+  // Much later it is a new episode: restarted again.
+  clock += 60 * 60_000;
+  await server.handle(prompt);
+  assert.deepEqual(restarted, ['pam', 'pam']);
+});
+
+test('with no window to restart them, Michael is told the member is stuck', async (t) => {
+  const { hive, server } = await office(t);
+  server.restartStuck = () => false;
+  await server.handle({ agent_id: 'pam', session_id: 's', hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'needs your permission' });
   const inbox = hive.inbox('god');
-  assert.equal(inbox.length, 1, 'one relay, no duplicate, nothing for idle');
-  assert.match(inbox[0].subject, /Pam is waiting on something in their terminal/);
-  assert.match(inbox[0].body, /needs your permission to use Bash/);
-  assert.match(inbox[0].body, /ASK ME/);
+  assert.equal(inbox.length, 1);
+  assert.match(inbox[0].subject, /Pam is stuck/);
 });
 
 test("Michael's own prompts are not relayed to himself", async (t) => {

@@ -98,29 +98,22 @@ export function OwnerViaMichaelBar({ agent }: { agent: Agent }) {
   return (
     <div role="region" aria-label={t('ownerVia.regionAria', { name: agent.name })} style={{
       // Design v2 Work tab (branding/DESIGN.md 7.12): two actions under the
-      // terminal, and one line of why. Coral only when the owner is needed.
+      // terminal, and one line of why. A member stuck on a prompt is the app's
+      // to restart, not the owner's to answer (owner, 2026-10-15), so the bar
+      // stays calm and keeps its order then too.
       padding: '10px 14px 14px', display: 'flex', flexDirection: 'column', gap: 8,
-      background: stuck ? 'var(--cth-coral-soft)' : 'transparent',
+      background: 'transparent',
       borderTop: '1px solid var(--cth-line)'
     }}>
-      <div style={{ fontSize: 11.5, lineHeight: '16px', color: stuck ? 'var(--cth-coral-text)' : 'var(--cth-ink-3)', fontWeight: stuck ? 600 : 400 }}>
+      <div style={{ fontSize: 11.5, lineHeight: '16px', color: 'var(--cth-ink-3)' }}>
         {stuck
           ? t('ownerVia.stuck', { name: agent.name })
           : t('ownerVia.explain', { name: agent.name, godName })}
       </div>
       {err && <div role="alert" style={{ fontSize: 12, color: 'var(--cth-coral-text)' }}>{t('ownerVia.holdFailed')}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {stuck ? (
-          <>
-            <PixelButton variant="primary" size="md" onClick={talkOneOnOne} disabled={busy}>{t('ownerVia.talk')}</PixelButton>
-            <PixelButton variant="secondary" size="md" onClick={messageMichael} disabled={!godId}>{t('ownerVia.message', { godName, name: agent.name })}</PixelButton>
-          </>
-        ) : (
-          <>
-            <PixelButton variant="secondary" size="md" onClick={messageMichael} disabled={!godId}>{t('ownerVia.message', { godName, name: agent.name })}</PixelButton>
-            <PixelButton variant="primary" size="md" onClick={talkOneOnOne} disabled={busy}>{t('ownerVia.talk')}</PixelButton>
-          </>
-        )}
+        <PixelButton variant="secondary" size="md" onClick={messageMichael} disabled={!godId}>{t('ownerVia.message', { godName, name: agent.name })}</PixelButton>
+        <PixelButton variant="primary" size="md" onClick={talkOneOnOne} disabled={busy}>{t('ownerVia.talk')}</PixelButton>
       </div>
     </div>
   );

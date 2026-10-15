@@ -1006,6 +1006,12 @@ const api = {
     ipcRenderer.on('connectors:restartNeeded', listener);
     return () => ipcRenderer.removeListener('connectors:restartNeeded', listener);
   },
+  /** A member stopped on a prompt: restart it now (hooks.ts stuckOnPrompt). */
+  onAgentRestartStuck: (cb: (p: { agentId: string }) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, p: { agentId: string }) => cb(p);
+    ipcRenderer.on('agent:restartStuck', listener);
+    return () => ipcRenderer.removeListener('agent:restartStuck', listener);
+  },
   /** Agents that may use QuickBooks, Read only, before the owner chooses (Oscar). */
   quickbooksRoleDefaults: (): Promise<string[]> => ipcRenderer.invoke('quickbooks:roleDefaults'),
   /** Save one agent's QuickBooks capability (through the owner's Claude account).

@@ -16,7 +16,13 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 
 ### Changed
 
+- **A team member stuck on a prompt is restarted, not handed to you.** When a member's session stops on a question only a person could answer, the app restarts them so they carry on, and Michael no longer asks you to open a 1:1 chat. If it comes back right after, Michael moves their work to a teammate and tells you plainly that they are stuck. (Agent behavior: what Michael is told and asks.)
 - **You never have to answer every question on a card.** Reply settles the ask with whatever you answered; the questions you left blank go through Michael to the team member who raised them, who works out what they can and comes back only for what they still need. Before, Michael asked you again at once. (Agent behavior: Michael and every team member.)
+
+### Fixed
+
+- **Pete no longer stops on a permission prompt for his own work.** Since Research stopped loading your Claude settings (for privacy), Claude Code ran him in normal permission mode, so every shell command waited for an approval nobody could give. His tools are now allowed in his own settings; his walls are unchanged.
+- **The app never answers a permission prompt for an agent.** The inbox nudge typed into an open prompt after five minutes, and its Enter approved it. It now waits until the agent moves on, however long that takes.
 
 ## [0.2.1] (2026-10-14)
 

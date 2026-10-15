@@ -1830,7 +1830,7 @@
     "aboutPrefix": "About {{name}}: ",
     "regionAria": "Reaching {{name}}",
     "explain": "{{name}} takes work from {{godName}}. To ask {{name}} something, tell {{godName}}, or talk to {{name}} 1:1.",
-    "stuck": "{{name}} is waiting on something in their terminal. Talk 1:1 to answer.",
+    "stuck": "{{name}} stopped on something in their session. The app restarts them to clear it.",
     "message": "Message {{godName}} about {{name}}",
     "talk": "Talk 1:1",
     "holdFailed": "Couldn't start the 1:1. Try again.",
