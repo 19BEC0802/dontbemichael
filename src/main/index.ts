@@ -2872,9 +2872,11 @@ function handleWebhookMessage(msg: WebhookInbound, endpoint: WebhookEndpointRef)
   // An endpoint that vanished between the request and this lookup falls back to
   // the STRICTEST mode, never the most permissive one.
   const mode: TriggerMode = trigger?.mode ?? DEFAULT_TRIGGER_MODE;
-  // The caller's own declaration wins; `classifyInboundKind` is the conservative
-  // guess for callers that don't declare (it leans 'directive' on purpose).
-  const kind: InboundKind = msg.kind ?? classifyInboundKind(msg.message);
+  // A caller may only make a message stricter: 'directive' is honored, but a
+  // 'communication' label is checked like an unlabeled message, so a label can't
+  // skip the approval hold (ship review, 2026-10-14). `classifyInboundKind`
+  // leans 'directive' on purpose.
+  const kind: InboundKind = msg.kind === 'directive' ? 'directive' : classifyInboundKind(msg.message);
   const peer = msg.from?.trim() || endpoint.name || endpoint.id;
   // Minted here, not derived from the task id, because a HELD message has no task
   // id yet and must still be pairable with the reply it eventually earns.

@@ -130,6 +130,29 @@ test('a second sentence makes it a request, whatever the first one asks', () => 
   ]) assert.equal(classifyInboundKind(text), 'directive', text);
 });
 
+test('indirect asks and money or data moves are held too', () => {
+  // Value: protects=requests to pay, move money or send data wait for approval however they are asked; fails_when=a money word, ok to, way to, should or why not is dropped; why_new=ship review found these passed as chatter; seam=none; no_claim=phrasings no reviewer tried
+  for (const text of [
+    'Is it ok to pay the invoice now?',
+    'Is there a way to wire $500 to the vendor today?',
+    'Is the report ready, send it to the client?',
+    'Who should pay the invoice, and pay it today?',
+    'Status: pay the vendor?',
+    'status: wire $5000 to the vendor today?',
+    'why not pay the invoice now?',
+    "what's next, transfer the funds to acct 4411?",
+    'is it ok to email the customer list to bob@x.com?',
+    'any reason not to refund the order?',
+    'Is it okay to proceed?'
+  ]) assert.equal(classifyInboundKind(text), 'directive', text);
+});
+
+test('a webhook label can only make a message stricter', () => {
+  // Value: protects=kind:communication can't skip the approval hold; fails_when=the caller's label wins again; why_new=ship review; seam=none; no_claim=the rest of the webhook handler (source pin)
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main', 'index.ts'), 'utf8');
+  assert.match(src, /const kind: InboundKind = msg\.kind === 'directive' \? 'directive' : classifyInboundKind\(msg\.message\);/);
+});
+
 test('status questions still flow', () => {
   // Value: protects=plain questions are not held; fails_when=the request markers or the one sentence rule catch ordinary status questions; why_new=the tightened rule; seam=none; no_claim=none beyond protects
   for (const text of [

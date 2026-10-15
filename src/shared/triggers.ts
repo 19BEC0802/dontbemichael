@@ -77,12 +77,15 @@ export function classifyInboundKind(text: string): InboundKind {
   // (a full stop, "!", "?" or ";" followed by more text, or a new line).
   const oneQuestion = t.endsWith('?') && !/[.!?;]\s+\S|\n/.test(t.slice(0, -1));
   // A question word up front, and none of the action words.
+  // Money and data moves count as action words too (ship review, 2026-10-14):
+  // "Is it ok to pay the invoice now?", "Status: wire $500 to the vendor?".
   const asks = /^(what|how|when|where|who|why|is|are|do|does|did|status|any)\b/.test(t)
-    && !/\b(fix|build|ship|deploy|run|write|create|add|remove|delete|refactor|implement|update|merge|revert)\b/.test(t);
+    && !/\b(fix|build|ship|deploy|run|write|create|add|remove|delete|refactor|implement|update|merge|revert|pay|wire|transfer|send|email|refund|order|buy|approve|cancel)\b/.test(t);
   // Polite ways of asking someone to act: "you" with more words after it ("you
   // could", "you pay", "don't you"; a closing "how are you?" is only asking),
-  // "mind", "chance", "possible", "how about".
-  const asksToAct = /\byou\b(?!\s*\?$)|\b(mind|chance|possible)\b|\bhow about\b/.test(t);
+  // "mind", "chance", "possible", "how about", "ok to", "way to", "should" and a
+  // leading "why not".
+  const asksToAct = /\byou\b(?!\s*\?$)|\b(mind|chance|possible|should)\b|\bhow about\b|\b(ok|okay|way) to\b|^why not\b/.test(t);
   return oneQuestion && asks && !asksToAct ? 'communication' : 'directive';
 }
 
