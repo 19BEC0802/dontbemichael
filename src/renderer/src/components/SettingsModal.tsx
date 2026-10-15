@@ -150,7 +150,9 @@ Check status (GET <tunnel>/<webhookId>):
 
 The mode decides which of the two answers you get:
   allow all           routes straight through -> 200
-  communication only  chatter routes; a directive gets 202 awaiting approval
+  communication only  a short plain status question routes; anything else gets
+                      202 awaiting approval. "kind": "directive" holds a message;
+                      "communication" is checked like no kind at all.
   strict              everything gets 202 awaiting approval
 
 A 202 means the message is parked in Trigger History until you approve it; the

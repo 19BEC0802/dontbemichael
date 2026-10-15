@@ -2865,9 +2865,6 @@ function handleWebhookMessage(msg: WebhookInbound, endpoint: WebhookEndpointRef)
   // 192-bit unguessable token, returned once; only its hash is stored.
   const token = randomBytes(24).toString('hex');
   const tokenHash = hashWebhookToken(token);
-  const full = msg.title ?? msg.message;
-  const title = full.length > 80 ? `${full.slice(0, 79)}…` : full;
-
   const trigger = (readConfig().webhookTriggers ?? []).find((t) => t.id === endpoint.id);
   // An endpoint that vanished between the request and this lookup falls back to
   // the STRICTEST mode, never the most permissive one.
@@ -2877,6 +2874,11 @@ function handleWebhookMessage(msg: WebhookInbound, endpoint: WebhookEndpointRef)
   // skip the approval hold (ship review, 2026-10-14). `classifyInboundKind`
   // leans 'directive' on purpose.
   const kind: InboundKind = msg.kind === 'directive' ? 'directive' : classifyInboundKind(msg.message);
+  // Only the message is checked, so a message let through as chatter in
+  // communication only mode takes its title from the message: a caller's title
+  // could otherwise carry the instruction to Michael (ship review, 2026-10-14).
+  const full = mode === 'communication-only' && isAutoAllowed(mode, kind) ? msg.message : (msg.title ?? msg.message);
+  const title = full.length > 80 ? `${full.slice(0, 79)}…` : full;
   const peer = msg.from?.trim() || endpoint.name || endpoint.id;
   // Minted here, not derived from the task id, because a HELD message has no task
   // id yet and must still be pairable with the reply it eventually earns.

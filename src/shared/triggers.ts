@@ -38,7 +38,8 @@ export const DEFAULT_TRIGGER_MODE: TriggerMode = 'strict';
 /**
  * What an inbound message is asking for. A *directive* wants the hive to do work;
  * *communication* is informational (a status question, an FYI, a reply).
- * Senders may declare it; `classifyInboundKind` guesses when they don't.
+ * A sender may declare 'directive' to make a message stricter; a 'communication'
+ * label is never taken as given, and `classifyInboundKind` decides.
  */
 export type InboundKind = 'directive' | 'communication';
 
@@ -54,8 +55,8 @@ export function isAutoAllowed(mode: TriggerMode, kind: InboundKind): boolean {
  *
  * Deliberately conservative: anything we aren't confident is chatter is treated as
  * a directive, because mis-labelling a directive as communication is what lets
- * unapproved work through in `communication-only` mode. Callers who care should
- * send an explicit `kind`.
+ * unapproved work through in `communication-only` mode. A caller can make a
+ * message stricter by sending `kind: "directive"`; it can never make it looser.
  *
  * Chatter is one question and nothing else (owner, 2026-10-14): it opens with a
  * question word, ends with its only "?", has no second sentence, names none of the
@@ -73,20 +74,25 @@ export function classifyInboundKind(text: string): InboundKind {
   // "Please" anywhere is a request too.
   if (/\bplease\b/.test(t)) return 'directive';
 
-  // One question: a single "?" at the very end, and no other sentence before it
-  // (a full stop, "!", "?" or ";" followed by more text, or a new line).
-  const oneQuestion = t.endsWith('?') && !/[.!?;]\s+\S|\n/.test(t.slice(0, -1));
+  // One question: a single "?" at the very end, and no other sentence or clause
+  // before it (a full stop, "!", "?", ";", ",", ":" or a dash followed by more
+  // text, or a new line).
+  const oneQuestion = t.endsWith('?') && !/[.!?;,:]\s+\S|[\u2013\u2014]|\s-\s|\n/.test(t.slice(0, -1));
+  // Plainly status (owner, 2026-10-14, after two review rounds found request
+  // words a list missed): short, and naming no address, link or amount, so a
+  // new phrasing that moves data or money fails safe.
+  const plain = t.split(/\s+/).length <= 12 && !/@|https?:\/\/|www\.|[$€£]\s?\d|\d\s?(usd|eur|gbp|dollars?)\b/.test(t);
   // A question word up front, and none of the action words.
   // Money and data moves count as action words too (ship review, 2026-10-14):
   // "Is it ok to pay the invoice now?", "Status: wire $500 to the vendor?".
   const asks = /^(what|how|when|where|who|why|is|are|do|does|did|status|any)\b/.test(t)
-    && !/\b(fix|build|ship|deploy|run|write|create|add|remove|delete|refactor|implement|update|merge|revert|pay|wire|transfer|send|email|refund|order|buy|approve|cancel)\b/.test(t);
+    && !/\b(fix|build|ship|deploy|run|write|create|add|remove|delete|refactor|implement|update|merge|revert|pay|wire|transfer|send|email|refund|order|buy|approve|cancel|share|forward|export|upload|give|grant|invite|post|publish|sign|book|move|copy)\b/.test(t);
   // Polite ways of asking someone to act: "you" with more words after it ("you
   // could", "you pay", "don't you"; a closing "how are you?" is only asking),
   // "mind", "chance", "possible", "how about", "ok to", "way to", "should" and a
   // leading "why not".
   const asksToAct = /\byou\b(?!\s*\?$)|\b(mind|chance|possible|should)\b|\bhow about\b|\b(ok|okay|way) to\b|^why not\b/.test(t);
-  return oneQuestion && asks && !asksToAct ? 'communication' : 'directive';
+  return oneQuestion && plain && asks && !asksToAct ? 'communication' : 'directive';
 }
 
 /* ──────────────────────────── context trigger ────────────────────────────── */

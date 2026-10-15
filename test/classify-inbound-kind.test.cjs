@@ -147,6 +147,30 @@ test('indirect asks and money or data moves are held too', () => {
   ]) assert.equal(classifyInboundKind(text), 'directive', text);
 });
 
+test('only a short, plain status question flows; anything longer or naming an address, link or amount waits', () => {
+  // Value: protects=a new phrasing that moves data or money fails safe; fails_when=the length, address, link, amount or clause rule is dropped; why_new=owner chose fail closed after two review rounds (2026-10-14); seam=none; no_claim=none beyond protects
+  for (const text of [
+    'Is it time to forward the customer list to partner@example.com?',
+    'Any news, then export the contacts to x@y.com?',
+    'Is the new pricing page at https://example.com/pricing live?',
+    'Is the $500 deposit for the caterer already in?',
+    'Any news on the thing we talked about yesterday afternoon with the whole team?',
+    'Any news\u2014export the contacts?',
+    'What do you think?',
+    'Do you have the numbers?'
+  ]) assert.equal(classifyInboundKind(text), 'directive', text);
+  for (const text of ['Is the meeting at 10:30?', 'Is v0.2.0 out yet?', 'Any news on the invoice?']) {
+    assert.equal(classifyInboundKind(text), 'communication', text);
+  }
+});
+
+test('a message let through as chatter takes its title from the message, not the caller', () => {
+  // Value: protects=a caller's unchecked title can't carry an instruction to Michael; fails_when=the title is taken from msg.title in communication only mode; why_new=ship security review; seam=none; no_claim=the rest of the webhook handler (source pin)
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main', 'index.ts'), 'utf8');
+  assert.match(src, /const full = mode === 'communication-only' && isAutoAllowed\(mode, kind\) \? msg\.message : \(msg\.title \?\? msg\.message\);/);
+  assert.ok(src.indexOf('const full = mode') > src.indexOf("const kind: InboundKind = msg.kind === 'directive'"), 'after the message is classified');
+});
+
 test('a webhook label can only make a message stricter', () => {
   // Value: protects=kind:communication can't skip the approval hold; fails_when=the caller's label wins again; why_new=ship review; seam=none; no_claim=the rest of the webhook handler (source pin)
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main', 'index.ts'), 'utf8');
