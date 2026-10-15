@@ -204,7 +204,8 @@ test('the trust layer\'s checks keep no transcript of Research\'s text, and Rese
   assert.match(idx, /if \(isResearch\) pruneOldFiles\(dir, 7 \* 24 \* 60 \* 60_000\);\n\s+else setTimeout/);
   assert.match(idx, /const dir = isResearch \? ownResearchDir\(opts\.cwd, RESEARCH_TMP_DIR\) :/, 'its scratch folder only as a real folder');
   assert.match(layer, /sweepOldCheckTranscripts\(\);/, 'old check transcripts are swept');
-  assert.match(idx, /for \(const folder of \['standing-check', 'trust-check'\]\)/, 'and those a stopped check left in its own folder');
+  assert.match(idx, /for \(const folder of CHECK_FOLDERS\)/, 'and those a stopped check left in its own folder');
+  assert.deepEqual([...loadTs('src/main/factoryReset.ts').CHECK_FOLDERS], ['standing-check', 'trust-check']);
   assert.match(idx, /memory\.setMineKey\(\(id\) => \(id === RESEARCH_ID \? trustLayer\.policyKey\?\.\(\) \?\? '' : ''\)\);/, 'its mined copy is made again when privacy settings change');
   assert.match(src('src/main/memory.ts'), /const key = `\$\{mtime\}:\$\{extra\}`;/);
   assert.match(idx, /claudeProjectsRoot\(\), \.\.\.teamFolders,/, 'its shell is walled from the projects folder wherever it is');
