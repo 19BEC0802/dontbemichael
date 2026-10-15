@@ -24,6 +24,7 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 - **Reset & start over now starts truly fresh.** It used to erase only the team's memory and the office's work, so Pete's research desk and threads, Memory & Knowledge, saved keys, the history and mail and Slack files carried into the next office. Now everything the app made for the office goes, and setup opens as a new owner sees it. Your team's folders and the files in them, your Claude sign in and the saved copies of your team list stay, and so do your own files in the office folder. The confirm screen says what is erased and what is kept.
 - **In the communication only mode, only a plain status question skips your approval.** A webhook message goes straight through only when it is one short question that names no address, link or amount and asks nobody to act, like "Is the test suite green?". Anything else waits for you, however politely it is worded ("Can you pay the invoice?", contributed in #180, "Any chance you could...", "Is it ok to..."), and the sender can no longer skip that by labelling the message as chatter or by putting the request in its title.
 - Clicking a dotfile an agent names in its terminal, such as `.gitignore`, `.env` or `.npmrc`, opens it for editing instead of only showing it in Finder.
+- Pete's card on the office floor shows the name the app gave him, also in an office that saved him as Research.
 
 ## [0.2.0] (2026-10-13)
 
