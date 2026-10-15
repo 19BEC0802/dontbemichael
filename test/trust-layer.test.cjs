@@ -173,3 +173,11 @@ test('a verdict followed by a sentence of explanation is read; nothing after the
   assert.deepEqual(await layer(deny).l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.refusalForClass('names') }, 'the leading verdict wins, never a later object');
   assert.equal((await layer('```json\n{"decision":"PASS","flag":false}\n```\nNothing to remove.').l.outbound({ subject: 's', body: 'b' })).decision, 'pass', 'outbound too');
 });
+
+test('an escaped quote stays inside the text, an unclosed fence is read, and a cut off answer fails closed', async () => {
+  // Value: protects=quoted text in a cleaned body survives and a truncated answer never passes; fails_when=the escape skip or the unclosed fence branch in leadingObject changes; why_new=leadingObject is new (ship coverage audit); seam=fake runner; no_claim=other model output shapes
+  const quoted = json({ decision: 'CLEAN', subject: 'Q', body: 'Ask about the "hi}" sign', removed: ['names'] });
+  assert.equal((await layer(quoted + ' Done.').l.inbound({ subject: 'Q', body: 'x' })).body, 'Ask about the "hi}" sign');
+  assert.equal((await layer('```json\n{"decision":"PASS"}').l.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'pass', 'no closing fence');
+  assert.deepEqual(await layer('{"decision":"PASS"').l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, 'a cut off verdict');
+});

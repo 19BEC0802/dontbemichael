@@ -109,6 +109,19 @@ test('a denied message goes back to its sender in its thread, and Michael hears 
   assert.ok(!fs.existsSync(path.join(outbox, '.sent', 'm1.json')));
 });
 
+test('Michael\'s own refused message reaches him once, as the sender', async (t) => {
+  // Value: protects=Michael hears his own refusal once, not twice; fails_when=the from===godId early return in tellMichaelNotSent is dropped; why_new=tellMichaelNotSent is new (ship coverage audit); seam=fake layer; no_claim=what Michael does with the note
+  const layer = fakeLayer({ inbound: () => ({ decision: 'deny', reason: R.refusalForClass('names') }) });
+  const { hive } = await office(t, { layer });
+  fs.mkdirSync(path.join(hive.root(), 'agents', 'god', 'outbox'), { recursive: true });
+  send(hive, 'god', { to: 'research', act: 'query', subject: 'Who is', body: 'Home address of Jane Smith' });
+  hive.routeOnce();
+  await tick();
+  hive.routeOnce();
+  assert.equal(msgsIn(hive, 'research').length, 0);
+  assert.equal(notes(hive, 'god', R.NOT_SENT_SUBJECT).length, 1);
+});
+
 test('a list or object body reaches the layer whole, and Research gets only its text', async (t) => {
   // Value: protects=a non text body can't skip the check (security review); fails_when=the layer sees an empty body or Research gets the raw list; why_new=ship review D2.3; seam=fake layer
   const layer = fakeLayer({ inbound: (m) => ({ decision: 'clean', subject: String(m.subject), body: 'a short list of questions', removed: [] }) });

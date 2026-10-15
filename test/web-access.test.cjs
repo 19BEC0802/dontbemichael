@@ -154,6 +154,15 @@ test('Research\'s Work style and jobs reach it only as the trust layer passed th
     goal('Pizza trends');
     await new Promise((r) => setImmediate(r));
     assert.equal(goal('Pizza trends'), 'Pizza trends', 'retried after a minute');
+    // A check that could not run is the common failure since 2026-10-14: retried the same way.
+    next = { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED };
+    assert.equal(goal('Bakery trends'), 'BUILT IN');
+    await new Promise((r) => setImmediate(r));
+    next = { decision: 'pass', subject: 's', body: 'Bakery trends' };
+    now += 61_000;
+    goal('Bakery trends');
+    await new Promise((r) => setImmediate(r));
+    assert.equal(goal('Bakery trends'), 'Bakery trends', 'a failed check is retried, not taken as a refusal');
   } finally { Date.now = realNow; }
   const main = read('src/main/index.ts');
   assert.match(main, /return agentId === RESEARCH_ID \? researchGoal\(text\) : text;/);
