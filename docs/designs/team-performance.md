@@ -402,7 +402,7 @@ telemetry pipeline (D16); this section's diagram and scaling are revised for it.
   bad frame           | Y       | ignore that frame, console.warn with agent and event | nothing (run still ends at idle or 60 min)
   open run            | Y       | 60 minute end, outcome unknown                       | run counted, outcome unknown
   open run at exit    | Y       | on start, close open runs at app quit time, unknown  | same
-  SQLITE_FULL/BUSY/CORRUPT, load error | Y (D15) | busy: retry with backoff (WAL makes this rare); others: count the failure per day in memory and in kv | "Some records from <day> could not be saved"; no advice uses that day; a store that cannot open shows "Team numbers are unavailable"
+  SQLITE_FULL/BUSY/CORRUPT, load error | Y (D15) | busy: retry with backoff (WAL makes this rare); others: count the failure per day in memory and in kv | "Some records from <day> could not be saved"; no advice uses that day; a store that cannot open shows "Pulse numbers are unavailable"
   SyntaxError tasks   | Y       | skip this tick, keep the last good snapshot          | nothing; next tick catches up
   missing id          | Y       | treat as removed; no status event invented           | nothing
   parse/partial batch | Y       | skip the bad event (counted); cursor saved only after a batch commits | no double counting after a crash
@@ -561,7 +561,7 @@ stay exact. Flakiness: every time based test injects the clock.
 
 | Feature | Loading | Empty | Error | Success | Partial |
 |---|---|---|---|---|---|
-| Office line | last snapshot | "Collecting since" | "Team numbers are unavailable" | numbers | headroom hidden on an API key |
+| Office line | last snapshot | "Collecting since" | "Pulse numbers are unavailable" | numbers | headroom hidden on an API key |
 | Member rows | last snapshot | zeros, says so | per section error | rows | Codex row labelled |
 | Advice | none shown | "No advice yet" | hidden | cards | days with gaps left out (D15) |
 
@@ -616,7 +616,7 @@ advice, and one cost store (D17).
   CODEPATH              | FAILURE MODE                  | RESCUED? | TEST? | USER SEES?                         | LOGGED?
   ----------------------|-------------------------------|----------|-------|------------------------------------|--------
   TelemetryWriter       | insert fails (full, corrupt)  | Y (D15)  | Y     | "Some records from <day> ..."      | Y
-  TelemetryWriter       | store cannot open             | Y        | Y     | "Team numbers are unavailable"     | Y
+  TelemetryWriter       | store cannot open             | Y        | Y     | "Pulse numbers are unavailable"     | Y
   hook frame            | missing agent or prompt       | Y        | Y     | nothing (run ends at idle or cap)  | Y (counter)
   run rule              | no stop arrives               | Y        | Y     | outcome unknown                    | Y
   tasks.json diff       | malformed file                | Y        | Y     | nothing; next tick                 | Y
@@ -832,7 +832,7 @@ History: D2 answered with a delivery instruction rather than an option; D3 confi
 2. Distribution: no new artifact; better-sqlite3 already ships for macOS and Windows
    (`db.ts`), so the build and installer paths are unchanged.
 3. Production failure per new path: harness.db cannot open (native module) -> view says
-   "Team numbers are unavailable" (Section 2 map); hook socket down -> no turn events,
+   "Pulse numbers are unavailable" (Section 2 map); hook socket down -> no turn events,
    view shows the last update time; processor throws -> batch not committed, retried
    next tick. All handled in the plan.
 
@@ -1056,17 +1056,205 @@ REALITY: pr-count pass one branch, nothing ships until the owner says so (D2) do
 
 PLAN_REALITY: phase=eng rows=7/7 missing=none unverified=0 verdict=complete
 
+# Design review (plan-design-review, 2026-10-15)
+
+Approved mockups: `~/.gstack/projects/agentvivekkumar-dontbemichael/designs/team-view-20261015/`
+(`team-view.html` round 1, `team-view-round2.html` round 2, `approved.json`). Outside design
+voices skipped: owner policy (Codex only for the adversarial code pass, no Claude fallback).
+
+Step 0: 4/10. Focus: all 7 passes (owner, D1).
+
+## Approved direction (owner)
+
+- D2: "i liked B where it tells how to optimize first. The overall metric for agents looks
+  like a table of data to read through. This is hard to make sense. This needs to be much
+  more visual and graphic to immediately understand what matters the most. what got done,
+  what efforts got saved etc."
+- D3: C, outcomes on top (B1) and member tiles below (B2). No table anywhere.
+- D4: "effort saved" = money saved by applied suggestions ("Saved by your changes") plus
+  work counts; no hours estimate (#81 and CEO D9 stand).
+
+## Pass 1: Information architecture (3/10 -> 8/10)
+
+- D5 (1A): a fourth fixed view tab, named **Pulse** (owner: "1A but i want to rename it to
+  Pulse"): Office, Tasks, Pulse, Who talks to whom; remembered in `cth.floorView`. Replaces
+  "opened from the studio home".
+- Order on the page, top to bottom:
+
+```
+  Pulse  [This week v]                                         Updated just now
+  +-- Ways to save ----------------------------------------------------------+
+  | [suggestion] [suggestion] [suggestion]      | Saved by your changes $x   |
+  +-- What got done ---------------------------------------------------------+
+  | [emails organized] [emails sent for you] [tasks finished] [checks run]   |
+  |   big number, label, who-did-it bar with names                            |
+  +-- Team -------------------------------------------------------------------+
+  | [Michael tile] [member tile] [member tile] [member tile]                   |
+  | [member tile] ...  (click a tile -> member detail overlay)                |
+  +-- Office -----------------------------------------------------------------+
+  | Where the money went (bar) | Plan use ring + pace | Your time, away share |
+```
+
+- D6 (1B): a member tile shows what they did (counts by kind) and a **Cost for the work**
+  bar: the member's cost per piece of each kind against the office median for that kind,
+  marked cheaper / about usual / pricier; "too few to compare" under 5 pieces of a kind.
+  No "work share" (unlike work is never added up).
+- D7 (1C): Michael's tile comes first, indigo ring: requests routed, questions to you,
+  cards opened, and "Running the office: N% of cost"; no cost-for-the-work bar.
+- The view is named Pulse everywhere (D5): earlier mentions of "the Team view" or a
+  studio home button in this plan mean the Pulse tab.
+- Remaining: the layout when the right column narrows the stage (Pass 6).
+
+## Pass 2: Interaction states (4/10 -> 9/10)
+
+- D8 (2A): the period picker offers This week, Last week and Last 4 weeks; weeks start
+  Monday, local time; remembered on this computer. Suggestions always use the last 14 days.
+- D9 (2B): with no suggestion, one calm line "Nothing to change this week." with an (i);
+  before 14 days of records, "Suggestions start on <date>." Saved by your changes stays.
+
+```
+  FEATURE              | LOADING          | EMPTY                          | ERROR                              | SUCCESS             | PARTIAL
+  ---------------------|------------------|--------------------------------|------------------------------------|---------------------|------------------------------
+  Ways to save         | last snapshot    | "Nothing to change this week." | hidden (store unavailable message) | amber soft cards    | days with gaps left out (D15)
+  Saved by your changes| last snapshot    | "Apply a suggestion to start"  | hidden                             | $ amount, since     | "Measuring, first result <d>"
+  What got done        | last snapshot    | zeros with "Collecting since"  | "Pulse numbers are unavailable"    | 4 tiles             | gap notice above the tiles
+  Team tiles           | last snapshot    | "Your office is empty" + Hire  | per tile "Could not load"          | tiles               | "Too few to compare yet"
+  Office row           | last snapshot    | zeros                          | per section message                | bar, ring, numbers  | ring hidden on an API key
+```
+
+  Remaining: exact strings are settled at build with the no dashes rule.
+
+## Pass 3: Journey (5/10 -> 8/10)
+
+```
+  STEP | USER DOES                     | USER FEELS                 | PLAN SPECIFIES
+  -----|-------------------------------|----------------------------|-------------------------------------------
+  1    | clicks Pulse                  | curious: is it working?    | ways to save first, then what got done
+  2    | reads What got done           | reassured: it did a lot    | big numbers with who did it
+  3    | scans Team tiles              | oriented: who to look at   | cost for the work bar, verdict words
+  4    | clicks Apply on a suggestion  | in control                 | D10: green "Applied." with Undo, no dialog
+  5    | comes back next week          | trust: did it pay off?     | D16: measured "Saved by your changes"
+```
+
+- D10 (3A): Apply confirms in place: the card turns green, "Applied. <what changed>." with
+  Undo, which restores the exact previous setting; after leaving Pulse it folds into Saved
+  by your changes. Schedules and Edit agent still change it any time.
+
+## Pass 4: AI slop (6/10 -> 8/10)
+
+Classifier: OPERATE (app UI). Hard rejections: none after fixes (tiles are click targets,
+not decoration). Litmus: brand clear (app shell) yes; one anchor (What got done numbers)
+yes; scannable by headings yes; one job per section yes; cards necessary yes (each is an
+action or opens a member); motion none needed; premium without shadows yes.
+- D11 (4A): the app's line icons (Icon.tsx: mail, send, check, clock) at 18 px in ink-2
+  on a card-2 square; no emoji anywhere on Pulse.
+- D12 (4B): suggestion cards use an amber soft fill with a 1 px amber border at 40%, no left
+  stripe (the stripe stays Ask me's alone); applied cards turn green soft.
+
+## Pass 5: Design system (7/10 -> 9/10)
+
+- Tokens: amber for proposals, green for savings and good, coral never on Pulse, mono for
+  every number (words like "Measuring" stay in Sora), r-xl tiles, shadow-md.
+- D13 (5A): in who-did-it and money bars, members of one department take its acc, then m,
+  then d shades, with a 2 px white gap; every bar has a legend naming each member with
+  their number.
+- New DESIGN.md entry at build (7.27 Pulse): outcome tile, member tile, cost for the work
+  bar, suggestion card (amber soft, applied green), plan ring (SVG arc, not a gradient).
+
+## Pass 6: Responsive and accessibility (3/10 -> 9/10)
+
+- D14 (6A): reflow by stage width: 1100 px or wider, 4 outcome tiles and 4 member tiles a
+  row, office row in 3 columns; 760 to 1099 px, outcomes 2 by 2, members 3 a row,
+  suggestions 2 a row, money bar on its own row; under 760 px, one column.
+- D15 (6B): tiles and suggestion buttons in tab order with the app focus ring (DESIGN.md
+  12); each bar and the ring carry an aria-label sentence with every value; the view is a
+  region labelled Pulse with h2 per section; Undo announces in a polite live region;
+  RTL mirrors the layout and bars run right to left; nothing relies on color alone.
+
+## Pass 7: Open decisions (1 resolved, 0 deferred)
+
+- D16 (7A): Saved by your changes is measured: (cost per piece in the 14 days before the
+  change minus cost per piece since) x pieces since, at API prices, labelled "about";
+  "Measuring, first result <date>" for the first 7 days; zero or negative says so.
+- D17: the final reference mockup was updated to match every decision.
+
+## Approved Mockups
+
+| Screen/Section | Mockup Path | Direction | Notes |
+|----------------|-------------|-----------|-------|
+| Pulse (full width and narrow) | /Users/moblizeit/.gstack/projects/agentvivekkumar-dontbemichael/designs/team-view-20261015/pulse-final.html | ways to save, what got done, team tiles, office row | avatars draw PersonAvatar props in the build; "Measuring" in Sora |
+| Member detail | /Users/moblizeit/.gstack/projects/agentvivekkumar-dontbemichael/designs/team-view-20261015/team-view.html (Member detail section) | overlay like Task detail | facts grid plus amber soft suggestions (D12 style) |
+
+## Design NOT in scope
+
+- Hours saved (D4, #81, CEO D9).
+- Custom date ranges (D8).
+- A confirm dialog before Apply (D10).
+
+## Design: what already exists
+
+View tabs (TopBar, DESIGN.md 7.2), TaskDetailOverlay pattern for member detail (7.21),
+InfoTip (7.23), PersonAvatar and department colors (3.4), Icon.tsx line icons, status and
+soft tokens (3.2), the right column (5.2), focus ring (12).
+
+## Design implementation tasks
+
+- [ ] **D-T1 (P1, human: ~2d / CC: ~45min)** — renderer — Pulse view per pulse-final.html (D5 to D16)
+  - Surfaced by: Passes 1 to 7
+  - Files: src/renderer/src/components/pulse/ (new), src/renderer/src/shell/TopBar.tsx, i18n locales
+  - Verify: component tests for each state in the Pass 2 table; screenshot at 1280 with the right column open
+- [ ] **D-T2 (P1, human: ~4h / CC: ~15min)** — renderer — accessibility per D15
+  - Surfaced by: Pass 6
+  - Files: the Pulse components
+  - Verify: keyboard walk and aria-label sentences in tests
+- [ ] **D-T3 (P2, human: ~1h / CC: ~5min)** — docs — DESIGN.md 7.27 Pulse, tab list in 7.2
+  - Surfaced by: Pass 5
+  - Files: branding/DESIGN.md
+  - Verify: no dashes in copy test passes
+- [ ] **D-T4 (P1, human: ~3h / CC: ~10min)** — shared — cost for the work and measured savings math (D6, D16)
+  - Surfaced by: Pass 1, Pass 7
+  - Files: src/shared/teamPerformance.ts
+  - Verify: node --test test/team-performance.test.cjs (median per kind, under 5 pieces, savings before and after)
+
+## Design completion summary
+
+```
+  +====================================================================+
+  |         DESIGN PLAN REVIEW — COMPLETION SUMMARY                    |
+  +====================================================================+
+  | System Audit         | DESIGN.md present; UI scope: new Pulse view  |
+  | Step 0               | 4/10, all 7 passes                           |
+  | Pass 1  (Info Arch)  | 3/10 -> 8/10 after fixes                     |
+  | Pass 2  (States)     | 4/10 -> 9/10 after fixes                     |
+  | Pass 3  (Journey)    | 5/10 -> 8/10 after fixes                     |
+  | Pass 4  (AI Slop)    | 6/10 -> 8/10 after fixes                     |
+  | Pass 5  (Design Sys) | 7/10 -> 9/10 after fixes                     |
+  | Pass 6  (Responsive) | 3/10 -> 9/10 after fixes                     |
+  | Pass 7  (Decisions)  | 1 resolved, 0 deferred                       |
+  +--------------------------------------------------------------------+
+  | NOT in scope         | written (3 items)                            |
+  | What already exists  | written                                      |
+  | TODOS.md updates     | 0 items proposed                             |
+  | Approved Mockups     | 3 generated, 1 approved (final reference)    |
+  | Decisions made       | 15 added to plan (D2 to D16)                 |
+  | Decisions deferred   | 0                                            |
+  | Overall design score | 3/10 -> 8/10                                 |
+  +====================================================================+
+```
+
+Plan is design-complete. Run /design-review after implementation for visual QA.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 7 proposals, 6 accepted, 0 deferred |
-| Outside Review | codex, plan review (CEO and eng) | Independent 2nd opinion | 0 | skipped | owner policy (Codex only for the adversarial code pass, no Claude fallback); no completed external review |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | ISSUES OPEN | 39 issues (1 architecture, 3 code quality, 2 performance, 33 test gaps for proposed paths), 0 critical gaps; all mapped to tasks, 4 decisions approved |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 for this plan | not run | recommended: the Team view is a new screen |
+| Outside Review | codex, plan review (CEO, eng) and design voices | Independent 2nd opinion | 0 | skipped | owner policy (Codex only for the adversarial code pass, no Claude fallback); no completed external review |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | ISSUES OPEN | 39 issues (mapped to tasks), 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR | score: 3/10 → 8/10, 15 decisions |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | not run | not applicable |
 
-- **OUTSIDE COVERAGE:** codex, plan-review phase (CEO and eng), skipped by owner policy, no findings; no native fallback by the same policy.
-- **VERDICT:** CEO CLEARED; eng review ISSUES OPEN (findings mapped to tasks E-T1 to E-T5 and T1 to T10, no unresolved decisions); eng review required.
+- **OUTSIDE COVERAGE:** codex, plan-review and design phases, skipped by owner policy, no findings; no native fallback by the same policy.
+- **VERDICT:** CEO + DESIGN CLEARED; eng review ISSUES OPEN (findings mapped to tasks, no unresolved decisions); eng review required.
 
 NO UNRESOLVED DECISIONS
