@@ -14,7 +14,7 @@
  * the updater's log and version stamp, the anonymous usage id, and the hero,
  * model and skill catalog caches.
  */
-import { existsSync, readdirSync, rmdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, parse, resolve } from 'node:path';
 import { officeRecordPath, readOfficeRecord } from './officeFile';
@@ -31,7 +31,9 @@ export const OFFICE_FOLDER_ENTRIES = [
   AGENT_TMP_DIR,
   RESEARCH_DESK_DIR,
   'hallways.json',
-  'tunnels.json'
+  'tunnels.json',
+  // Isolated agents' git worktrees (index.ts), with any work left in them.
+  'worktrees'
 ] as const;
 
 /** What the app keeps in `<office>/private/` (shared/agentPrivatePaths.ts and
@@ -86,19 +88,44 @@ export const APP_DATA_KEPT = [
 
 /** Is this folder an office the app made, and not the owner's home folder or a
  *  disk's root? Only then are its app-made entries removed. */
+function isBroad(abs: string): boolean {
+  return abs === resolve(homedir()) || abs === parse(abs).root;
+}
+
 function isOfficeFolder(home: string): boolean {
   const abs = resolve(home);
-  if (abs === resolve(homedir()) || abs === parse(abs).root) return false;
-  return existsSync(join(abs, 'hive', 'registry.json')) || readOfficeRecord(abs) !== null;
+  if (isBroad(abs)) return false;
+  // The registry, the office record, or the roster backups the reset itself
+  // just wrote (roster.ts archive), so a damaged office is still cleared.
+  return existsSync(join(abs, 'hive', 'registry.json')) || readOfficeRecord(abs) !== null
+    || existsSync(join(abs, 'roster-backups'));
+}
+
+/** Is this a Company knowledge store kg-core made: a docs folder and an index
+ *  whose first line is one of its entries? Never the home folder or a root. */
+export function isKnowledgeStore(root: string): boolean {
+  const abs = resolve(root);
+  if (isBroad(abs)) return false;
+  try {
+    if (!statSync(join(abs, 'docs')).isDirectory()) return false;
+    const first = readFileSync(join(abs, 'index.jsonl'), 'utf8').split('\n', 1)[0].trim();
+    if (!first) return true;
+    const row = JSON.parse(first) as Record<string, unknown>;
+    return typeof row.docId === 'string' && typeof row.chunkIdx === 'number';
+  } catch { return false; }
 }
 
 /** Erase the office's data. `extra` adds folders that live elsewhere (the
  *  hive and palace where they resolve, Research's and the checks' Claude Code
  *  conversations). Returns the paths it could not remove; a reset carries on
  *  past them rather than stopping half way. */
-export function eraseOfficeData(p: { home: string | null; userData: string; extra?: string[] }): string[] {
+export function eraseOfficeData(p: { home: string | null; userData: string; extra?: string[]; knowledgeRoot?: string | null }): string[] {
   const home = p.home && isOfficeFolder(p.home) ? p.home : null;
+  // Company knowledge the owner moved out of the app's data folder: its store's
+  // own entries, and only when it really is one.
+  const kg = p.knowledgeRoot && isKnowledgeStore(p.knowledgeRoot) ? p.knowledgeRoot : null;
   const targets = [
+    ...(kg ? KNOWLEDGE_STORE_ENTRIES.map((n) => join(kg, n)) : []),
     ...(home ? OFFICE_FOLDER_ENTRIES.map((n) => join(home, n)) : []),
     ...(home ? PRIVATE_ENTRIES.map((n) => join(privateRoot(home), n)) : []),
     // Only the app's own office record, never an owner's file of that name.

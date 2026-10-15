@@ -14,7 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const loadTs = require('./load-ts.cjs');
 
-const { eraseOfficeData, OFFICE_FOLDER_ENTRIES, PRIVATE_ENTRIES, APP_DATA_ENTRIES, APP_DATA_KEPT } = loadTs('src/main/factoryReset.ts');
+const { eraseOfficeData, isKnowledgeStore, OFFICE_FOLDER_ENTRIES, PRIVATE_ENTRIES, APP_DATA_ENTRIES, APP_DATA_KEPT } = loadTs('src/main/factoryReset.ts');
 const { writeOfficeRecord } = loadTs('src/main/officeFile.ts');
 
 function seed(dir, names) {
@@ -173,9 +173,9 @@ test('app:resetAll erases the office data before it resets the config', () => {
   assert.ok(erase > 0, 'the reset calls eraseOfficeData');
   assert.ok(erase < body.indexOf('\n  resetConfig();'), 'before the config forgets the office folder');
   assert.match(body, /\.\.\.\(researchDesk\(\) \? projectDirs\(researchDesk\(\)!\) : \[\]\),/, 'Research\'s conversation too, in either folder spelling');
-  assert.match(body, /\.\.\.CHECK_FOLDERS\.flatMap\(\(f\) => projectDirs\(join\(userData, f\)\)\),/);
+  assert.match(body, /\.\.\.CHECK_FOLDERS\.flatMap\(\(f\) => projectDirs\(join\(userData, f\)\)\)/);
   assert.match(body, /const kgRoot = knowledge\.root\(\);/, 'the knowledge store where it really is, read before the config resets');
-  assert.match(body, /KNOWLEDGE_STORE_ENTRIES\.map\(\(n\) => join\(kgRoot, n\)\)/);
+  assert.match(body, /knowledgeRoot: resolve\(kgRoot\) !== resolve\(join\(userData, 'knowledge'\)\) \? kgRoot : null/);
   assert.ok(body.indexOf('const kgRoot') < body.indexOf('\n  resetConfig();'));
   assert.ok(body.indexOf('hive.stopAllProxyBridges()') > 0 && body.indexOf('stopWebhookServer()') > 0, 'proxy sidecars and the webhook server stop, as on quit');
   assert.doesNotMatch(body, /hive\.root\(\)|memory\.palacePath\(\)|researchFolders\(\)/, 'office folder paths come only through the office check');
@@ -198,4 +198,30 @@ test('a moved knowledge store is matched by its own entries, and both transcript
     else assert.deepEqual(dirs, [path.join('/tmp/cc', 'projects', '-Users-me-My-Office'), path.join('/tmp/cc', 'projects', 'Users-me-My.Office')]);
     assert.deepEqual(projectDirs('/'), [path.join('/tmp/cc', 'projects', '-')], 'no legacy candidate for the root');
   } finally { if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved; }
+});
+
+test('a moved knowledge store is erased only when it really is one, and a damaged office is still cleared', (t) => {
+  // Value: protects=a stale knowledge setting can't delete someone's docs folder, and a reset clears an office whose registry is gone; fails_when=isKnowledgeStore is dropped or loosened, or roster-backups stops counting as an office; why_new=Codex adversarial pass 2; seam=fs; no_claim=a store that kg-core changes the layout of
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-kg-'));
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-kg-data-'));
+  t.after(() => { for (const d of [root, userData]) fs.rmSync(d, { recursive: true, force: true }); });
+  const store = path.join(root, 'store');
+  seed(store, ['docs', 'meaning']);
+  fs.writeFileSync(path.join(store, 'index.jsonl'), JSON.stringify({ docId: 'd1', title: 't', source: 's', modality: 'text', chunkIdx: 0, text: 'x' }) + '\n');
+  fs.writeFileSync(path.join(store, 'mine.txt'), 'mine');
+  const notStore = path.join(root, 'project');
+  seed(notStore, ['docs']);
+  fs.writeFileSync(path.join(notStore, 'index.jsonl'), '{"event":"build"}\n');
+  assert.equal(isKnowledgeStore(store), true);
+  assert.equal(isKnowledgeStore(notStore), false);
+  assert.deepEqual(eraseOfficeData({ home: null, userData, knowledgeRoot: notStore }), []);
+  assert.ok(fs.existsSync(path.join(notStore, 'docs', 'inside.txt')), 'not a store, so its docs stay');
+  assert.deepEqual(eraseOfficeData({ home: null, userData, knowledgeRoot: store }), []);
+  for (const n of ['docs', 'index.jsonl', 'meaning']) assert.equal(fs.existsSync(path.join(store, n)), false, n);
+  assert.equal(fs.readFileSync(path.join(store, 'mine.txt'), 'utf8'), 'mine', 'the folder it sits in keeps everything else');
+  const damaged = path.join(root, 'office');
+  seed(damaged, ['roster-backups', 'agent-settings', 'worktrees']);
+  assert.deepEqual(eraseOfficeData({ home: damaged, userData }), []);
+  assert.equal(fs.existsSync(path.join(damaged, 'agent-settings')), false, 'no registry, but the reset just archived its roster');
+  assert.equal(fs.existsSync(path.join(damaged, 'worktrees')), false, 'agents\' worktrees go too');
 });

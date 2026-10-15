@@ -110,7 +110,7 @@ import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { pastesDir, savePaste, sweepOldPastes } from './pastes';
-import { CHECK_FOLDERS, KNOWLEDGE_STORE_ENTRIES, STANDING_CHECK_DIR, TRUST_CHECK_DIR, eraseOfficeData } from './factoryReset';
+import { CHECK_FOLDERS, STANDING_CHECK_DIR, TRUST_CHECK_DIR, eraseOfficeData } from './factoryReset';
 import { buildWorkerLaunch } from './workerLaunch';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
@@ -6199,11 +6199,10 @@ ipcMain.handle('app:resetAll', () => {
     // desk are in its own entries, removed only when it really is an office.
     extra: [
       ...(researchDesk() ? projectDirs(researchDesk()!) : []),
-      ...CHECK_FOLDERS.flatMap((f) => projectDirs(join(userData, f))),
-      // Company knowledge the owner moved out of the app's data folder: its
-      // store's own entries, never the folder it sits in.
-      ...(resolve(kgRoot) !== resolve(join(userData, 'knowledge')) ? KNOWLEDGE_STORE_ENTRIES.map((n) => join(kgRoot, n)) : [])
-    ]
+      ...CHECK_FOLDERS.flatMap((f) => projectDirs(join(userData, f)))
+    ],
+    // Company knowledge the owner moved out of the app's data folder.
+    knowledgeRoot: resolve(kgRoot) !== resolve(join(userData, 'knowledge')) ? kgRoot : null
   });
   if (failed.length) console.error('[reset] could not remove:', failed);
   // Back to first-run defaults, then relaunch clean so all in-memory services
