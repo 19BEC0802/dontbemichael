@@ -8,7 +8,7 @@ export type IconName =
   | 'gear' | 'plus' | 'x' | 'check' | 'arrow-right' | 'pause' | 'play'
   | 'bell' | 'folder' | 'terminal' | 'code' | 'web' | 'mcp' | 'sparkle'
   | 'expand' | 'minimize' | 'clock' | 'mic' | 'ledger' | 'info' | 'sidebar'
-  | 'image' | 'edit' | 'git' | 'file' | 'sheet' | 'help' | 'external' | 'mail' | 'lock';
+  | 'image' | 'edit' | 'git' | 'file' | 'sheet' | 'help' | 'external' | 'mail' | 'lock' | 'send';
 
 /** Each icon is one or more path `d` strings on a 24 unit grid. */
 const paths: Record<IconName, string[]> = {
@@ -50,7 +50,9 @@ const paths: Record<IconName, string[]> = {
   // After a link in agent text (docs/designs/named-links.md): it opens the
   // browser (Lucide external-link), or the mail app (Lucide mail).
   external: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
-  mail: ['M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7']
+  mail: ['M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7'],
+  // Pulse's emails sent for you (Lucide send).
+  send: ['M22 2 11 13', 'M22 2l-7 20-4-9-9-4z']
 };
 
 export interface IconProps {

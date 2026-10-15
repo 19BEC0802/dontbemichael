@@ -10,6 +10,8 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 
 ### Added
 
+- **Pulse: what the office got done and what it costs.** A new Pulse tab beside Tasks shows ways to save first (run a check less often when it mostly finds nothing; try a lighter or stronger model when the work shows it), each with the numbers behind it, applied only when you click Apply and undone with Undo. Below: what got done and who did it, each team member's cost for the work against the office's usual, your time, work done while you were away, and your plan use. Savings are measured from the office's own records after a week. The numbers come from a new store only the app writes, in its own data folder, which no team member can reach.
+
 - **Ask me cards you can answer with a click.** When Michael offers choices, they show as rows to pick, with his recommendation tagged; when he asks several things, each question gets its own line, and a question can carry its own small choices. Nothing is sent until you press Reply, which says what it will send ("Reply with option 1", "Reply to 2 of 5"), and a box for your own answer or a note stays on every card. Michael gets your answer in words ("Picked: …", "1: … Not answered: 3"), never a bare number. Asks written the old way look as they did. (Agent behavior: Michael writes choices and questions as fields, and a to-do gets "Done, I did it" as its first option.)
 
 - **Delete a team member for good.** Edit agent has a Danger zone under the engine with a Delete button. After one confirm, the team member stops, their schedules pause, work bound to them goes back to the teammates it was taken from, and they leave the floor with no way back. Michael's roster skips them from then on. Their open questions leave Ask me (kept on the card, marked withdrawn because they were deleted), and Michael gets one note listing their open cards to give to someone else or close. Michael, his assistant and Research have no Delete (Research is turned off in Settings). Before this, no hire could leave the team: the old close button was hidden on 2026-09-24. (Agent behavior: who Michael can route to, and a new note to Michael when you delete someone.)
@@ -20,6 +22,10 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 - **Glass monitors.** The desk monitors, Michael's too, are clear glass panes instead of thick black screens: plain glass when idle, tinted with scrolling lines while someone works.
 - **A team member stuck on a prompt is restarted, not handed to you.** When a member's session stops on a question only a person could answer, the app restarts them so they carry on, and Michael no longer asks you to open a 1:1 chat. If it comes back right after, Michael moves their work to a teammate and tells you plainly that they are stuck. (Agent behavior: what Michael is told and asks.)
 - **You never have to answer every question on a card.** Reply settles the ask with whatever you answered; the questions you left blank go through Michael to the team member who raised them, who works out what they can and comes back only for what they still need. Before, Michael asked you again at once. (Agent behavior: Michael and every team member.)
+
+### Security
+
+- **Hook events carry a secret for each start (issue #61).** Every team member's events (a turn starting, a tool used, a turn finished, its cost) now carry a secret the app gives it when it starts, and the app takes the sender from that secret. An event with no secret, someone else's, or one from an earlier start reaches nothing, and a tool check from it is refused. Behavior change for agents: none in what they do; an engine bridge that drops the secret loses its hook features until fixed.
 
 ### Fixed
 

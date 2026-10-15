@@ -6,6 +6,7 @@ import type { HarnessConfig } from '@/store/config';
 import { DEFAULT_ORG_TRIGGER } from '@shared/triggers';
 import { StudioStage } from '@/scene/studio/StudioStage';
 import { TasksKanban } from '@/components/TasksKanban';
+import { PulseView } from '@/components/pulse/PulseView';
 import { FileTabView } from '@/components/FileTabView';
 import { MemoryGraphPanel } from '@/components/MemoryGraphPanel';
 import { useHive } from '@/hooks/useHive';
@@ -333,7 +334,7 @@ export function App() {
   // written reply survive the switch; opening it goes back to the office.
   // A file tab keeps it beside the file, so an Ask me card stays answerable
   // while its file is read (docs/designs/open-file-tab.md, F1).
-  const columnShown = columnOpen && (floorView === 'office' || floorView === 'file');
+  const columnShown = columnOpen && (floorView === 'office' || floorView === 'file' || floorView === 'pulse');
   const columnRef = useRef<HTMLDivElement>(null);
   const lastColumnMode = useRef<'board' | 'person'>('board');
   // An ask arriving, or waiting at launch, opens the board. Focus stays put.
@@ -478,6 +479,7 @@ export function App() {
               background: 'var(--cth-bg)'
             }}>
               {floorView === 'tasks' && <TasksKanban />}
+              {floorView === 'pulse' && <PulseView />}
               {floorView === 'file' && <FileTabView />}
               {floorView === 'graph' && (
                 <MemoryGraphPanel godId={godId} onJumpToMemory={(id) => useStore.getState().openAgentMemory(id)} />

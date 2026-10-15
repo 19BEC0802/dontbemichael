@@ -332,6 +332,8 @@ interface State {
    *  graph no longer sits next to that tab. seq-keyed like ccTabRequest. */
   memoryFocusRequest: { agentId: string; seq: number } | null;
   openAgentMemory: (agentId: string) => void;
+  /** Open a team member's Profile tab (their schedules), from Pulse. */
+  openAgentProfile: (agentId: string) => void;
   /** The task whose detail overlay is open (rendered app-wide over the office
    *  floor — the card content grows: contracts, deps, the human Q&A trail). */
   taskDetailId: string | null;
@@ -464,16 +466,17 @@ const LS_FLOOR_VIEW = 'cth.floorView';
  *  (owner, 2026-10-03). A file tab keeps it beside the file, so an Ask me card
  *  stays answerable while its file is read (open-file-tab.md, F1). */
 function officeView(view: FloorView): { floorView?: FloorView } {
-  if (view === 'office' || view === 'file') return {};
+  // Pulse keeps the column too, so an ask is answered beside it (design D14).
+  if (view === 'office' || view === 'file' || view === 'pulse') return {};
   try { window.localStorage.setItem(LS_FLOOR_VIEW, 'office'); } catch { /* per-Mac nicety only */ }
   return { floorView: 'office' };
 }
 
-export type FloorView = 'office' | 'tasks' | 'graph' | 'file';
+export type FloorView = 'office' | 'tasks' | 'pulse' | 'graph' | 'file';
 const initialFloorView: FloorView = (() => {
   try {
     const v = window.localStorage.getItem(LS_FLOOR_VIEW);
-    return v === 'tasks' || v === 'graph' ? v : 'office';
+    return v === 'tasks' || v === 'graph' || v === 'pulse' ? v : 'office';
   } catch { return 'office'; }
 })();
 
@@ -916,6 +919,11 @@ export const useStore = create<State>((set, get) => ({
   addAgentOpen: false,
   ccTabRequest: null,
   memoryFocusRequest: null,
+  openAgentProfile: (agentId) => set((s) => {
+    const seq = (s.ccTabRequest?.seq ?? 0) + 1;
+    persistAgents(s.agents, agentId);
+    return { selectedId: agentId, ccTabRequest: { tab: 'profile', seq }, rightColumn: 'person' as const, ...officeView(s.floorView) };
+  }),
   openAgentMemory: (agentId) => set((s) => {
     const god = s.agents.find((a) => a.isGod);
     const seq = (s.ccTabRequest?.seq ?? 0) + 1;
@@ -945,7 +953,7 @@ export const useStore = create<State>((set, get) => ({
   floorView: initialFloorView,
   fileTabs: [],
   activeFileTab: null,
-  lastFixedView: initialFloorView === 'tasks' || initialFloorView === 'graph' ? initialFloorView : 'office',
+  lastFixedView: initialFloorView === 'tasks' || initialFloorView === 'graph' || initialFloorView === 'pulse' ? initialFloorView : 'office',
   ideInitialFile: null,
   ideOpen: false,
   ideAgentId: null,

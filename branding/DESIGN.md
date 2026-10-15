@@ -477,7 +477,7 @@ has no layer, so the update badge's cards keep competing at 400.
 
 ### 7.2 View tabs (TopBar)
 
-Office, Tasks, Who talks to whom, then any **file tabs** (docs/designs/open-file-tab.md).
+Office, Tasks, Pulse (§7.27), Who talks to whom, then any **file tabs** (docs/designs/open-file-tab.md).
 Tab: `t-ui` 500, `ink-2`, padding 7 × 13, `r-md`.
 Active: `ink` fill, white text (dark mode: `ink` fill `#ECEAF4`, text `#14131C`). No tab
 carries a count: the Needs you button (§7.5) is the one coral number, what is waiting on
@@ -1120,6 +1120,38 @@ string here takes the current name. Its engine offers Claude only, shown as plai
 Claude.
 
 ---
+
+### 7.27 Pulse (PulseView)
+
+The office's performance and cost as pictures (docs/designs/team-performance.md; approved
+mockup `pulse-final.html`). A fixed view tab between Tasks and Who talks to whom; the right
+column stays beside it, so an ask is answered while Pulse is open.
+
+- Header: "Pulse" `t-view`, a period select (This week, Last week, Last 4 weeks; weeks start
+  Monday; remembered), "Collecting since" in `t-meta` `ink-3`.
+- **Ways to save** first: up to three suggestion cards in `amber` soft with a 1 px `amber`
+  border at 40%, never a left stripe (that stays Ask me's); avatar, title 13/600, evidence 12
+  in `amber` text, primary Apply, secondary Not now, and a `green` soft "Saves about $N a
+  week" chip. An applied card turns `green` soft with "Applied." and Undo. Beside them, Saved
+  by your changes: "Measuring" with the first result date for 7 days, then mono dollars in
+  `green` text. With nothing to suggest, one calm line, "Nothing to change this week."
+- **What got done**: four tiles (emails organized, emails sent for you, tasks finished,
+  scheduled checks), each a line icon (mail, send, check, clock, 18 px `ink-2` on a `card-2`
+  square), a mono 28 px number, a label, and a who did it bar: members of one department take
+  its `acc`, then `m`, then `d`, with a 2 px gap and a named legend.
+- **Team**: Michael's tile first with an `indigo` ring (requests routed, questions to you,
+  cards opened, running the office %); then a tile per member (avatar ringed in department
+  `acc`, name, department micro label, up to three counts, and a cost for the work bar:
+  `green` soft to `neutral-soft` to `amber` soft, a center tick for usual, a 14 px ring marker;
+  "Cheaper" `green` text, "About usual" `ink`, "Pricier" `amber` text, or "Too few to compare
+  yet"). An `amber` dot marks a member with a suggestion. A tile opens the member detail, an
+  overlay like Task detail (§7.21): six facts in `card-2` boxes and a four week value bar.
+- **Office row** last: Where the money went (one bar, department colors, named), plan use (SVG
+  ring, on a Claude plan only, with an `amber` soft "Runs out around …" when the pace says so),
+  Your time and While you were away.
+- Layout by the stage's width: 1100 px and wider, 4 a row; 760 to 1099, outcomes 2 by 2 and
+  members 3 a row; under 760, one column. Coral is never used on Pulse. Every chart has an
+  aria-label sentence; Apply and Undo announce in a polite live region.
 
 ## 8. The studio illustration [Both]
 

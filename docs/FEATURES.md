@@ -105,6 +105,12 @@ moving, and brings you only the decisions that need you.
 - Every team member has a Profile, Access, Messages, Memory and Work tab written for owners, not
   developers. Views for the task board and for who talks to whom, over any time from the last hour
   to the last month.
+- Pulse shows what the office got done and what each team member costs, as pictures: ways to
+  save first (a schedule that mostly finds nothing to do, or a member whose work would suit a
+  lighter model), each with its numbers and applied only by your click, with Undo; what got done
+  and who did it; each member's cost for the work against the office's usual; your time; work
+  done while you were away; and your plan use. Savings are measured from the office's own
+  records, never promised.
 
 ### 8. Built for small business owners
 - Setup by kind of business: restaurant and food, retail, professional services, home services,

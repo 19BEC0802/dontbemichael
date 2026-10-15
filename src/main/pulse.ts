@@ -38,20 +38,8 @@ export interface PulseDeps {
   now?: () => number;
 }
 
-export interface AppliedChange { id: number; adviceId: string; agentId: string; kind: string; before: unknown; after: unknown; at: number; undoneAt: number | null }
-
-export interface PulseView {
-  available: boolean;
-  billing: 'account' | 'apiKey';
-  collectingSince: string | null;
-  snapshot: PulseSnapshot;
-  advice: Advice[];
-  /** When suggestions start (14 days after the first record), or null once they can show. */
-  adviceFrom: string | null;
-  saved: { state: 'none' } | { state: 'measuring'; firstAt: number } | { state: 'measured'; usd: number; since: number };
-  headroom: { usedPct: number; resetsAt: number; runsOutAt: number | null } | null;
-  applied: AppliedChange[];
-}
+export type { AppliedChange, PulseView } from '../shared/pulseView';
+import type { AppliedChange, PulseView } from '../shared/pulseView';
 
 /** Window lengths by Claude Code's rate limit names. */
 function windowMs(name: string): number {
@@ -142,7 +130,7 @@ export class PulseService {
     const godId = this.d.godId();
     const db = this.d.db();
     const empty = pulseSnapshot({ period, now, days: [], cards: [], decisions: [], asks: [], members: [] });
-    if (!office || !db) return { available: false, billing, collectingSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [] };
+    if (!office || !db) return { available: false, billing, collectingSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [], trend: {} };
     const range = periodRange(period, now);
     const from = Math.min(range.fromMs, now - ADVICE_WINDOW_MS);
     const ids = this.d.members().map((m) => m.id);
@@ -170,8 +158,23 @@ export class PulseService {
       adviceFrom: adviceReady ? null : dayKey(firstMs + ADVICE_WINDOW_MS),
       saved: this.saved(office, applied),
       headroom: billing === 'account' ? planHeadroom(this.reading) : null,
-      applied
+      applied,
+      trend: this.trend(office, ids)
     };
+  }
+
+  /** Value per week, last four weeks (this week last), per member. */
+  private trend(office: string, ids: string[]): Record<string, number[]> {
+    const now = this.now();
+    const start = periodRange('4-weeks', now).fromMs;
+    const days = this.d.processor.days(office, dayKey(start));
+    const out: Record<string, number[]> = {};
+    for (const id of ids) out[id] = [0, 0, 0, 0];
+    for (const d of days) {
+      const w = Math.floor((new Date(`${d.day}T12:00:00`).getTime() - start) / (7 * 86_400_000));
+      if (w >= 0 && w < 4) (out[d.agentId] ??= [0, 0, 0, 0])[w] += d.usd;
+    }
+    return out;
   }
 
   /** D16: measured savings of every change still in place. */

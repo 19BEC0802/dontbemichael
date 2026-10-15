@@ -1,5 +1,5 @@
 import type { Period } from '../shared/teamPerformance';
-import type { PulseView } from '../main/pulse';
+import type { PulseView } from '../shared/pulseView';
 import type { ResearchConfig } from '../shared/research';
 import type { DataClassId, DataClassSetting } from '../shared/dataClasses';
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
