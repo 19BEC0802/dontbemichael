@@ -1218,6 +1218,18 @@ each side (Michael lands "that's what she said", Andy went to Cornell), and the 
 picked to fit; a break-room line never names its own speaker (owner, 2026-10-03). A
 conversation ends early if either person gets work.
 
+**Pete.** The Research member takes part like everyone else, in his own character (owner,
+2026-10-13). His lines come from his season 9 story, written in his voice: Andy calls him
+Plop, he is the New Jim with nothing in common with Jim, he recites Die Hard for Erin, Poor
+Richard's after work, Kelly's old customer service desk, and the office sizing up the new
+guys. No line says "Pete", since the owner may rename him. The one exception to the deck:
+**his first day welcome.** After the owner turns Research on, the first conversation that
+can be one of Pete's is, with someone in another pod, under the same pod rules. It plays
+once per turn on, kept per office; once played, a restart or a restore does not replay it
+(an office with no record of it yet, such as one that had Research on before it existed,
+plays it once), turning him on again does, and demo or lab banter never uses it up. Idle talk, his included, does not
+run in the compact grid (§8.9).
+
 The first line or conversation comes 8 to 15 s after the office opens, then every 15 to
 30 s. A single line is visible 8 s. Never from a pod with someone at work, and never from
 someone still clocking in.
@@ -1704,6 +1716,7 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-10-12 | Ask me: the See full context footer shows only when the card has a background, a result or other questions and answers (§7.8). |
 | 2026-10-12 | Task detail: QUESTIONS newest first, each with how long ago it was asked (§7.21). |
 | 2026-10-12 | Office stops: out of credit and a sign in that stopped working join the plan limit break, as a counted owner to do with a coral chip; the plan limit stays the quiet amber break (§7.6a). |
+| 2026-10-13 | Pete joins the idle talk (§8.8): his own lines and bits from his season 9 story, and a first day welcome once per turn on, per office (owner, D1, D5, D7, D9). |
 | 2026-10-13 | Research & privacy (issue #230): a Settings section with the Research row and the data classes (§7.26), Research in the onboarding Team step (§7.25), the one time Research report card (§7.8); the Sites group is gone from the Access tab (§7.12). |
 | 2026-10-13 | The Research team member is called Pete (owner): the Settings copy, the Team step row and the report card name him (§7.8, §7.25, §7.26); his name and engine show as plain text in Edit agent. |
 | 2026-10-13 | The Research member is renamable, Pete by default, and the copy takes its current name; Research & privacy shows in every office (owner, ship 2 D16, ship 2 D17). |

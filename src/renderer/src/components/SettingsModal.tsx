@@ -150,7 +150,9 @@ Check status (GET <tunnel>/<webhookId>):
 
 The mode decides which of the two answers you get:
   allow all           routes straight through -> 200
-  communication only  chatter routes; a directive gets 202 awaiting approval
+  communication only  a short plain status question routes; anything else gets
+                      202 awaiting approval. "kind": "directive" holds a message;
+                      "communication" is checked like no kind at all.
   strict              everything gets 202 awaiting approval
 
 A 202 means the message is parked in Trigger History until you approve it; the
@@ -1007,7 +1009,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                   <Icon name="bell" />
                 </div>
                 <div style={{ flex: 1, fontSize: 15, lineHeight: '22px', color: 'var(--cth-ink-700)' }}>
-                  {t('settings.resetConfirm.body', { godName })}
+                  {t('settings.resetConfirm.body')}
                 </div>
               </div>
 
@@ -2335,7 +2337,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           {t('settings.general.dangerZone')}
                         </div>
                         <p style={{ margin: 0, fontSize: 13, lineHeight: '20px', color: 'var(--cth-ink)' }}>
-                          {t('settings.general.dangerDesc', { godName })}
+                          {t('settings.general.dangerDesc')}
                         </p>
                         <div style={{ marginTop: 6 }}>
                           <button type="button" onClick={() => setConfirming(true)} style={{
