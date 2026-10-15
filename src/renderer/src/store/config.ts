@@ -295,7 +295,8 @@ export type { CatalogModel, ModelCatalog } from '@shared/modelCatalogPayload';
  *  - kimi: managed Kimi Code aliases accepted by `kimi --model <alias>`.
  *  - custom: no presets at all; the command field is the whole interface.
  */
-const BAKED: ModelCatalog = modelCatalog;
+// The JSON import types `tier` as a plain string; the parser's ModelTier is the contract.
+const BAKED: ModelCatalog = modelCatalog as ModelCatalog;
 
 /** The catalog the pickers actually read. Starts as the baked copy and is
  *  replaced, per provider, when the remote copy arrives from main. `let`, not
