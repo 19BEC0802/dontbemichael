@@ -247,7 +247,7 @@ export class HookServer {
     /** Optional observer of every hook boundary (agentId, event, message). The
      *  worker inbox-wake watchdog (workerWake.ts) feeds on this to learn when an
      *  agent is parked on a permission/HITL prompt so it never types into it. */
-    private onEvent?: (agentId: string | undefined, event: string, message: string | undefined) => void,
+    private onEvent?: (agentId: string | undefined, event: string, message: string | undefined, toolName?: string) => void,
     /** Company knowledge's live state, so turning it on or off reaches running
      *  agents on their next prompt instead of at their next start. */
     private getKnowledge?: () => { active: boolean; cliPath?: string; root?: string; meaning?: { bin: string; palace: string } },
@@ -428,7 +428,7 @@ export class HookServer {
     // subagent stopping must not mark the agent idle or replace its transcript.
     const subagent = typeof p.subagent_id === 'string' && p.subagent_id.length > 0;
     if (subagent && event === 'SubagentStop') return {};
-    this.onEvent?.(agentId, event, p.message);
+    this.onEvent?.(agentId, event, p.message, p.tool_name);
     if (agentId && !subagent && typeof p.transcript_path === 'string' && p.transcript_path) {
       this.transcriptPaths.set(agentId, p.transcript_path);
       // Michael's notes fallback reads only the transcript his own session

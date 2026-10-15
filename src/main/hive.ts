@@ -3441,6 +3441,8 @@ export class HiveManager {
     // as the outcome until the work finishes again.
     if (!this.patchTask(id, { status, waitingOn: undefined, closedBy: undefined, closedAt: undefined, closedReason: undefined, ...(wasDone ? { result: undefined } : {}) })) return false;
     if (wasDone && card.status !== 'done') { delete this.guardState().done[id]; this.saveGuard(); }
+    // A reopen used to leave no trace; Pulse counts it against kept as is (E2).
+    if (wasDone) this.appendLog({ kind: 'card-reopen', id, agentId: card.assignee ?? null, by: 'owner' });
     if (from !== status) this.tellGodOwnerChange(card, { kind: 'moved', from, to: status, ...(why ? { reason: why } : {}) });
     return true;
   }
@@ -3840,6 +3842,7 @@ export class HiveManager {
     try { this.guardBoard(); } catch (e) { console.error('[hive] board guard:', e); }
     const raw = this.tasks() as { tasks?: unknown };
     const tasks = Array.isArray(raw?.tasks) ? (raw.tasks as CardLike[]) : [];
+    try { this.tasksObserver?.(tasks); } catch (e) { console.error('[hive] tasks observer:', e); }
     // A card that has ended (Done, or closed by the owner) needs no routing,
     // unless the owner answered after it closed: an open question stays on Ask
     // me on a Done card, and that answer is still Michael's to route. Only an
@@ -5277,9 +5280,17 @@ export class HiveManager {
     if (!root) return;
     // Compact JSON with a top-level numeric ts first: logTail's fast path
     // reads "kind":"..." and "ts":N straight from the line text.
-    const line = JSON.stringify({ ts: Date.now(), ...event }) + '\n';
+    const stamped = { ts: Date.now(), ...event };
+    const line = JSON.stringify(stamped) + '\n';
     try { appendFileSync(join(root, 'log.jsonl'), line, 'utf8'); } catch { /* noop */ }
+    // Pulse telemetry mirrors the kinds it counts (docs/designs/team-performance.md).
+    try { this.logObserver?.(stamped); } catch { /* best-effort */ }
   }
+
+  /** Called with every office log event after it is written (Pulse telemetry). */
+  logObserver?: (event: Record<string, unknown> & { ts: number }) => void;
+  /** Called with the board each 8 s tick reads (Pulse telemetry's card diff). */
+  tasksObserver?: (tasks: CardLike[]) => void;
 
   /**
    * Append one cost sample to the durable, append-only ledger at

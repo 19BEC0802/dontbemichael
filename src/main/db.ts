@@ -64,6 +64,77 @@ const MIGRATIONS: Array<(db: Database.Database) => void> = [
       );
       CREATE INDEX IF NOT EXISTS idx_ch_agent_ts ON command_history(agent_id, ts DESC);
     `);
+  },
+  // → user_version 2: Pulse telemetry (docs/designs/team-performance.md, D16).
+  // Data points are written only by main; runs, daily totals and the rest are
+  // derived and can be rebuilt from the events. Keyed by office (harness home).
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS telemetry_events (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        office   TEXT NOT NULL,
+        agent_id TEXT,
+        kind     TEXT NOT NULL,
+        ts       INTEGER NOT NULL,
+        value    REAL,
+        attrs    TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_te_office_ts ON telemetry_events(office, ts);
+      CREATE TABLE IF NOT EXISTS telemetry_runs (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        office     TEXT NOT NULL,
+        agent_id   TEXT NOT NULL,
+        mission_id TEXT NOT NULL,
+        dispatched INTEGER NOT NULL,
+        start      INTEGER,
+        end        INTEGER,
+        usd        REAL NOT NULL DEFAULT 0,
+        work       INTEGER NOT NULL DEFAULT 0,
+        outcome    TEXT,
+        relay      INTEGER NOT NULL DEFAULT 0,
+        day        TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_tr_office_start ON telemetry_runs(office, dispatched);
+      CREATE TABLE IF NOT EXISTS telemetry_daily (
+        office         TEXT NOT NULL,
+        agent_id       TEXT NOT NULL,
+        day            TEXT NOT NULL,
+        usd            REAL NOT NULL DEFAULT 0,
+        run_usd        REAL NOT NULL DEFAULT 0,
+        tokens         REAL NOT NULL DEFAULT 0,
+        emails         INTEGER NOT NULL DEFAULT 0,
+        sent           INTEGER NOT NULL DEFAULT 0,
+        tasks          INTEGER NOT NULL DEFAULT 0,
+        checks         INTEGER NOT NULL DEFAULT 0,
+        checks_nothing INTEGER NOT NULL DEFAULT 0,
+        away_pieces    INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (office, agent_id, day)
+      );
+      CREATE TABLE IF NOT EXISTS telemetry_failures (
+        office TEXT NOT NULL,
+        day    TEXT NOT NULL,
+        count  INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (office, day)
+      );
+      CREATE TABLE IF NOT EXISTS telemetry_dismissed (
+        office    TEXT NOT NULL,
+        advice_id TEXT NOT NULL,
+        band      INTEGER NOT NULL,
+        at        INTEGER NOT NULL,
+        PRIMARY KEY (office, advice_id)
+      );
+      CREATE TABLE IF NOT EXISTS telemetry_applied (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        office    TEXT NOT NULL,
+        advice_id TEXT NOT NULL,
+        agent_id  TEXT NOT NULL,
+        kind      TEXT NOT NULL,
+        before    TEXT NOT NULL,
+        after     TEXT NOT NULL,
+        at        INTEGER NOT NULL,
+        undone_at INTEGER
+      );
+    `);
   }
 ];
 
@@ -108,6 +179,10 @@ export class PersistStore {
   }
 
   get isOpen(): boolean { return this.db !== null; }
+
+  /** The open handle for main-process stores built on this database (Pulse
+   *  telemetry), or null when it is closed or failed to open. */
+  database(): Database.Database | null { return this.db; }
 
   // ─── kv (scalar app state) ─────────────────────────────────────────────────
 
