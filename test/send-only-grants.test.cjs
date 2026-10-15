@@ -376,6 +376,7 @@ test('list_mailboxes ignores malformed saved send records instead of crashing', 
     sends: [
       { agentId: 'dwight', mailbox: 'ceo', messageId: '<good@x.com>', references: [], to: 'lead@client.com', subject: 'Intro', sentAt: 1_000 },
       { agentId: 'dwight', mailbox: 'ceo', messageId: '<bad-date@x.com>', references: [], to: 'lead@client.com', subject: 'Intro', sentAt: 'yesterday' },
+      { agentId: 'dwight', mailbox: 'ceo', messageId: '<out-of-range-date@x.com>', references: [], to: 'lead@client.com', subject: 'Intro', sentAt: 1e20 },
       { agentId: 'dwight', mailbox: 'ceo', messageId: '<bad-thread@x.com>', references: '<good@x.com>', to: 'lead@client.com', subject: 'Re: Intro', sentAt: 2_000 }
     ]
   }), 'utf8');

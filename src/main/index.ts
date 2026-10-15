@@ -41,7 +41,7 @@ import {
 import { normalizeWeekly, weeklyDelayMs } from '../shared/weeklySchedule';
 import { normalizeTimes, timesDelayMs } from '../shared/scheduleTimes';
 import {
-  armPlan, firePayload, upsertMission, deleteMission, setMissionEnabled, pauseMissionsOf,
+  armPlan, catchUpFloor, firePayload, upsertMission, deleteMission, setMissionEnabled, pauseMissionsOf,
   migrateMissions, clampIntervals, buildScheduleRequest, applyScheduleRequest, missionsFor, fileScheduleRequest, foldScheduleRequests,
   requestSummary, whenWords, cleanFocus, scheduledJobsBlock,
   type ScheduleRequest
@@ -1197,7 +1197,9 @@ function syncMissions(): void {
       // the worst case is a lost stamp rather than a hot loop.
       const rearm = (justFired: boolean): void => {
         const now = Date.now();
-        const persisted = (readConfig().missions ?? []).find((x) => x.id === m.id)?.lastFiredAt ?? 0;
+        // The later of the last run and when its times took effect (catchUpFloor).
+        const stored = (readConfig().missions ?? []).find((x) => x.id === m.id);
+        const persisted = stored ? catchUpFloor(stored) : 0;
         const floor = justFired ? Math.max(persisted, now) : persisted;
         // Several "when" lines re-arm the same way (src/shared/scheduleTimes.ts).
         const delay = plan.type === 'times' ? timesDelayMs(plan.times, now, floor) : weeklyDelayMs(plan.weekly, now, floor);
@@ -1428,7 +1430,7 @@ function receiveScheduleRequest(actor: string, payload: unknown, why = ''): stri
   if (actor === godId) {
     let refused = '';
     const res = applyMissions((list) => {
-      const applied = applyScheduleRequest(built.request, list, `m_${Date.now().toString(36)}`);
+      const applied = applyScheduleRequest(built.request, list, `m_${Date.now().toString(36)}`, Date.now());
       if (!applied.ok) { refused = applied.error; return null; }
       return applied.missions.map((m) => (m.id === applied.missionId ? { ...m, approvedBy: 'michael' as const } : m));
     });
@@ -1548,7 +1550,7 @@ function decideScheduleRequest(id: string, approve: boolean, by: 'owner' | 'mich
     let refused = '';
     // Apply against the list as it is when written (applyMissions reads it fresh).
     const res = applyMissions((list) => {
-      const applied = applyScheduleRequest(req, list, `m_${Date.now().toString(36)}`);
+      const applied = applyScheduleRequest(req, list, `m_${Date.now().toString(36)}`, Date.now());
       if (!applied.ok) { refused = applied.error; return null; }
       return applied.missions.map((m) => (m.id === applied.missionId ? { ...m, approvedBy: by } : m));
     });
@@ -6366,12 +6368,12 @@ ipcMain.handle('missions:upsert', (_evt, mission: unknown): MissionOpResult => {
     if (!times) return { ok: false, error: 'invalid schedule times' };
     clean = { ...clean, times };
   }
-  return applyMissions((list) => upsertMission(list, clean));
+  return applyMissions((list) => upsertMission(list, clean, Date.now()));
 });
 ipcMain.handle('missions:delete', (_evt, id: unknown): MissionOpResult =>
   typeof id === 'string' ? applyMissions((list) => deleteMission(list, id)) : { ok: false, error: 'invalid id' });
 ipcMain.handle('missions:setEnabled', (_evt, id: unknown, on: unknown): MissionOpResult =>
-  typeof id === 'string' ? applyMissions((list) => setMissionEnabled(list, id, on === true)) : { ok: false, error: 'invalid id' });
+  typeof id === 'string' ? applyMissions((list) => setMissionEnabled(list, id, on === true, Date.now())) : { ok: false, error: 'invalid id' });
 
 // ─── IPC: schedule requests (an agent asked, the owner decides in ASK ME) ────
 ipcMain.handle('scheduleRequests:list', () => {

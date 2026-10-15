@@ -867,12 +867,29 @@ export class HiveManager {
    * agents a `$HIVE_NODE` they can invoke directly (running the Electron binary
    * WITHOUT the env var would launch a second app window, not a script).
    *
-   * Rewritten on every bootstrap, so an app update/move re-bakes execPath.
+   * Checked on every bootstrap and rewritten when its text changed, so an app
+   * update/move re-bakes execPath (see writeIfChanged for why not every time).
    */
   private nodeLauncherPath(): string | null {
     const root = this.root();
     if (!root) return null;
     return join(root, 'bin', process.platform === 'win32' ? 'hive-node.cmd' : 'hive-node');
+  }
+
+  /** Write `text` to `p` unless the file already says exactly that.
+   *
+   *  For the bundled-node shims (the launcher below and the PATH `node` in
+   *  writeRuntimeShims). ensureHive runs on every task write and every spawn,
+   *  not just at startup, and on Windows something holds a running `.cmd` open
+   *  (cmd.exe, or a scanner) for as long as a hook runs through it, so rewriting
+   *  the same bytes failed with EBUSY and logged an error on every board
+   *  change (seen live, 2026-10-12). The text only changes when the app moves
+   *  or updates, and that write still lands on the next bootstrap with no hook
+   *  in flight. */
+  private writeIfChanged(p: string, text: string): void {
+    let current: string | null;
+    try { current = readFileSync(p, 'utf8'); } catch { current = null; }
+    if (current !== text) writeFileSync(p, text, 'utf8');
   }
 
   /** Write the launcher described above. Best-effort: on failure callers fall
@@ -882,9 +899,9 @@ export class HiveManager {
     if (!p) return;
     try {
       if (process.platform === 'win32') {
-        writeFileSync(p, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`, 'utf8');
+        this.writeIfChanged(p, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`);
       } else {
-        writeFileSync(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`, 'utf8');
+        this.writeIfChanged(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`);
         chmodSync(p, 0o755);
       }
     } catch (e) {
@@ -948,14 +965,10 @@ export class HiveManager {
     try {
       mkdirSync(dir, { recursive: true });
       if (process.platform === 'win32') {
-        writeFileSync(
-          join(dir, 'node.cmd'),
-          `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`,
-          'utf8'
-        );
+        this.writeIfChanged(join(dir, 'node.cmd'), `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`);
       } else {
         const p = join(dir, 'node');
-        writeFileSync(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`, 'utf8');
+        this.writeIfChanged(p, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "$@"\n`);
         chmodSync(p, 0o755);
       }
     } catch (e) {
@@ -1440,6 +1453,16 @@ export class HiveManager {
       mkdirSync(dirname(settingsPath), { recursive: true });
       this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), opts.folderPolicy, stripConnectors ? [] : opts.connectors?.deny ?? [], shell.shell, opts.network, meta.isResearch ? this.researchShellWrite(dir, meta.cwd) : undefined));
       args.push('--settings', settingsPath);
+      // A `claude` the agent starts from its shell has no hook and no deny
+      // rules, so it would load every connector on the account (TODOS, P1).
+      // Claude Code sources CLAUDE_ENV_FILE before each shell command, so the
+      // agent keeps its connectors and its shell children get none. Bash only;
+      // a PowerShell agent (Windows without Git Bash) is not covered yet.
+      if (shell.shell === 'bash') {
+        const envFile = settingsPath.replace(/\.json$/, '.env.sh');
+        writeFileSync(envFile, 'export ENABLE_CLAUDEAI_MCP_SERVERS=false\n');
+        env.CLAUDE_ENV_FILE = envFile;
+      }
     }
     if (stripConnectors) {
       env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';

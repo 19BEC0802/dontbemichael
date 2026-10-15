@@ -729,6 +729,9 @@ export function useHive(config: HarnessConfig | null): void {
       } else if (e.event === 'PostCompact') {
         if (!breakerArmed) updateAgent(e.agentId, { status: 'working', action: 'resumed', carrying: undefined, actionDetail: undefined, actionAt: Date.now() });
       } else if (e.event === 'PreToolUse' && e.tool) {
+        // A blocked event means the hook denied this call; nothing ran.
+        // Do not update the agent's working state or count a tool use for it.
+        if (e.blocked) return;
         const m = stationForTool(e.tool);
         // Each tool call restarts the clock the closing-time rows show.
         if (!breakerArmed) updateAgent(e.agentId, { status: 'working', currentStation: m.station, carrying: m.carry, action: `using ${e.tool}`, actionDetail: e.detail, actionAt: Date.now() });
@@ -743,6 +746,8 @@ export function useHive(config: HarnessConfig | null): void {
         // With parallel calls, the row goes back to the latest one still running.
         const running = e.event === 'PostToolUse' ? runningCalls.end(e.agentId, e.toolUseId) : undefined;
         if (running && !breakerArmed) updateAgent(e.agentId, { action: `using ${running.tool}`, actionDetail: running.detail, actionAt: running.at });
+        // Nothing still running: the row stops naming the tool that finished.
+        else if (e.event === 'PostToolUse' && !breakerArmed) updateAgent(e.agentId, { action: 'thinking' });
         // The prompt landed: a submit waiting on it stops pressing Enter.
         if (e.event === 'UserPromptSubmit') { promptSubmits.note(e.agentId); runningCalls.clear(e.agentId); }
       } else if (e.event === 'PreInvocation') {

@@ -4,6 +4,7 @@ import { MailboxesSettings } from './MailboxesSettings';
 import { ClaudeConnectorsSettings } from './ClaudeConnectorsSettings';
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { useDialog } from '@/shell/useDialog';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 import { useTranslation } from 'react-i18next';
 import { agentModels, type HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
@@ -208,6 +209,9 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
   // once requestClose exists, so unsaved changes still ask first.
   const closeFnRef = useRef<() => void>(() => onClose());
   useDialog(dialogRef, () => closeFnRef.current());
+  // The backdrop closes through the same guard, and only on a real click on
+  // it: a click outside used to drop staged changes without asking.
+  const backdrop = useBackdropClose(() => closeFnRef.current());
   const godName = useStore((s) => s.agents.find((a) => a.isGod)?.name) ?? 'the orchestrator';
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -893,7 +897,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
 
   return (
     <div
-      onClick={busy ? undefined : onClose}
+      {...backdrop}
       style={{
         position: 'fixed', inset: 0,
         background: 'color-mix(in srgb, var(--cth-bg) 60%, transparent)',
@@ -909,7 +913,6 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
         aria-modal="true"
         aria-label={modalTitle}
         tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
         style={{
           width: 880, maxWidth: '92vw', maxHeight: '88vh',
           display: 'flex', flexDirection: 'column', overflow: 'hidden', outline: 'none',
@@ -1110,7 +1113,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           </div>
                         )}
                         {changeErr && !changeHome && (
-                          <div style={{ fontSize: 12, lineHeight: '18px', color: '#6E1423', marginTop: 6 }}>{changeErr}</div>
+                          <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--cth-coral-text)', marginTop: 6 }}>{changeErr}</div>
                         )}
                       </div>
 
@@ -1896,7 +1899,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                         )}
 
                         {/* Public surface warning. Loud, not buried. */}
-                        <span style={{ fontSize: 12, lineHeight: '16px', color: '#6E1423' }}>
+                        <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--cth-coral-text)' }}>
                           {t('settings.connections.webhookWarning')}
                         </span>
 
