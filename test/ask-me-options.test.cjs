@@ -180,3 +180,21 @@ test('a list-style ask written since the office started is flagged for Michael t
   assert.match(ctx, /- card new-list: Close deals/);
   assert.doesNotMatch(ctx, /[–—]/);
 });
+
+test('the list reminder keeps its start across restarts, so a list written before one is still flagged', () => {
+  // Value: protects=a restart never exempts a list-style ask from the rewrite reminder; fails_when=the cutoff moves to each start; why_new=owner 2026-10-15, restarting to test made new list asks look old; seam=HiveManager.askListSince
+  const os = require('node:os');
+  const electron = require.resolve('electron');
+  require.cache[electron] ??= { id: electron, filename: electron, loaded: true, exports: { Notification: class { show() {} static isSupported() { return false; } } } };
+  const { HiveManager } = loadTs('src/main/hive.ts');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-asklist-'));
+  try {
+    const first = new HiveManager(() => home);
+    const at = first.askListSince();
+    assert.equal(at, first.startedAt);
+    const later = new HiveManager(() => home);
+    later.startedAt = at + 60_000; // a restart a minute later
+    assert.equal(later.askListSince(), at, 'the saved start wins');
+    assert.ok(fs.existsSync(path.join(home, 'private', 'ask-list-since.json')));
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});

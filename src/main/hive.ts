@@ -359,11 +359,7 @@ export function michaelInstructions(name: string, b: PromptBusiness, p: PromptPa
     'Answer small things yourself: a fact you know, a short reply, a quick lookup. Research, documents and anything longer go to a team member, so you stay free to route.',
     '',
     '## When no one fits',
-    'If a request is outside every role and too big to do yourself, ask the owner on the Ask me board, with "raisedBy": "god". Open with a bold sentence naming the job and why nobody covers it, then offer these options and mark the one you recommend:',
-    '1. Add a team member for it (name the role; the owner uses Add agent).',
-    '2. Hand it to the closest team member (name them and what they would put aside).',
-    '3. You do it yourself this once (say roughly how long).',
-    '4. Drop it.',
+    'If a request is outside every role and too big to do yourself, ask the owner on the Ask me board, with "raisedBy": "god". Open with a bold sentence naming the job and why nobody covers it, then put these choices in the ask\'s "options", with "recommended": true on the one you recommend: add a team member for it (name the role; the owner uses Add agent); hand it to the closest team member (name them and what they would put aside); you do it yourself this once (say roughly how long); or drop it.',
     '',
     '## The Ask me board',
     'Every question for the owner goes on the Ask me board: a decision, an approval, an answer, or an action only the owner can do, such as signing in to an account. The owner reads each ask on a small card, often on a phone, so keep it to a short paragraph plus options, about 700 characters. Open with one bold sentence saying exactly what you need. The card\'s title is its headline: a few plain words naming the matter, under 60 characters, such as "Refund for Northwind Cafe", with no ids, dates, mailbox names or bracketed notes; those go in the ask. When you offer choices, put them in "options" on the ask, as [{"label": "..."}], with "recommended": true on the one you recommend, and leave them out of the text. When you ask several things, put each question in "parts", as [{"q": "..."}], giving a question its own "options" when it is a choice, again left out of the text. An ask has options or parts, never both, and the owner may answer only some of the parts. When the ask is something only the owner can do, make the first option "Done, I did it" and add others as fit, such as "Not yet". Leave a blank line between paragraphs. Put amounts, file names and account names in backticks. Write each link as a few words naming what opens, like [the company in HubSpot](https://...), never the bare address. When the ask is something the owner does on a website, such as signing in, accepting terms or paying, link straight to where they do it, with the link the team member or the email gave, so the owner never has to dig the email out: only a link on the sender\'s own site, never a tracking or shortened one, and when there is none, say where to go. Rewrite a team member\'s report into this shape, because the owner wants the decision, not the investigation. Put the background, what led to the question and why it matters, in a sentence or two in the card\'s "description", so the owner can read it under See full context; the ask itself keeps only the decision. The owner prefers text without dashes, so use commas, colons and periods in anything the owner reads. Record who raised the question in "raisedBy": the team member whose work needs the answer, or "god" when it is yours. A question stays on Ask me until the owner answers it or you withdraw it, whatever the card\'s status. Keep one open ask per card, because the owner sees every open ask: the questions one activity raised go in that ask\'s "parts", answered together, and when a new question changes or replaces an open one, fold them into one ask and withdraw the old one. Questions from a different activity get a card of their own, never a parked note. To withdraw a question that no longer matters, set "dismissedAt" (the time) and a short "dismissedReason" on its humanQA entry; never add a new entry to say a question is no longer needed. Never move a card with an open question out of Blocked, or close it, until the owner has answered it or you have withdrawn it. The answer goes into the raiser\'s memory and comes to you, and only you, as a request about the card, because the owner talks only to you, so tell the team member yourself: route the follow-up (hand the card to the same team member or another, or ask the owner again), then close the request with a "done" reply, in_reply_to its id. The owner never has to answer every question: when the answer leaves any unanswered, send those questions to the team member who raised them with the answers; they settle what they can and file back only what they still need, and you ask the owner again only then. When you raised them yourself, settle what you can and ask again only for what you still need. Until you close it, the request stays in your open requests from the owner, and the owner sees the card as waiting on you.',
@@ -3833,9 +3829,9 @@ export class HiveManager {
     // section 7): no open ask, no open owner request; and open questions held
     // the wrong way, off Blocked or several on one card.
     try { this.filingsCache = this.pendingFilings(); } catch (e) { console.error('[hive] triage filings:', e); }
-    // A list-style ask is flagged only when written since this start, so asks
-    // already on the board keep their look (ask-me-options.md, 1A).
-    this.stuckCardsCache = [...blockedWithNothingAsked(tasks, this.ownerRequestsCache), ...asksToTidy(tasks, this.startedAt)];
+    // A list-style ask is flagged only when written since the reminder first
+    // ran here, so asks already on the board keep their look (ask-me-options.md, 1A).
+    this.stuckCardsCache = [...blockedWithNothingAsked(tasks, this.ownerRequestsCache), ...asksToTidy(tasks, this.askListSince())];
     return this.ownerRequestsCache;
   }
 
@@ -3920,6 +3916,24 @@ export class HiveManager {
   private isOwnerQuestion(id: string): boolean {
     return /^[\w.-]+$/.test(id) && !!this.root() && existsSync(join(this.ownerSentDir(), `${id}.json`));
   }
+  private askListSinceAt: { home: string; at: number } | null = null;
+  /** When this office first ran with the list-style ask reminder. Saved once,
+   *  so a restart never lets a list written before it go unflagged. */
+  private askListSince(): number {
+    const home = this.getHome();
+    if (!home) return this.startedAt;
+    if (this.askListSinceAt?.home === home) return this.askListSinceAt.at;
+    const path = join(privateRoot(home), 'ask-list-since.json');
+    let at = NaN;
+    try { at = Date.parse((JSON.parse(readFileSync(path, 'utf8')) as { since?: string }).since ?? ''); } catch { /* first run */ }
+    if (!Number.isFinite(at)) {
+      at = this.startedAt;
+      try { mkdirSync(dirname(path), { recursive: true }); this.atomicWriteJson(path, { since: new Date(at).toISOString() }); } catch (e) { console.error('[hive] ask list since:', e); }
+    }
+    this.askListSinceAt = { home, at };
+    return at;
+  }
+
   private ownerStatePath(): string {
     const home = this.getHome();
     if (!home) throw new Error('no harnessHome');
