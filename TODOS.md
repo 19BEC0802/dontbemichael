@@ -241,18 +241,6 @@
 **Priority:** P2
 **Depends on:** None
 
-### Authenticate hook events and keep the owner's messages out of the agents' folder
-
-**What:** Give each spawned agent a secret for its hook events and ignore events whose agent id doesn't match, and move the owner's sent messages and dock state (agents/human) out of the hive folder agents can write. The design from issue #61: at spawn, main mints a random token per agent and keeps the token to agent map in memory only, never in the hive folder; each bridge carries it the way it already gets per agent config (the agent's `--settings` hook command, the hooks shim's env or config, the proxy sidecar's env); `HookServer` takes the agent from the token, not from the frame's `agent_id`, drops and logs a frame with a missing, unknown or mismatched token, and honours a `subagent_id` only under its parent's token; the token changes on every respawn and restart.
-
-**Why:** Security reviews: an agent can send a fake Stop or SessionStart event naming Michael (his notes fallback now reads only his session start transcript inside Claude's folder, but another agent's own transcript is there too), and agents can write into agents/human.
-
-**Context:** Owner decision D4 in the ship took the two cheap checks and left this with the existing data folder task. Start in `src/main/hooks.ts` (the hook socket, which reads the agent from the frame today) and `src/main/hive.ts` (`ownerSentDir`, `ownerStatePath`). A forged frame can overwrite another agent's saved session id (so it resumes the wrong conversation), add cost rows for it, or fire its Stop. One test per bridge kind (Claude settings hook, hooks shim, proxy sidecar) sends a frame naming another agent, and one with no token, and passes only when both are dropped. Every engine bridge posts to the same socket, so this is a gate for a second engine (gap 10 under "Make a second engine (Codex first) ready for an office").
-
-**Effort:** L
-**Priority:** P2
-**Depends on:** None
-
 ## Update notices (deferred from ship of feat/claude-code-update-notice, 2026-09-30)
 
 ## Secret store (deferred from ship of fix/atomic-secret-store, 2026-09-30)
@@ -644,7 +632,7 @@ Deferred from plan: `docs/designs/business-mode-office-packs.md` (owner chose "s
 7. Michael's first prompt is still written for one engine (`INITIAL_GOD_PROMPT` in `src/renderer/src/hooks/useHive.ts:77`). The spawn prompt and PROTOCOL.md now say "AI agents".
 8. No permission-prompt detection for these engines (no Notification event), which matters only with auto mode off.
 9. The access policy reaches Claude only (issue #48). Folder privacy (`denyRead`/`denyWrite`), connector deny and the MCP list are written into Claude's `--settings` (`hookSettings` in `src/main/hive.ts`); Codex gets its own workspace sandbox and `--add-dir`, but no folder read privacy or connector deny. Before any engine joins `BUILD_ENGINES`: build the one policy into each engine's own settings, record per engine which rules it can enforce, and where it can't, limit that agent (mail Draft only, connectors off) with the reason on its Access tab. A test per engine tries a read of another member's folder, a write outside its own and a denied connector, and passes only when each is blocked or the agent is limited. `test/engine-readiness.test.cjs` checks the preset half today. Issue #139 adds: make it a typed `isolation` capability on each engine preset (OS sandbox plus deny rules, a PreToolUse check only, or none), so `BUILD_ENGINES` refuses an engine that has not proved its kind, and an engine with none never hosts a member who holds a private folder; put the app's private mail token folder (`agentPrivatePaths.ts`, #63) in every engine's denied set; and note the hook gaps: pi has only PreToolUse, and the proxy tier (qwen) has no hooks at all, so its shell is unguarded.
-10. Hook events are not authenticated (issue #61): every engine's bridge posts to the one hook socket, which believes the agent named in the frame. The per agent token in "Authenticate hook events and keep the owner's messages out of the agents' folder" lands first, and the new engine's bridge passes its forged frame test.
+10. Hook events carry a per start secret (issue #61, built with the team performance work): a new engine's bridge must send `HIVE_HOOK_TOKEN` in every frame and pass the forged frame checks in `test/hook-auth.test.cjs` before it joins `BUILD_ENGINES`.
 11. No test of a run on each engine (issue #83). With a fake CLI process standing in for the engine (no paid calls), one shared test per engine checks: it starts and finishes a task, reports completion, and handles a sign-in failure, a plan or quota limit, a cancel and its cleanup, each with a plain reason to the owner. It runs in CI on every platform the engine ships for, beside `test/office-privacy-conformance.test.cjs` and `test/engine-readiness.test.cjs`.
 
 A live end-to-end run is required before adding an engine: Gemini has never been run for real, and Codex needs an OpenAI account with credits.

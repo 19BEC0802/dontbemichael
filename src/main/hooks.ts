@@ -21,7 +21,7 @@ import type { ControlRegistry } from './control';
 import type { CircuitBreaker } from './breaker';
 import { estimateCostUsd } from './pricing';
 import { claudeProjectsRoot, projectDir } from './transcript';
-import { HOOK_PATH_UNCHECKED, MAX_HOOK_FRAME_BYTES, TERMINAL_PROMPT_TYPES, isTerminalPrompt, validateHookEvent } from '../shared/hookEvents';
+import { HOOK_PATH_UNCHECKED, HOOK_SENDER_UNCHECKED, MAX_HOOK_FRAME_BYTES, TERMINAL_PROMPT_TYPES, isTerminalPrompt, validateHookEvent } from '../shared/hookEvents';
 export { TERMINAL_PROMPT_TYPES, isTerminalPrompt };
 import { resolveGodName } from '../shared/godIdentity';
 import { APP_NAME } from '../shared/appName';
@@ -300,6 +300,13 @@ export class HookServer {
         const frame = pending.subarray(0, nl).toString('utf8');
         let payload: HookPayload = {};
         try { payload = JSON.parse(frame); } catch { /* ignore */ }
+        // The sender is whoever owns the frame's secret (issue #61, eng E3): a
+        // frame without one, or naming someone else, reaches no consumer; a
+        // tool check from it is refused, never allowed.
+        if (!this.authenticate(payload)) {
+          conn.end(JSON.stringify(payload.hook_event_name === 'PreToolUse' ? mcpDeny(HOOK_SENDER_UNCHECKED) : {}));
+          return;
+        }
         let res: unknown = {};
         // A gate that throws allows a built-in tool as before, but never an MCP
         // call (connectors fail closed, D8) and never a web tool for anyone
@@ -337,6 +344,36 @@ export class HookServer {
     // (Codex adversarial review, 2026-10-05).
     this.opened = new Promise<void>((resolve) => { server.once('listening', () => resolve()); server.once('error', () => resolve()); });
     server.listen(sock);
+  }
+
+  /** Frames refused for a missing or wrong secret, by the agent they named
+   *  (or "unknown"). Read by the telemetry health record. */
+  rejectedFrames(): ReadonlyMap<string, number> {
+    return this.rejected;
+  }
+  private readonly rejected = new Map<string, number>();
+  private readonly rejectLogged = new Map<string, number>();
+
+  /** Whether a frame came from the agent it names, by its hook secret. On
+   *  success the frame names that agent and the secret is removed; on failure
+   *  the refusal is counted, and logged at most every 10 minutes per name. */
+  authenticate(p: HookPayload): boolean {
+    const token = (p as { hook_token?: unknown }).hook_token;
+    delete (p as { hook_token?: unknown }).hook_token;
+    const owner = this.hive.hookTokenOwner(token);
+    const claimed = typeof p.agent_id === 'string' && p.agent_id ? p.agent_id : null;
+    if (owner && (!claimed || claimed === owner)) {
+      p.agent_id = owner;
+      return true;
+    }
+    const who = claimed ?? 'unknown';
+    this.rejected.set(who, (this.rejected.get(who) ?? 0) + 1);
+    const now = Date.now();
+    if (now - (this.rejectLogged.get(who) ?? 0) > 10 * 60_000) {
+      this.rejectLogged.set(who, now);
+      try { this.hive.appendLog({ kind: 'hook-frame-rejected', reason: owner ? 'wrong-sender' : 'no-secret', agentId: who, event: p.hook_event_name ?? null }); } catch { /* best-effort */ }
+    }
+    return false;
   }
 
   /** Waits, up to `ms`, until the channel has opened or failed. */

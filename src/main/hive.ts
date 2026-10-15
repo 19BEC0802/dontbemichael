@@ -701,6 +701,28 @@ export function geminiIncludeDirArg(cwd: string, dir: string): string | undefine
 }
 
 export class HiveManager {
+  /** Each agent's hook secret for its current start (issue #61), in memory
+   *  only: never written to the hive or any file. A new start replaces it, so
+   *  an old process's frames are refused. */
+  private readonly hookTokens = new Map<string, string>();
+  private readonly hookTokenOwners = new Map<string, string>();
+
+  /** Make the hook secret for an agent's next start, retiring the last one. */
+  mintHookToken(agentId: string): string {
+    const old = this.hookTokens.get(agentId);
+    if (old) this.hookTokenOwners.delete(old);
+    const token = randomBytes(24).toString('hex');
+    this.hookTokens.set(agentId, token);
+    this.hookTokenOwners.set(token, agentId);
+    return token;
+  }
+
+  /** The agent a hook secret belongs to, or undefined for a missing, unknown
+   *  or retired one. */
+  hookTokenOwner(token: unknown): string | undefined {
+    return typeof token === 'string' && token ? this.hookTokenOwners.get(token) : undefined;
+  }
+
   /** When this office started, for checks that look only at what is new. */
   private readonly startedAt = Date.now();
   /**
@@ -1242,7 +1264,10 @@ export class HiveManager {
       AGENT_ID: meta.id,
       AGENT_NAME: meta.name,
       HIVE_ROOT: root,
-      AGENT_DIR: dir
+      AGENT_DIR: dir,
+      // A fresh secret for this start (issue #61): every hook frame carries it,
+      // and the hook server takes the sender from it, never from the frame.
+      HIVE_HOOK_TOKEN: this.mintHookToken(meta.id)
     };
     // The bundled-node launcher, so an agent can run the hive's .cjs helpers (KG
     // CLI, Slack reply helper) even when `node` is not on its PATH. Invoking the
@@ -1963,6 +1988,7 @@ export class HiveManager {
             ELECTRON_RUN_AS_NODE: '1',
             HIVE_SOCK: cfg.sock,
             AGENT_ID: agentId,
+            HIVE_HOOK_TOKEN: this.hookTokens.get(agentId) ?? '',
             UPSTREAM_BASE_URL: cfg.upstream,
             HIVE_PROXY_SESSION: cfg.sessionId,
             HIVE_PROXY_API: cfg.api
@@ -5708,6 +5734,8 @@ process.stdin.on('end', () => {
   const me = process.env.AGENT_ID || null;
   if (me && payload.agent_id && payload.agent_id !== me) payload.subagent_id = payload.agent_id;
   payload.agent_id = me || payload.agent_id || null;
+  // The spawn's secret (issue #61): the app works out the sender from it.
+  payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
   const sock = process.env.HIVE_SOCK;
   if (isStatus) {
     // Status-line mode: Claude Code pipes the session status JSON (incl.
@@ -5835,6 +5863,7 @@ process.stdin.on('end', () => {
   const payload = {
     hook_event_name: event,
     agent_id: agentId,
+    hook_token: process.env.HIVE_HOOK_TOKEN || null,
     session_id: agy.conversationId,
     transcript_path: agy.transcriptPath,
     cwd: Array.isArray(agy.workspacePaths) ? agy.workspacePaths[0] : undefined,
@@ -5886,6 +5915,7 @@ function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
+    payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
     var c = net.createConnection(SOCK, function () { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', function () {});
   } catch (e) {}
@@ -5923,6 +5953,7 @@ function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
+    payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
     const c = createConnection(SOCK, () => { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', () => {});
   } catch (e) {}
@@ -5981,6 +6012,7 @@ function ctxSize(model) {
 // Fire-and-forget emit of a shim-shaped payload to the hive socket. Never throws.
 function emit(payload) {
   if (!SOCK) return;
+  payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
   try {
     const c = net.createConnection(SOCK, function () { c.end(JSON.stringify(payload) + '\\n'); });
     c.on('error', function () {});
@@ -6193,7 +6225,8 @@ process.stdin.on('end', () => {
   const payload = {
     ...gemini,
     hook_event_name: names[gemini.hook_event_name] || gemini.hook_event_name || 'Unknown',
-    agent_id: agentId
+    agent_id: agentId,
+    hook_token: process.env.HIVE_HOOK_TOKEN || null
   };
   let resp = '';
   const done = () => {
@@ -6259,6 +6292,7 @@ process.stdin.on('end', () => {
   const payload = {
     hook_event_name: names[grok.hookEventName] || grok.hookEventName || 'Unknown',
     agent_id: agentId,
+    hook_token: process.env.HIVE_HOOK_TOKEN || null,
     session_id: grok.sessionId,
     cwd: grok.cwd || grok.workspaceRoot,
     tool_name: grok.toolName,
