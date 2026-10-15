@@ -379,6 +379,8 @@ function MemberTile({ m, name, role, color, advice, onOpen }: { m: MemberMeasure
   const counts: Array<[number, string]> = (['email', 'check', 'sent', 'task'] as WorkKind[]).filter((k) => m.counts[k] > 0).slice(0, 3).map((k) => [m.counts[k], t(`pulse.kind.${k}`)]);
   const verdictColor = c.verdict === 'cheaper' ? 'var(--cth-green-text)' : c.verdict === 'pricier' ? 'var(--cth-amber-text)' : 'var(--cth-ink)';
   const aria = c.verdict === 'too-few' ? t('pulse.tooFew') : t(`pulse.verdict.${c.verdict}`);
+  // No work yet: one quiet line, not an empty bar and a verdict about nothing.
+  const idle = !counts.length && c.verdict === 'too-few';
   return (
     <button type="button" onClick={onOpen} style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'start', cursor: 'pointer', border: 'none', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink)' }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -386,7 +388,7 @@ function MemberTile({ m, name, role, color, advice, onOpen }: { m: MemberMeasure
         {advice && <span aria-label={t('pulse.hasSuggestion')} style={{ marginInlineStart: 'auto', width: 8, height: 8, borderRadius: '50%', background: 'var(--cth-amber)' }} />}
       </div>
       {counts.length ? <Counts items={counts} /> : <div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.nothingYet')}</div>}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {!idle && <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={label}>{t('pulse.costForWork')}</div>
         <div role="img" aria-label={aria} style={{ position: 'relative', height: 8, borderRadius: 'var(--cth-r-pill)', background: 'linear-gradient(90deg, var(--cth-green-soft), var(--cth-neutral-soft) 40% 60%, var(--cth-amber-soft))', opacity: c.verdict === 'too-few' ? 0.4 : 1 }}>
           <span style={{ position: 'absolute', left: '50%', top: -3, width: 1, height: 14, background: 'var(--cth-ink-4)' }} />
@@ -395,7 +397,7 @@ function MemberTile({ m, name, role, color, advice, onOpen }: { m: MemberMeasure
         <div style={{ fontSize: 11, color: 'var(--cth-ink-2)' }}>
           {c.verdict === 'too-few' ? t('pulse.tooFew') : <><b style={{ color: verdictColor }}>{t(`pulse.verdict.${c.verdict}`)}</b>{c.perPiece !== null && c.kind && <> · <span style={{ fontFamily: 'var(--cth-font-mono)' }}>${c.perPiece.toFixed(2)}</span> {t(`pulse.per.${c.kind}`)}</>}</>}
         </div>
-      </div>
+      </div>}
     </button>
   );
 }

@@ -53,6 +53,8 @@ test('line icons, never emoji; Michael has his own tile; tiles show cost for the
   assert.doesNotMatch(view, /\p{Extended_Pictographic}/u);
   assert.match(view, /t\('pulse\.runningOffice'\)/);
   assert.match(view, /c\.verdict === 'too-few' \? t\('pulse\.tooFew'\)/);
+  assert.match(view, /const idle = !counts\.length && c\.verdict === 'too-few';/);
+  assert.match(view, /\{!idle && <div/, 'a member with no work shows one line, no empty bar');
 });
 
 test('the layout follows the stage width, and every picture has words', () => {
