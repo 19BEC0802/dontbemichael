@@ -70,7 +70,7 @@ import { SafeClearer, type SafeClearDeps } from './safeClearer';
 import { PersistStore } from './db';
 import { makeResearchGoal } from './researchGoal';
 import { ownResearchDir, readResearchNotes } from './researchNotes';
-import { claudeProjectsRoot, projectDir, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
+import { claudeProjectsRoot, projectDir, projectDirs, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
 import {
@@ -110,7 +110,7 @@ import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { pastesDir, savePaste, sweepOldPastes } from './pastes';
-import { CHECK_FOLDERS, STANDING_CHECK_DIR, TRUST_CHECK_DIR, eraseOfficeData } from './factoryReset';
+import { CHECK_FOLDERS, KNOWLEDGE_STORE_ENTRIES, STANDING_CHECK_DIR, TRUST_CHECK_DIR, eraseOfficeData } from './factoryReset';
 import { buildWorkerLaunch } from './workerLaunch';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
@@ -6191,14 +6191,18 @@ ipcMain.handle('app:resetAll', () => {
   // go, never the whole office folder. Read before resetConfig() forgets it.
   const resetHome = readConfig().harnessHome;
   const userData = app.getPath('userData');
+  const kgRoot = knowledge.root();
   const failed = eraseOfficeData({
     home: resetHome ? expandTilde(resetHome) : null,
     userData,
     // Only folders outside the office folder: the hive, palace and Research's
     // desk are in its own entries, removed only when it really is an office.
     extra: [
-      ...(researchDesk() ? [projectDir(researchDesk()!)] : []),
-      ...CHECK_FOLDERS.map((f) => projectDir(join(userData, f)))
+      ...(researchDesk() ? projectDirs(researchDesk()!) : []),
+      ...CHECK_FOLDERS.flatMap((f) => projectDirs(join(userData, f))),
+      // Company knowledge the owner moved out of the app's data folder: its
+      // store's own entries, never the folder it sits in.
+      ...(resolve(kgRoot) !== resolve(join(userData, 'knowledge')) ? KNOWLEDGE_STORE_ENTRIES.map((n) => join(kgRoot, n)) : [])
     ]
   });
   if (failed.length) console.error('[reset] could not remove:', failed);

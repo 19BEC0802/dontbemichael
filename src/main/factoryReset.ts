@@ -72,6 +72,10 @@ export const APP_DATA_ENTRIES = [
   ...CHECK_FOLDERS
 ] as const;
 
+/** What the Company knowledge store keeps in its folder (kg-core.cjs, knowledge.ts),
+ *  removed by name when the owner moved the store out of the app's data folder. */
+export const KNOWLEDGE_STORE_ENTRIES = ['docs', 'index.jsonl', 'meaning'] as const;
+
 /** In the app's data folder and kept by a reset: they describe this install,
  *  not the office (test/factory-reset.test.cjs checks every name is in one list). */
 export const APP_DATA_KEPT = [

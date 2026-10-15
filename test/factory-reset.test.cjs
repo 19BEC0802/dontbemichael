@@ -172,7 +172,30 @@ test('app:resetAll erases the office data before it resets the config', () => {
   const erase = body.indexOf('eraseOfficeData(');
   assert.ok(erase > 0, 'the reset calls eraseOfficeData');
   assert.ok(erase < body.indexOf('\n  resetConfig();'), 'before the config forgets the office folder');
-  assert.match(body, /\.\.\.\(researchDesk\(\) \? \[projectDir\(researchDesk\(\)!\)\] : \[\]\),/, 'Research\'s conversation too');
+  assert.match(body, /\.\.\.\(researchDesk\(\) \? projectDirs\(researchDesk\(\)!\) : \[\]\),/, 'Research\'s conversation too, in either folder spelling');
+  assert.match(body, /\.\.\.CHECK_FOLDERS\.flatMap\(\(f\) => projectDirs\(join\(userData, f\)\)\),/);
+  assert.match(body, /const kgRoot = knowledge\.root\(\);/, 'the knowledge store where it really is, read before the config resets');
+  assert.match(body, /KNOWLEDGE_STORE_ENTRIES\.map\(\(n\) => join\(kgRoot, n\)\)/);
+  assert.ok(body.indexOf('const kgRoot') < body.indexOf('\n  resetConfig();'));
   assert.ok(body.indexOf('hive.stopAllProxyBridges()') > 0 && body.indexOf('stopWebhookServer()') > 0, 'proxy sidecars and the webhook server stop, as on quit');
   assert.doesNotMatch(body, /hive\.root\(\)|memory\.palacePath\(\)|researchFolders\(\)/, 'office folder paths come only through the office check');
+});
+
+test('a moved knowledge store is matched by its own entries, and both transcript folder spellings are found', () => {
+  // Value: protects=a reset erases knowledge kept outside the app's data folder and every transcript folder for a path; fails_when=the store entries or the legacy spelling are dropped; why_new=Codex adversarial review; seam=CLAUDE_CONFIG_DIR; no_claim=the real Claude Code layout beyond these two spellings
+  const { KNOWLEDGE_STORE_ENTRIES } = loadTs('src/main/factoryReset.ts');
+  const kg = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'kg-core.cjs'), 'utf8');
+  assert.match(kg, /path\.join\(kgRoot, 'docs'\)/);
+  assert.match(kg, /path\.join\(kgRoot, 'index\.jsonl'\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'knowledge.ts'), 'utf8'), /const dir = join\(root, 'meaning'\);/);
+  assert.deepEqual([...KNOWLEDGE_STORE_ENTRIES], ['docs', 'index.jsonl', 'meaning']);
+  const saved = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = '/tmp/cc';
+  try {
+    const { projectDirs } = loadTs('src/main/transcript.ts');
+    const dirs = projectDirs('/Users/me/My.Office');
+    if (process.platform === 'win32') assert.equal(dirs.length, 1);
+    else assert.deepEqual(dirs, [path.join('/tmp/cc', 'projects', '-Users-me-My-Office'), path.join('/tmp/cc', 'projects', 'Users-me-My.Office')]);
+    assert.deepEqual(projectDirs('/'), [path.join('/tmp/cc', 'projects', '-')], 'no legacy candidate for the root');
+  } finally { if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved; }
 });
