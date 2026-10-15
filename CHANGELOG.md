@@ -23,6 +23,7 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 
 ### Fixed
 
+- **Ask me cards with choices now show as rows to pick.** Some of Michael's instructions still told him to write choices as a numbered list, so new asks kept arriving as plain text with one reply box. Those instructions now all point to options and separate questions, and when a new ask still comes in as a list, Michael is reminded to rewrite it. Asks written before you update keep their look.
 - **Pete no longer stops on a permission prompt for his own work.** Since Research stopped loading your Claude settings (for privacy), Claude Code ran him in normal permission mode, so every shell command waited for an approval nobody could give. His tools are now allowed in his own settings; his walls are unchanged.
 - **The app never answers a permission prompt for an agent.** The inbox nudge typed into an open prompt after five minutes, and its Enter approved it. It now waits until the agent moves on, however long that takes.
 

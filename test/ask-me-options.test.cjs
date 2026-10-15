@@ -152,3 +152,31 @@ test('the new strings exist in every language, with no dashes', () => {
     assert.match(d.replyPartial, /\{\{n\}\}[\s\S]*\{\{total\}\}|\{\{total\}\}[\s\S]*\{\{n\}\}/, loc);
   }
 });
+
+test('a list-style ask written since the office started is flagged for Michael to rewrite', () => {
+  // Value: protects=asks Michael writes as a list get turned into options or parts; fails_when=the check misses a numbered or bulleted ask, flags one with fields, or flags asks from before the start; why_new=owner 2026-10-15, Michael kept writing lists; seam=asksToTidy since
+  const { askAsList, asksToTidy, stuckCardsContext } = loadTs('src/shared/ownerRequests.ts');
+  const since = Date.parse('2026-10-15T12:00:00Z');
+  const list = '**Should Dwight close three deals?** Context.\n\n1. Close all three (recommended)\n\n2. Close one\n\n3. Leave them';
+  const bullets = '**Pick one.**\n- Yes\n- No';
+  const after = '2026-10-15T15:01:22Z', before = '2026-10-14T15:01:22Z';
+  assert.equal(askAsList({ q: list, askedAt: after }, since), true);
+  assert.equal(askAsList({ q: bullets, askedAt: after }, since), true);
+  assert.equal(askAsList({ q: list, askedAt: before }, since), false, 'older asks keep their look (1A)');
+  assert.equal(askAsList({ q: list, askedAt: after, options: [{ label: 'Close' }] }, since), false, 'already has fields');
+  assert.equal(askAsList({ q: '**One question?** Plain text, no list. Costs `$1.50` this month.', askedAt: after }, since), false);
+  assert.equal(askAsList({ q: 'Only\n1. one item', askedAt: after }, since), false, 'one item is not a list');
+  const cards = [
+    { id: 'new-list', title: 'Close deals', status: 'blocked', humanQA: [{ q: list, askedAt: after, raisedBy: 'dwight' }] },
+    { id: 'old-list', title: 'Old', status: 'blocked', humanQA: [{ q: list, askedAt: before }] },
+    { id: 'answered', title: 'Done ask', status: 'blocked', humanQA: [{ q: list, askedAt: after, a: 'yes' }] }
+  ];
+  const tidy = asksToTidy(cards, since);
+  assert.deepEqual(tidy.filter((c) => c.issue === 'ask-as-list').map((c) => c.id), ['new-list']);
+  assert.deepEqual(asksToTidy(cards).filter((c) => c.issue === 'ask-as-list'), [], 'no start time, no flags');
+  const ctx = stuckCardsContext(tidy);
+  assert.match(ctx, /ASKS WRITTEN AS A LIST\. The owner can only type an answer to these\./);
+  assert.match(ctx, /put a choice in "options", as \[\{"label": "\.\.\."\}\] with "recommended": true on the one you recommend, or several questions in "parts"/);
+  assert.match(ctx, /- card new-list: Close deals/);
+  assert.doesNotMatch(ctx, /[–—]/);
+});

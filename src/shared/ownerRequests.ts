@@ -1,6 +1,6 @@
 import { isNextAt } from './cardGuards';
 import { ownValue } from './ownValue';
-import { answerMessages, cardOfConversation, cardText, isAnswered, isWithdrawn, MICHAEL_ID, openAskIndexes, raiserOf, type AnswerMessage } from './askMeRouting';
+import { answerMessages, cardOfConversation, cardText, isAnswered, isWithdrawn, MICHAEL_ID, openAskIndexes, raiserOf, readAskShape, type AnswerMessage } from './askMeRouting';
 
 /**
  * Michael's open requests from the owner (docs/designs/card-lifecycle.md): an
@@ -330,7 +330,7 @@ export function nextStepBackstopNote(task: { id: string; title?: string; nextAt?
 
 /** A card Michael has to tidy: in Blocked with nothing asked (no `issue`), or
  *  holding an open question the wrong way (`issue`). */
-export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'filing' | 'triage' | 'ask-off-blocked' | 'several-asks' | 'bad-next' }
+export interface StuckCard { id: string; title: string; assignee?: string; issue?: 'filing' | 'triage' | 'ask-off-blocked' | 'several-asks' | 'bad-next' | 'ask-as-list' }
 
 const stuckOf = (t: CardLike, issue?: StuckCard['issue']): StuckCard => ({
   id: t.id,
@@ -360,7 +360,24 @@ export function blockedWithNothingAsked(tasks: CardLike[], open: Pick<OwnerReque
  * Michael is told each turn until he moves the card back to Blocked, folds the
  * questions into one, or withdraws what no longer matters.
  */
-export function asksToTidy(tasks: CardLike[]): StuckCard[] {
+/** Two or more lines that start like a numbered or bulleted list. */
+const LIST_LINES = /^[ \t]*(?:\d+[.)]|[-*\u2022])[ \t]+\S/gm;
+
+/**
+ * An open ask written as a list in its text, with no options or parts, asked
+ * since `since` (ms). The owner can only type an answer to it, so Michael is
+ * told to rewrite it (docs/designs/ask-me-options.md; owner, 2026-10-15: his
+ * habit beat the instruction). Older asks keep their look (decision 1A).
+ */
+export function askAsList(entry: { q?: unknown; askedAt?: unknown; options?: unknown; parts?: unknown } | null | undefined, since: number): boolean {
+  if (!entry || typeof entry.q !== 'string' || entry.options !== undefined || entry.parts !== undefined) return false;
+  if (readAskShape(entry).kind !== 'plain') return false;
+  const at = typeof entry.askedAt === 'string' ? Date.parse(entry.askedAt) : NaN;
+  if (!Number.isFinite(at) || at < since) return false;
+  return (entry.q.match(LIST_LINES) ?? []).length >= 2;
+}
+
+export function asksToTidy(tasks: CardLike[], since = Infinity): StuckCard[] {
   const out: StuckCard[] = [];
   for (const t of tasks) {
     if (!t || typeof t.id !== 'string') continue;
@@ -374,6 +391,8 @@ export function asksToTidy(tasks: CardLike[]): StuckCard[] {
     if (!open) continue;
     if (t.status !== 'blocked') out.push(stuckOf(t, 'ask-off-blocked'));
     else if (open > 1) out.push(stuckOf(t, 'several-asks'));
+    const qa = t.humanQA as unknown as Parameters<typeof askAsList>[0][] | undefined;
+    if (openAskIndexes(t.humanQA as never).some((i) => askAsList(qa?.[i], since))) out.push(stuckOf(t, 'ask-as-list'));
   }
   return out;
 }
@@ -384,6 +403,7 @@ const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', str
   'nothing-asked': 'BLOCKED CARDS WITH NOTHING ASKED. These cards are in Blocked, but none has a question for the owner on Ask me or an open request from the owner, so nothing is moving them. Blocked means waiting on the owner\'s answer. For each one: if it needs the owner, add the question to its humanQA so it shows on Ask me; if it waits on someone outside the office or on a team member, move it to "waiting" and name who in "waitingOn"; if the work is finished, or the owner decided to stop it, move it to "done".',
   'ask-off-blocked': 'OPEN QUESTIONS ON CARDS OUT OF BLOCKED. Each of these cards left Blocked with a question still open, and the owner still sees it on Ask me until they answer it or you withdraw it. For each one: if you moved the card out of Blocked and the work still needs the answer, move it back to "blocked". If the owner moved it, the card is done, or the question no longer matters, withdraw the question by setting "dismissedAt" (the time) and a short "dismissedReason" on that humanQA entry. Never move a card the owner moved.',
   'bad-next': 'CARDS WITH A NEXT TIME THE APP CANNOT READ. Nobody is reminded when it comes. Set "nextAt" on each to an ISO date and time with its offset, such as 2026-10-12T09:00:00+01:00, or remove it.',
+  'ask-as-list': 'ASKS WRITTEN AS A LIST. The owner can only type an answer to these. Rewrite the open humanQA entry on each card: keep only the bold sentence and the short context in "q"; put a choice in "options", as [{"label": "..."}] with "recommended": true on the one you recommend, or several questions in "parts", as [{"q": "..."}], giving a question its own "options" when it is a choice. Keep its "askedAt" and "raisedBy".',
   'several-asks': 'CARDS WITH MORE THAN ONE OPEN QUESTION. The owner sees every one of them on Ask me. Keep one open question per card: fold what still matters into the newest, and withdraw the others by setting "dismissedAt" (the time) and a short "dismissedReason" on each.'
 };
 
@@ -391,7 +411,7 @@ const STUCK_HEADS: Record<NonNullable<StuckCard['issue']> | 'nothing-asked', str
 export function stuckCardsContext(stuck: StuckCard[]): string | null {
   if (!stuck.length) return null;
   const parts: string[] = [];
-  for (const kind of ['filing', 'triage', 'nothing-asked', 'ask-off-blocked', 'several-asks', 'bad-next'] as const) {
+  for (const kind of ['filing', 'triage', 'nothing-asked', 'ask-off-blocked', 'several-asks', 'ask-as-list', 'bad-next'] as const) {
     const cards = stuck.filter((c) => (c.issue ?? 'nothing-asked') === kind);
     if (!cards.length) continue;
     parts.push([
