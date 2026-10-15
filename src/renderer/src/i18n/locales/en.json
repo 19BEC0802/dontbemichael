@@ -2443,7 +2443,7 @@
     "apply": "Apply",
     "notNow": "Not now",
     "savesAbout": "Saves about {{usd}} a week",
-    "adviceStarts": "Recommendations start on {{day}}, once there are 14 days of records to compare. Records began on {{since}}, and a few busy or quiet days alone could point to the wrong change.",
+    "adviceStarts": "Recommendations start on {{day}}, once Pulse has seen two full weeks of your team at work. It began on {{since}}, and a few unusually busy or quiet days alone could lead to the wrong advice.",
     "nothingToChange": "Nothing to change this week.",
     "savedByChanges": "Saved by your changes",
     "savedTip": "Measured from the records: what each piece of work cost before your change, against what it costs since. At API prices.",

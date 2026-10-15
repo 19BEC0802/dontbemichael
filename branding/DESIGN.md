@@ -1137,9 +1137,9 @@ half written message survives the switch.
   week" chip. An applied card turns `green` soft with "Applied." and Undo. Beside them, once a
   change was applied, Saved by your changes: "Measuring" with the first result date for 7
   days, then mono dollars in `green` text; before any change it is not there. With nothing to
-  recommend, one calm line, "Nothing to change this week." Before 14 days of records, that line
-  gives the start date and why: each one compares 14 days, and a few busy or quiet days could
-  point the wrong way.
+  recommend, one calm line, "Nothing to change this week." Before two full weeks of work, that
+  line gives the start date and why, in business words (never "records"): a few unusually busy
+  or quiet days alone could lead to the wrong advice.
 - **What got done**: four tiles (emails organized, emails sent for you, tasks finished,
   scheduled checks), each a line icon (mail, send, check, clock, 18 px `ink-2` on a `card-2`
   square), a mono 28 px number, a label, and a who did it bar: members of one department take

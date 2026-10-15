@@ -35,7 +35,8 @@ test('sections run recommendations, what got done, the office row, then the team
   assert.equal(en.pulse.recommendations, 'Recommendations');
   assert.match(view, /const savedShown = view\.saved\.state !== 'none';/);
   assert.match(view, /\{savedShown && <div/);
-  assert.match(en.pulse.adviceStarts, /\{\{day\}\}[\s\S]*14 days[\s\S]*\{\{since\}\}/);
+  assert.match(en.pulse.adviceStarts, /\{\{day\}\}[\s\S]*two full weeks[\s\S]*\{\{since\}\}/);
+  assert.doesNotMatch(en.pulse.adviceStarts, /record/i, 'business words, not records (owner, 2026-10-15)');
   assert.match(view, /t\('pulse\.adviceStarts', \{ day: fmtDay\(view\.adviceFrom\), since: /);
   const order = ['pulse.recommendations', 'pulse.whatGotDone', 'pulse.whereMoneyWent', 'pulse.team'].map((k) => view.indexOf(`t('${k}')`));
   assert.ok(order.every((i) => i > 0), 'every section is there');

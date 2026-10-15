@@ -2443,7 +2443,7 @@
     "apply": "应用",
     "notNow": "暂不",
     "savesAbout": "每周约节省 {{usd}}",
-    "adviceStarts": "建议将于 {{day}} 开始，届时会有 14 天的记录可供比较。记录从 {{since}} 开始，仅凭几天的忙碌或清闲可能会得出错误的调整。",
+    "adviceStarts": "建议将于 {{day}} 开始，届时 Pulse 已观察你的团队工作满两周。它从 {{since}} 开始，仅凭几天异常忙碌或清闲的情况可能会给出错误的建议。",
     "nothingToChange": "本周没有需要更改的。",
     "savedByChanges": "你的更改节省了",
     "savedTip": "根据记录测量：你更改前每项工作的成本，对比之后的成本。按 API 价格计算。",
