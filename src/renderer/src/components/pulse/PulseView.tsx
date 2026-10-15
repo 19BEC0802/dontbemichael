@@ -204,6 +204,8 @@ export function PulseView() {
     const shownAdvice = view.advice.filter((a) => !applied.some((x) => x.advice.id === a.id));
     const outcomeLabel = (o: Outcome): string => t(`pulse.outcome.${o.kind}`, { sub: o.sub ?? 0 });
     const outcomeAria = (o: Outcome): string => `${outcomeLabel(o)}: ${o.by.map((b) => `${nameOf(b.agentId)} ${b.count}`).join(', ')}`;
+    // Saved by your changes shows only once a change was applied (owner, 2026-10-15).
+    const savedShown = view.saved.state !== 'none';
     body = (
       <>
         {s.gapDays.length > 0 && (
@@ -212,7 +214,7 @@ export function PulseView() {
           </div>
         )}
 
-        <Section title={t('pulse.waysToSave')} tip={t('pulse.waysToSaveTip')}>
+        <Section title={t('pulse.recommendations')} tip={t('pulse.recommendationsTip')}>
           <div style={grid(sugCols)}>
             {applied.map((x) => (
               <div key={`a-${x.appliedId}`} style={{ background: 'var(--cth-green-soft)', borderRadius: 'var(--cth-r-xl)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--cth-green) 35%, transparent)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -244,16 +246,15 @@ export function PulseView() {
               );
             })}
             {shownAdvice.length === 0 && applied.length === 0 && (
-              <div style={{ ...card, padding: '12px 14px', fontSize: 13, color: 'var(--cth-ink-2)', display: 'flex', alignItems: 'center', gridColumn: sugCols > 1 ? `span ${sugCols - 1}` : undefined }}>
-                {view.adviceFrom ? t('pulse.adviceStarts', { day: fmtDay(view.adviceFrom) }) : t('pulse.nothingToChange')}
+              <div style={{ ...card, padding: '12px 14px', fontSize: 13, lineHeight: '19px', color: 'var(--cth-ink-2)', display: 'flex', alignItems: 'center', gridColumn: savedShown ? (sugCols > 1 ? `span ${sugCols - 1}` : undefined) : '1 / -1' }}>
+                {view.adviceFrom ? t('pulse.adviceStarts', { day: fmtDay(view.adviceFrom), since: fmtDay(view.collectingSince ?? Date.now()) }) : t('pulse.nothingToChange')}
               </div>
             )}
-            <div style={{ ...card, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
+            {savedShown && <div style={{ ...card, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
               <div style={label}>{t('pulse.savedByChanges')}<InfoTip text={t('pulse.savedTip')} /></div>
-              {view.saved.state === 'none' && <div style={{ fontSize: 12, color: 'var(--cth-ink-3)' }}>{t('pulse.savedNone')}</div>}
               {view.saved.state === 'measuring' && <><div style={{ fontSize: 22, fontWeight: 600 }}>{t('pulse.measuring')}</div><div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.firstResult', { day: fmtDay(view.saved.firstAt) })}</div></>}
               {view.saved.state === 'measured' && <><div style={{ ...mono, fontSize: 22, fontWeight: 600, color: view.saved.usd >= 0 ? 'var(--cth-green-text)' : 'var(--cth-ink)' }}>{view.saved.usd < 0 ? '−' : ''}{money(Math.abs(view.saved.usd))}</div><div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t(view.saved.usd < 0 ? 'pulse.costMore' : 'pulse.since', { day: fmtDay(view.saved.since) })}</div></>}
-            </div>
+            </div>}
           </div>
         </Section>
 
@@ -270,25 +271,6 @@ export function PulseView() {
               </div>
             ))}
           </div>
-        </Section>
-
-        <Section title={t('pulse.team')} tip={t('pulse.teamTip')}>
-          {members.length === 0 && !s.michael ? (
-            <div style={{ ...card, padding: 20, fontSize: 13, color: 'var(--cth-ink-2)' }}>{t('pulse.emptyOffice')}</div>
-          ) : (
-            <div style={grid(memberCols)}>
-              {s.michael && (
-                <button type="button" onClick={() => setDetail(s.michael!.agentId)} style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'start', cursor: 'pointer', border: 'none', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink)' }}>
-                  <TileHead id={s.michael.agentId} name={nameOf(s.michael.agentId)} role={t('pulse.officeManager')} color="var(--cth-indigo)" />
-                  <Counts items={[[s.michael.routed, t('pulse.routed')], [s.michael.questions, t('pulse.questionsToYou')], [s.michael.cardsOpened, t('pulse.cardsOpened')]]} />
-                  <div style={{ fontSize: 11, color: 'var(--cth-ink-2)' }}>{t('pulse.runningOffice')} <b style={mono}>{pct(s.michael.share)}</b></div>
-                </button>
-              )}
-              {members.map((m) => (
-                <MemberTile key={m.agentId} m={m} name={nameOf(m.agentId)} role={byId.get(m.agentId) ? roleOf(byId.get(m.agentId)!) : ''} color={colorOf(m.agentId, 0)} advice={view.advice.some((a) => a.agentId === m.agentId)} onOpen={() => setDetail(m.agentId)} />
-              ))}
-            </div>
-          )}
         </Section>
 
         <div style={{ display: 'grid', gridTemplateColumns: layout === 'wide' ? '1.6fr 1fr 1fr' : layout === 'mid' ? '1fr 1fr' : '1fr', gap: 12 }}>
@@ -322,6 +304,26 @@ export function PulseView() {
             <div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.awayLine')}</div>
           </div>
         </div>
+
+        <Section title={t('pulse.team')} tip={t('pulse.teamTip')}>
+          {members.length === 0 && !s.michael ? (
+            <div style={{ ...card, padding: 20, fontSize: 13, color: 'var(--cth-ink-2)' }}>{t('pulse.emptyOffice')}</div>
+          ) : (
+            <div style={grid(memberCols)}>
+              {s.michael && (
+                <button type="button" onClick={() => setDetail(s.michael!.agentId)} style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'start', cursor: 'pointer', border: 'none', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink)' }}>
+                  <TileHead id={s.michael.agentId} name={nameOf(s.michael.agentId)} role={t('pulse.officeManager')} color="var(--cth-indigo)" />
+                  <Counts items={[[s.michael.routed, t('pulse.routed')], [s.michael.questions, t('pulse.questionsToYou')], [s.michael.cardsOpened, t('pulse.cardsOpened')]]} />
+                  <div style={{ fontSize: 11, color: 'var(--cth-ink-2)' }}>{t('pulse.runningOffice')} <b style={mono}>{pct(s.michael.share)}</b></div>
+                </button>
+              )}
+              {members.map((m) => (
+                <MemberTile key={m.agentId} m={m} name={nameOf(m.agentId)} role={byId.get(m.agentId) ? roleOf(byId.get(m.agentId)!) : ''} color={colorOf(m.agentId, 0)} advice={view.advice.some((a) => a.agentId === m.agentId)} onOpen={() => setDetail(m.agentId)} />
+              ))}
+            </div>
+          )}
+        </Section>
+
       </>
     );
   }

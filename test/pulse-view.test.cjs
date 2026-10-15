@@ -30,9 +30,14 @@ test('Pulse is a fixed view tab between Tasks and Who talks to whom, and takes t
   assert.match(read('src/renderer/src/store/store.ts'), /if \(view === 'office' \|\| view === 'file'\) return \{\};/);
 });
 
-test('sections run ways to save, what got done, team, then the office row', () => {
-  // Value: protects=D2 and D3 order; fails_when=a section moves or a table returns; why_new=design D2, D3; seam=none; no_claim=none beyond protects
-  const order = ['pulse.waysToSave', 'pulse.whatGotDone', 'pulse.team', 'pulse.whereMoneyWent'].map((k) => view.indexOf(`t('${k}')`));
+test('sections run recommendations, what got done, the office row, then the team', () => {
+  // Value: protects=D2 and D3 order as the owner moved it on 2026-10-15 (office row above Team, "Recommendations" title), the saved card only once something was applied, and the start date with its reason; fails_when=a section moves, a table returns, the saved card shows with nothing in it, or the start date loses its reason; why_new=owner ask 2026-10-15; seam=none; no_claim=none beyond protects
+  assert.equal(en.pulse.recommendations, 'Recommendations');
+  assert.match(view, /const savedShown = view\.saved\.state !== 'none';/);
+  assert.match(view, /\{savedShown && <div/);
+  assert.match(en.pulse.adviceStarts, /\{\{day\}\}[\s\S]*14 days[\s\S]*\{\{since\}\}/);
+  assert.match(view, /t\('pulse\.adviceStarts', \{ day: fmtDay\(view\.adviceFrom\), since: /);
+  const order = ['pulse.recommendations', 'pulse.whatGotDone', 'pulse.whereMoneyWent', 'pulse.team'].map((k) => view.indexOf(`t('${k}')`));
   assert.ok(order.every((i) => i > 0), 'every section is there');
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   assert.doesNotMatch(view, /<table/);
