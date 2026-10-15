@@ -15,7 +15,7 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 ### Changed
 
 - Pete's old idle lines about looking things up are gone; his lines come from the show like everyone else's.
-- **Michael hears every message the privacy check keeps from Pete:** who sent it, its subject, why, and that what stays private is set in Settings, Research & privacy, so his ask can tell you exactly what was stopped. Before, only the sender was told. When the check itself could not run, the sender is told it is not about the wording and Michael that it is an app problem, instead of "ask again in plainer words". (Agent behavior: what the team and Michael are told.)
+- **Michael hears every message the privacy check keeps from Pete:** who sent it, its subject, why, and what to do next (for a privacy refusal, that what stays private is set in Settings, Research & privacy), so his ask can tell you exactly what was stopped. Before, only the sender was told. When the check itself could not run, the sender is told it is not about the wording and Michael that it is an app problem, instead of "ask again in plainer words". (Agent behavior: what the team and Michael are told.)
 - **An Ask me card that needs you to do something on a website links straight to it.** When you need to sign in, accept terms or pay, the team member who found it now passes on the email's own link for it, and Michael puts it in the ask as a named link, so you no longer dig the email out of your mailbox. Only a link on the sender's own site, never a tracking or shortened one; when there is none, the ask says where to go. (Agent behavior: team members and Michael.)
 
 ### Fixed
