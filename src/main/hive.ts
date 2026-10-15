@@ -21,7 +21,7 @@
 import { WEB_SETTINGS_UNREADABLE, WEB_TOOLS, type SandboxNetwork } from '../shared/webAccess';
 import {
   addressedToResearch, ANSWER_UNCHECKED, ANSWER_UNCHECKED_SUBJECT, hasAttachments, looksLikeInjection, NOT_SENT_SUBJECT,
-  PRIVACY_CHECK_SENDER, REFUSAL_CHECK_FAILED, REFUSAL_FILES, REFUSAL_OFF, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
+  PRIVACY_CHECK_SENDER, REFUSAL_CHECK_FAILED, REFUSAL_FILES, REFUSAL_NOT_DELIVERED, REFUSAL_OFF, RESEARCH_HOUSE_RULE, RESEARCH_ID, RESEARCH_REPLY_LABEL,
   RESEARCH_UNCHECKED_TOOL, NOT_SENT_SUBJECT_OUT, RESEARCH_ONLY_ASKERS, RESEARCH_NAME, RESEARCH_ROLE, isReservedName,
   SENT_AS_SUBJECT, sentAsBody, nameKey, researchText, cleanResearchName, RESEARCH_ONLY_SKILLS
 } from '../shared/research';
@@ -2307,6 +2307,10 @@ export class HiveManager {
   }
   /** App and owner messages for Research whose check is under way. */
   private researchQueued = 0;
+  /** Checked messages for Research whose delivery failed (a disk error), by
+   *  id: each routing pass tries them again with the verdict they already have. */
+  private readonly researchUndelivered = new Map<string, () => void>();
+  static readonly RESEARCH_DELIVERY_TRIES = 5;
   private stampKey: Buffer | null = null;
 
   /** Research while it is on: the reserved id, the owner's switch, a live entry. */
@@ -2481,7 +2485,7 @@ export class HiveManager {
     const what = from === 'human' ? 'A note from the owner'
       : from === 'system' ? 'A message from the app'
         : `${reg.agents[from]?.name?.trim() || from}'s message`;
-    const next = reason === REFUSAL_CHECK_FAILED
+    const next = reason === REFUSAL_CHECK_FAILED || reason === REFUSAL_NOT_DELIVERED
       ? 'This is an app problem. If it keeps happening, tell the owner.'
       : reason === REFUSAL_OFF
         ? `The owner turns ${n} on in Settings, Research & privacy.`
@@ -2580,18 +2584,42 @@ export class HiveManager {
     const policy = this.policyOf(layer);
     layer.inbound({ subject: msg.subject, body: msg.body }).then((v) => {
       this.researchQueued--;
-      if (!fromAgent) this.researchPending(msg, false);
-      try {
-        // The owner changed what stays private while it was checked: checked
-        // again under the new settings (Codex review, third ship).
-        if (this.policyOf(layer) !== policy) { this.queueForResearch(msg); return; }
-        if (v.decision === 'deny') return refuse(v.reason);
+      // Its pending row stays until it is delivered or refused. A delivery
+      // that fails (a disk error) is tried again with this verdict on the next
+      // routing passes, then told to Michael, so nothing is dropped unseen
+      // (TODOS.md, Codex review of the mit/named-links ship).
+      let tries = 0;
+      const deliverOrRefuse = (): 'done' | 'again' | 'recheck' => {
+        // The owner changed what stays private while it was checked, or
+        // since: checked again under the new settings (Codex review, third ship).
+        if (this.policyOf(layer) !== policy) return 'recheck';
+        if (v.decision === 'deny') { refuse(v.reason); return 'done'; }
         // Research may have been turned off while the check ran.
-        if (!this.researchOn()) return refuse(REFUSAL_OFF, 'research-off');
-        this.deliverToResearch(msg.from, msg, v.subject, v.body);
-        if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body, this.researchName()), true);
-        this.commit('hive: trust layer delivered to research');
-      } catch (e) { console.error('[research] delivering a checked message', e); }
+        if (!this.researchOn()) { refuse(REFUSAL_OFF, 'research-off'); return 'done'; }
+        try { this.deliverToResearch(msg.from, msg, v.subject, v.body); } catch (e) {
+          console.error('[research] delivering a checked message', e);
+          if (tries < HiveManager.RESEARCH_DELIVERY_TRIES) return 'again';
+          refuse(REFUSAL_NOT_DELIVERED, 'undelivered');
+          return 'done';
+        }
+        try {
+          if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body, this.researchName()), true);
+          this.commit('hive: trust layer delivered to research');
+        } catch (e) { console.error('[research] after delivering a checked message', e); }
+        return 'done';
+      };
+      const settle = (): void => {
+        tries++;
+        // A refusal that could not be told keeps its row, so the next start
+        // tells Michael instead of nobody.
+        let outcome: 'done' | 'again' | 'recheck' | 'keep' = 'keep';
+        try { outcome = deliverOrRefuse(); } catch (e) { console.error('[research] settling a checked message', e); }
+        if (outcome === 'again') { this.researchUndelivered.set(msg.id, settle); return; }
+        if (outcome === 'keep') return;
+        if (!fromAgent) this.researchPending(msg, false);
+        if (outcome === 'recheck') this.queueForResearch(msg);
+      };
+      settle();
     }, () => {
       this.researchQueued--;
       if (!fromAgent) this.researchPending(msg, false);
@@ -2776,9 +2804,10 @@ export class HiveManager {
   }
 
   /** Asks waiting for Research: delivered and not yet read, plus those in a
-   *  check. Turning Research off sends these back (design review D7). */
+   *  check or waiting to be delivered again. Turning Research off sends these
+   *  back (design review D7). */
   researchWaiting(): number {
-    let n = this.researchQueued;
+    let n = this.researchQueued + this.researchUndelivered.size;
     for (const [k, c] of this.trustChecks) if (k.startsWith('in:') && !c.done) n++;
     // Only what the app delivered counts.
     n += this.listMessages(join(this.agentDir(RESEARCH_ID), 'inbox')).length;
@@ -3142,6 +3171,11 @@ export class HiveManager {
     if (!existsSync(agentsDir)) return 0;
     const researchOn = this.researchOn();
     try { this.tellLostResearchPending(); } catch { /* next start */ }
+    // Checked messages for Research whose delivery failed get another try.
+    for (const [id, retry] of [...this.researchUndelivered]) {
+      this.researchUndelivered.delete(id);
+      try { retry(); } catch { /* its pending row stays, so the next start tells Michael */ }
+    }
     try { this.sweepResearchInbox(researchOn); } catch { /* next tick */ }
     this.pruneTrustChecks();
     let routed = 0;
