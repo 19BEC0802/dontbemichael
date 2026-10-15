@@ -1124,8 +1124,10 @@ Claude.
 ### 7.27 Pulse (PulseView)
 
 The office's performance and cost as pictures (docs/designs/team-performance.md; approved
-mockup `pulse-final.html`). A fixed view tab between Tasks and Who talks to whom; the right
-column stays beside it, so an ask is answered while Pulse is open.
+mockup `pulse-final.html`). A fixed view tab between Tasks and Who talks to whom. It takes
+the whole window: no right column and no bottom bar (owner, 2026-10-15). Opening Needs you
+or a person goes back to the office, as from Tasks; the bottom bar stays mounted, hidden, so a
+half written message survives the switch.
 
 - Header: "Pulse" `t-view`, a period select (This week, Last week, Last 4 weeks; weeks start
   Monday; remembered), "Collecting since" in `t-meta` `ink-3`.
@@ -1149,7 +1151,7 @@ column stays beside it, so an ask is answered while Pulse is open.
 - **Office row** last: Where the money went (one bar, department colors, named), plan use (SVG
   ring, on a Claude plan only, with an `amber` soft "Runs out around …" when the pace says so),
   Your time and While you were away.
-- Layout by the stage's width: 1100 px and wider, 4 a row; 760 to 1099, outcomes 2 by 2 and
+- Layout by the window's width: 1100 px and wider, 4 a row; 760 to 1099, outcomes 2 by 2 and
   members 3 a row; under 760, one column. Coral is never used on Pulse. Every chart has an
   aria-label sentence; Apply and Undo announce in a polite live region.
 

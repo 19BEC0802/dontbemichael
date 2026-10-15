@@ -18,15 +18,16 @@ const read = (rel) => fs.readFileSync(path.resolve(__dirname, '..', rel), 'utf8'
 const view = read('src/renderer/src/components/pulse/PulseView.tsx');
 const en = JSON.parse(read('src/renderer/src/i18n/locales/en.json'));
 
-test('Pulse is a fixed view tab between Tasks and Who talks to whom, and keeps the right column', () => {
-  // Value: protects=D5 location and name, D14 column; fails_when=the tab moves, is renamed or Pulse hides Ask me; why_new=design D5; seam=none; no_claim=pixel layout (visual QA after build)
+test('Pulse is a fixed view tab between Tasks and Who talks to whom, and takes the whole window', () => {
+  // Value: protects=D5 location and name, the owner's 2026-10-15 ask (no Needs you column or bottom bar on Pulse); fails_when=the tab moves, is renamed, or the column or bottom bar shows on Pulse; why_new=design D5; seam=none; no_claim=pixel layout (visual QA after build)
   const top = read('src/renderer/src/shell/TopBar.tsx');
   assert.match(top, /tab\('tasks', t\('floorView\.tasks'\)\)\}\s*\{tab\('pulse', t\('floorView\.pulse'\)\)\}\s*\{tab\('graph'/);
   assert.equal(en.floorView.pulse, 'Pulse');
   const app = read('src/renderer/src/App.tsx');
-  assert.match(app, /const columnView = floorView === 'office' \|\| floorView === 'file' \|\| floorView === 'pulse';\s*const columnShown = columnOpen && columnView;/);
-  assert.match(app, /display: columnView \? 'flex' : 'none'/, 'the column shows on Pulse, not only stays mounted');
-  assert.match(read('src/renderer/src/store/store.ts'), /if \(view === 'office' \|\| view === 'file' \|\| view === 'pulse'\) return \{\};/);
+  assert.match(app, /const columnView = floorView === 'office' \|\| floorView === 'file';\s*const columnShown = columnOpen && columnView;/);
+  assert.match(app, /display: closingOpen \|\| floorView === 'pulse' \? 'none' : 'contents'/, 'the bottom bar hides on Pulse but stays mounted');
+  assert.match(app, /paddingBottom: floorView === 'pulse' \? 0 : 96/);
+  assert.match(read('src/renderer/src/store/store.ts'), /if \(view === 'office' \|\| view === 'file'\) return \{\};/);
 });
 
 test('sections run ways to save, what got done, team, then the office row', () => {

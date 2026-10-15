@@ -462,12 +462,11 @@ const LS_FOCUS_MODE = 'cth.prefersFocusMode';
 const LS_FLOOR_VIEW = 'cth.floorView';
 
 /** Opening the right column on purpose (Needs you, a person, Michael's tabs)
- *  goes back to the office: Tasks and Who talks to whom hide the column
- *  (owner, 2026-10-03). A file tab keeps it beside the file, so an Ask me card
- *  stays answerable while its file is read (open-file-tab.md, F1). */
+ *  goes back to the office: Tasks, Pulse and Who talks to whom hide the column
+ *  (owner, 2026-10-03; Pulse 2026-10-15). A file tab keeps it beside the file,
+ *  so an Ask me card stays answerable while its file is read (open-file-tab.md, F1). */
 function officeView(view: FloorView): { floorView?: FloorView } {
-  // Pulse keeps the column too, so an ask is answered beside it (design D14).
-  if (view === 'office' || view === 'file' || view === 'pulse') return {};
+  if (view === 'office' || view === 'file') return {};
   try { window.localStorage.setItem(LS_FLOOR_VIEW, 'office'); } catch { /* per-Mac nicety only */ }
   return { floorView: 'office' };
 }
