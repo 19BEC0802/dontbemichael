@@ -154,3 +154,69 @@ test('a failed write is counted for its day and the day is reported; records kee
   const day = proc.days('/office', '2026-01-01').find((d) => d.agentId === 'nick');
   assert.deepEqual([day.tasks, day.emails, day.awayPieces], [1, 2, 3], 'the owner was away for all of it');
 });
+
+const { PulseService } = loadTs('src/main/pulse.ts');
+
+function service(t, opts = {}) {
+  const env = setup(t);
+  const t0 = new Date(2026, 9, 1, 9).getTime();
+  env.clock.at(t0);
+  // 14 runs over two weeks of Toby's check, 12 found nothing.
+  for (let i = 0; i < 14; i++) {
+    const at = t0 + i * 86_400_000;
+    env.store.record({ agentId: 'toby', kind: 'run-dispatch', ts: at, attrs: { mission: 'm1' } });
+    env.store.record({ agentId: 'toby', kind: 'prompt', ts: at + 1000 });
+    if (i < 2) env.store.record({ agentId: 'toby', kind: 'message', ts: at + 1500 });
+    env.store.record({ agentId: 'toby', kind: 'stop', ts: at + 2000 });
+    env.clock.at(at + 2000 + 3 * 60_000);
+    env.proc.tick('/office');
+  }
+  env.clock.at(t0 + 15 * 86_400_000);
+  let missions = [{ id: 'm1', label: 'Benefits inbox check', to: 'toby', intervalMs: 2 * 3600_000, body: '', enabled: true, kind: 'dispatch' }];
+  const models = opts.models ?? [{ agentId: 'toby', provider: 'claude', model: 'claude-opus-5-5' }];
+  const svc = new PulseService({
+    db: () => env.persist.database(), store: env.store, processor: env.proc, office: () => '/office',
+    members: () => [{ id: 'toby', isGod: false }, { id: 'god', isGod: true }], godId: () => 'god', tasks: () => [],
+    missions: () => missions, models: () => models, ladder: () => [], priceOf: () => undefined,
+    applyMissions: (change) => { const next = change(missions); if (!next) return { ok: false, error: 'not found' }; missions = next; return { ok: true }; },
+    billing: () => 'account', now: env.clock.now
+  });
+  return { ...env, svc, missions: () => missions, setMissions: (m) => { missions = m; } };
+}
+
+test('Apply changes a schedule only if it still is what the advice saw; Undo restores it; Not now hides it', (t) => {
+  // Value: protects=D10 apply and undo, compare and set, D13 dismiss; fails_when=a stale or double click overwrites a schedule, Undo restores the wrong value, or a dismissed card stays; why_new=new apply path; seam=none; no_claim=the Schedules UI refresh (missions:updated is sent by applyMissions)
+  const { svc, missions, setMissions } = service(t);
+  const view = svc.snapshot('last-week');
+  assert.equal(view.available, true);
+  const [advice] = view.advice;
+  assert.equal(advice.kind, 'run-less');
+  assert.deepEqual(svc.apply(advice.id, { kind: 'interval', fromMs: 1, toMs: 2 }), { ok: false, error: 'stale' }, 'not what the owner saw');
+  const r = svc.apply(advice.id, advice.change);
+  assert.equal(r.ok, true);
+  assert.equal(missions()[0].intervalMs, 4 * 3600_000);
+  assert.deepEqual(svc.apply(advice.id, advice.change), { ok: false, error: 'stale' }, 'a second click finds it changed');
+  assert.equal(svc.snapshot('this-week').advice.length, 0, 'an applied suggestion waits for new evidence');
+  assert.equal(svc.snapshot('this-week').saved.state, 'measuring');
+  assert.equal(svc.undo(r.appliedId).ok, true);
+  assert.equal(missions()[0].intervalMs, 2 * 3600_000);
+  assert.deepEqual(svc.undo(r.appliedId), { ok: false, error: 'stale' }, 'undone once');
+  setMissions([{ ...missions()[0], intervalMs: 3 * 3600_000 }]);
+  assert.equal(svc.apply(advice.id, advice.change).ok, false, 'changed elsewhere: refused');
+  setMissions([{ ...missions()[0], intervalMs: 2 * 3600_000 }]);
+  assert.equal(svc.dismiss(advice.id), true);
+  assert.equal(svc.snapshot('this-week').advice.length, 0);
+});
+
+test('a model suggestion is checked here and made by the roster; the owner\'s store is never written from main', (t) => {
+  // Value: protects=model changes only through the owner's click and the renderer roster; fails_when=main writes a model or applies a stale one; why_new=eng correction 3; seam=none; no_claim=the renderer side (component test)
+  const { svc } = service(t);
+  const fake = { id: 'cheaper-model:toby', kind: 'cheaper-model', agentId: 'toby', change: { kind: 'model', from: 'claude-opus-5-5', to: 'claude-sonnet-5', toLabel: 'Sonnet 5' }, evidence: {}, savesPerWeek: null, band: 1 };
+  svc.allAdvice = () => [fake];
+  assert.deepEqual(svc.apply(fake.id, fake.change), { ok: true, kind: 'model', agentId: 'toby', to: 'claude-sonnet-5', from: 'claude-opus-5-5' });
+  const id = svc.modelApplied(fake.id, 'toby', 'claude-opus-5-5', 'claude-sonnet-5');
+  assert.ok(id > 0);
+  assert.deepEqual(svc.undo(id), { ok: true, kind: 'model', agentId: 'toby', to: 'claude-opus-5-5' });
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  assert.equal((src.match(/pulse\.apply\(/g) || []).length, 1, 'only the pulse:apply handler applies advice');
+});

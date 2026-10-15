@@ -1,0 +1,273 @@
+/**
+ * The Pulse service (docs/designs/team-performance.md): builds what the Pulse
+ * view shows from the telemetry store, and carries out the owner's clicks on
+ * ways to save. Nothing here changes a schedule or a model on its own: apply,
+ * undo and dismiss run only from the owner's click (memory 2026-10-10, D10).
+ *
+ *   view ─ pulse:snapshot ─► snapshot() ─► pulseSnapshot + adviceFor + savings + headroom
+ *   view ─ pulse:apply    ─► apply()    ─► schedule: compare and set in config
+ *                                          model: checked here, set by the renderer's roster
+ *   view ─ pulse:undo / pulse:dismiss
+ */
+import type Database from 'better-sqlite3';
+import type { ScheduledMission } from '../shared/missions';
+import {
+  dayKey, keptAsIs, measuredSaving, periodRange, planHeadroom, pulseSnapshot,
+  type AskFact, type Period, type PlanReading, type PulseSnapshot
+} from '../shared/teamPerformance';
+import { adviceFor, visibleAdvice, ADVICE_WINDOW_MS, type Advice, type Dismissal, type LadderModel, type MissionFact } from '../shared/teamAdvice';
+import type { TelemetryStore } from './telemetryStore';
+import type { TelemetryProcessor } from './telemetryProcessor';
+
+export interface PulseDeps {
+  db: () => Database.Database | null;
+  store: TelemetryStore;
+  processor: TelemetryProcessor;
+  office: () => string | null;
+  members: () => Array<{ id: string; isGod: boolean }>;
+  godId: () => string | null;
+  /** Cards with their asks (humanQA), from the board. */
+  tasks: () => Array<{ humanQA?: Array<{ kind?: string; askedAt?: string; answeredAt?: string; raisedBy?: string }> }>;
+  missions: () => ScheduledMission[];
+  /** Each member's provider and model, from the roster. */
+  models: () => Array<{ agentId: string; provider: string; model: string | null }>;
+  ladder: () => LadderModel[];
+  priceOf: (model: string) => number | undefined;
+  applyMissions: (change: (list: ScheduledMission[]) => ScheduledMission[] | null) => { ok: boolean; error?: string };
+  billing: () => 'account' | 'apiKey';
+  now?: () => number;
+}
+
+export interface AppliedChange { id: number; adviceId: string; agentId: string; kind: string; before: unknown; after: unknown; at: number; undoneAt: number | null }
+
+export interface PulseView {
+  available: boolean;
+  billing: 'account' | 'apiKey';
+  collectingSince: string | null;
+  snapshot: PulseSnapshot;
+  advice: Advice[];
+  /** When suggestions start (14 days after the first record), or null once they can show. */
+  adviceFrom: string | null;
+  saved: { state: 'none' } | { state: 'measuring'; firstAt: number } | { state: 'measured'; usd: number; since: number };
+  headroom: { usedPct: number; resetsAt: number; runsOutAt: number | null } | null;
+  applied: AppliedChange[];
+}
+
+/** Window lengths by Claude Code's rate limit names. */
+function windowMs(name: string): number {
+  return /five_hour|5h/i.test(name) ? 5 * 3_600_000 : 7 * 86_400_000;
+}
+
+export class PulseService {
+  private reading: PlanReading | null = null;
+  constructor(private readonly d: PulseDeps) {}
+  private now(): number { return this.d.now ? this.d.now() : Date.now(); }
+
+  /** A status line's usage windows: keep the most constrained one (E6). */
+  noteRateLimits(rateLimits: unknown, at = this.now()): void {
+    if (!rateLimits || typeof rateLimits !== 'object') return;
+    let best: PlanReading | null = null;
+    for (const [name, w] of Object.entries(rateLimits as Record<string, { used_percentage?: unknown; resets_at?: unknown }>)) {
+      const pct = typeof w?.used_percentage === 'number' ? w.used_percentage : NaN;
+      const resets = typeof w?.resets_at === 'number' ? w.resets_at * 1000 : NaN;
+      if (!(pct >= 0) || !(resets > at)) continue;
+      if (!best || pct > best.usedPct) best = { usedPct: pct, resetsAt: resets, windowMs: windowMs(name), at };
+    }
+    if (best) this.reading = best;
+  }
+
+  private asks(): AskFact[] {
+    const out: AskFact[] = [];
+    for (const c of this.d.tasks()) for (const e of c.humanQA ?? []) {
+      if (!e || e.kind === 'report' || !e.raisedBy || !e.askedAt) continue;
+      const askedAt = Date.parse(e.askedAt);
+      if (!Number.isFinite(askedAt)) continue;
+      const answeredAt = e.answeredAt ? Date.parse(e.answeredAt) : NaN;
+      out.push({ raisedBy: e.raisedBy, askedAt, ...(Number.isFinite(answeredAt) ? { answeredAt } : {}) });
+    }
+    return out;
+  }
+
+  private dismissed(office: string): Dismissal[] {
+    const db = this.d.db();
+    if (!db) return [];
+    return (db.prepare('SELECT advice_id AS id, band, at FROM telemetry_dismissed WHERE office = ?').all(office) as Dismissal[]);
+  }
+
+  appliedChanges(office: string): AppliedChange[] {
+    const db = this.d.db();
+    if (!db) return [];
+    return (db.prepare('SELECT * FROM telemetry_applied WHERE office = ? ORDER BY id').all(office) as Array<Record<string, unknown>>).map((r) => ({
+      id: Number(r.id), adviceId: String(r.advice_id), agentId: String(r.agent_id), kind: String(r.kind),
+      before: JSON.parse(String(r.before)), after: JSON.parse(String(r.after)), at: Number(r.at), undoneAt: r.undone_at === null ? null : Number(r.undone_at)
+    }));
+  }
+
+  /** Every suggestion the last 14 days support, before dismissals. */
+  private allAdvice(office: string): Advice[] {
+    const now = this.now();
+    const since = now - ADVICE_WINDOW_MS;
+    const days = this.d.processor.days(office, dayKey(since)).filter((x) => x.day >= dayKey(since));
+    const cards = this.d.processor.cards(office, since);
+    const decisions = this.d.processor.decisions(office, since);
+    const godId = this.d.godId();
+    const missions: MissionFact[] = this.d.missions()
+      .filter((m) => m.enabled && (m.kind ?? 'dispatch') === 'dispatch')
+      .map((m) => ({ id: m.id, to: m.to === 'god' && godId ? godId : m.to, label: m.label, intervalMs: m.intervalMs, timed: !!(m.times?.length || m.weekly) }));
+    const members = this.d.models().map((m) => {
+      const mine = days.filter((x) => x.agentId === m.agentId);
+      const kept = keptAsIs(m.agentId, decisions, cards);
+      return {
+        agentId: m.agentId, provider: m.provider, model: m.model, isGod: m.agentId === godId,
+        pieces: mine.reduce((s, x) => s + x.emails + x.sent + x.tasks + x.checks, 0),
+        mailDecisions: decisions.filter((x) => x.agentId === m.agentId && x.decision !== 'cancelled').length,
+        keptShare: kept.share, keptDecisions: kept.decisions,
+        reopens: cards.filter((c) => c.assignee === m.agentId && c.reopened).length,
+        usdPerWeek: mine.reduce((s, x) => s + x.usd, 0) / 2
+      };
+    });
+    // A change the owner applied in the window makes the evidence before it
+    // stale: that suggestion waits for 14 days of new records.
+    const recent = new Set(this.appliedChanges(office).filter((a) => a.undoneAt === null && a.at >= since).map((a) => a.adviceId));
+    return adviceFor({
+      now, runs: this.d.processor.runs(office, since), missions, members,
+      ladder: this.d.ladder(), gapDays: this.d.store.failureDays(office), priceOf: this.d.priceOf
+    }).filter((a) => !recent.has(a.id));
+  }
+
+  snapshot(period: Period): PulseView {
+    const office = this.d.office();
+    const now = this.now();
+    const billing = this.d.billing();
+    const godId = this.d.godId();
+    const db = this.d.db();
+    const empty = pulseSnapshot({ period, now, days: [], cards: [], decisions: [], asks: [], members: [] });
+    if (!office || !db) return { available: false, billing, collectingSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [] };
+    const range = periodRange(period, now);
+    const from = Math.min(range.fromMs, now - ADVICE_WINDOW_MS);
+    const ids = this.d.members().map((m) => m.id);
+    const snapshot = pulseSnapshot({
+      period, now,
+      days: this.d.processor.days(office, dayKey(from)),
+      cards: this.d.processor.cards(office, from),
+      decisions: this.d.processor.decisions(office, from),
+      asks: this.asks(),
+      members: ids,
+      sentAsWritten: this.d.processor.decisions(office, range.fromMs).filter((x) => x.decision === 'approve' && x.at <= range.toMs).length,
+      gapDays: this.d.store.failureDays(office),
+      ...(godId ? { michael: { agentId: godId, ...this.d.processor.michaelCounts(office, godId, range.fromMs) } } : {})
+    });
+    const first = this.d.processor.firstDay(office);
+    const firstMs = first ? new Date(`${first}T00:00:00`).getTime() : now;
+    const adviceReady = now - firstMs >= ADVICE_WINDOW_MS;
+    const applied = this.appliedChanges(office);
+    return {
+      available: true,
+      billing,
+      collectingSince: first,
+      snapshot,
+      advice: adviceReady ? visibleAdvice(this.allAdvice(office), this.dismissed(office), now) : [],
+      adviceFrom: adviceReady ? null : dayKey(firstMs + ADVICE_WINDOW_MS),
+      saved: this.saved(office, applied),
+      headroom: billing === 'account' ? planHeadroom(this.reading) : null,
+      applied
+    };
+  }
+
+  /** D16: measured savings of every change still in place. */
+  private saved(office: string, applied: AppliedChange[]): PulseView['saved'] {
+    const live = applied.filter((a) => a.undoneAt === null);
+    if (!live.length) return { state: 'none' };
+    const now = this.now();
+    let usd = 0, measuring: number | null = null;
+    for (const a of live) {
+      const days = this.d.processor.days(office, dayKey(a.at - ADVICE_WINDOW_MS)).filter((x) => x.agentId === a.agentId);
+      const r = measuredSaving(days, a.at, now);
+      if (r.state === 'measuring') measuring = Math.min(measuring ?? r.firstAt, r.firstAt);
+      else usd += r.usd;
+    }
+    const measuredAny = live.some((a) => now >= a.at + 7 * 86_400_000);
+    if (!measuredAny && measuring !== null) return { state: 'measuring', firstAt: measuring };
+    return { state: 'measured', usd, since: Math.min(...live.map((a) => a.at)) };
+  }
+
+  private record(office: string, adviceId: string, agentId: string, kind: string, before: unknown, after: unknown): number {
+    const db = this.d.db();
+    if (!db) return 0;
+    const at = this.now();
+    const r = db.prepare('INSERT INTO telemetry_applied (office, advice_id, agent_id, kind, before, after, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(office, adviceId, agentId, kind, JSON.stringify(before), JSON.stringify(after), at);
+    this.d.store.record({ agentId, kind: 'advice-applied', ts: at, attrs: { advice: adviceId } });
+    return Number(r.lastInsertRowid);
+  }
+
+  /** The owner's Apply. A schedule change is made here, compare and set; a
+   *  model change is checked here and made by the renderer (it owns models). */
+  apply(adviceId: string, expected: unknown): { ok: true; kind: 'schedule'; appliedId: number } | { ok: true; kind: 'model'; agentId: string; to: string; from: string | null } | { ok: false; error: 'stale' | 'unavailable' | 'failed' } {
+    const office = this.d.office();
+    if (!office || !this.d.db()) return { ok: false, error: 'unavailable' };
+    const a = this.allAdvice(office).find((x) => x.id === adviceId);
+    if (!a) return { ok: false, error: 'stale' };
+    // The change the owner saw must still be the change: a double click or an
+    // edit elsewhere since the view loaded is refused, never applied twice.
+    if (JSON.stringify(expected) !== JSON.stringify(a.change)) return { ok: false, error: 'stale' };
+    if (a.change.kind === 'interval') {
+      const { fromMs, toMs } = a.change;
+      const res = this.d.applyMissions((list) => {
+        const m = list.find((x) => x.id === a.missionId);
+        if (!m || m.intervalMs !== fromMs || m.times?.length || m.weekly) return null;
+        return list.map((x) => (x.id === m.id ? { ...x, intervalMs: toMs } : x));
+      });
+      if (!res.ok) return { ok: false, error: res.error === 'not found' ? 'stale' : 'failed' };
+      return { ok: true, kind: 'schedule', appliedId: this.record(office, a.id, a.agentId, 'schedule', { missionId: a.missionId, intervalMs: fromMs }, { missionId: a.missionId, intervalMs: toMs }) };
+    }
+    if (a.change.kind === 'model') {
+      const current = this.d.models().find((m) => m.agentId === a.agentId)?.model ?? null;
+      if (current !== a.change.from) return { ok: false, error: 'stale' };
+      return { ok: true, kind: 'model', agentId: a.agentId, to: a.change.to, from: a.change.from };
+    }
+    return { ok: false, error: 'failed' };
+  }
+
+  /** After the renderer set the model, record it for savings and Undo. */
+  modelApplied(adviceId: string, agentId: string, from: string | null, to: string): number {
+    const office = this.d.office();
+    return office ? this.record(office, adviceId, agentId, 'model', { model: from }, { model: to }) : 0;
+  }
+
+  /** Undo restores the exact previous setting, if nothing changed it since. */
+  undo(appliedId: number): { ok: true; kind: 'schedule' } | { ok: true; kind: 'model'; agentId: string; to: string | null } | { ok: false; error: 'stale' | 'unavailable' } {
+    const office = this.d.office();
+    const db = this.d.db();
+    if (!office || !db) return { ok: false, error: 'unavailable' };
+    const a = this.appliedChanges(office).find((x) => x.id === appliedId && x.undoneAt === null);
+    if (!a) return { ok: false, error: 'stale' };
+    const mark = (): void => { db.prepare('UPDATE telemetry_applied SET undone_at = ? WHERE id = ?').run(this.now(), a.id); };
+    if (a.kind === 'schedule') {
+      const before = a.before as { missionId: string; intervalMs: number };
+      const after = a.after as { intervalMs: number };
+      const res = this.d.applyMissions((list) => {
+        const m = list.find((x) => x.id === before.missionId);
+        if (!m || m.intervalMs !== after.intervalMs) return null;
+        return list.map((x) => (x.id === m.id ? { ...x, intervalMs: before.intervalMs } : x));
+      });
+      if (!res.ok) return { ok: false, error: 'stale' };
+      mark();
+      return { ok: true, kind: 'schedule' };
+    }
+    mark();
+    return { ok: true, kind: 'model', agentId: a.agentId, to: (a.before as { model: string | null }).model };
+  }
+
+  /** Not now: hidden until the evidence crosses its next band (D13). */
+  dismiss(adviceId: string): boolean {
+    const office = this.d.office();
+    const db = this.d.db();
+    if (!office || !db) return false;
+    const a = this.allAdvice(office).find((x) => x.id === adviceId);
+    if (!a) return false;
+    db.prepare(`INSERT INTO telemetry_dismissed (office, advice_id, band, at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(office, advice_id) DO UPDATE SET band = excluded.band, at = excluded.at`).run(office, a.id, a.band, this.now());
+    return true;
+  }
+}

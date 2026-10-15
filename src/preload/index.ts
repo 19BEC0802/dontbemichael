@@ -1,3 +1,5 @@
+import type { Period } from '../shared/teamPerformance';
+import type { PulseView } from '../main/pulse';
 import type { ResearchConfig } from '../shared/research';
 import type { DataClassId, DataClassSetting } from '../shared/dataClasses';
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
@@ -1361,6 +1363,25 @@ const api = {
   /** The owner ends a card: Done, marked "Closed by owner", never deleted. */
   hiveCloseTask: (id: string, reason?: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('hive:closeTask', id, reason),
+
+  // ─── Pulse (docs/designs/team-performance.md) ─────────────────────────────
+  /** What the Pulse view shows for a period. */
+  pulseSnapshot: (period: Period): Promise<PulseView> => ipcRenderer.invoke('pulse:snapshot', period),
+  /** The owner's Apply on a way to save. A model change comes back for the store to make. */
+  pulseApply: (id: string, expected: unknown): Promise<{ ok: true; kind: 'schedule'; appliedId: number } | { ok: true; kind: 'model'; agentId: string; to: string; from: string | null } | { ok: false; error: 'stale' | 'unavailable' | 'failed' }> =>
+    ipcRenderer.invoke('pulse:apply', id, expected),
+  /** After the store set a model from a suggestion: record it for savings and Undo. */
+  pulseModelApplied: (id: string, agentId: string, from: string | null, to: string): Promise<number> =>
+    ipcRenderer.invoke('pulse:modelApplied', id, agentId, from, to),
+  pulseUndo: (appliedId: number): Promise<{ ok: true; kind: 'schedule' } | { ok: true; kind: 'model'; agentId: string; to: string | null } | { ok: false; error: 'stale' | 'unavailable' }> =>
+    ipcRenderer.invoke('pulse:undo', appliedId),
+  pulseDismiss: (id: string): Promise<boolean> => ipcRenderer.invoke('pulse:dismiss', id),
+  /** Fires when new telemetry was folded, so an open Pulse view refreshes. */
+  onPulseUpdated: (cb: () => void): (() => void) => {
+    const listener = (): void => cb();
+    ipcRenderer.on('pulse:updated', listener);
+    return () => ipcRenderer.removeListener('pulse:updated', listener);
+  },
 
   // ─── Scheduled missions (recurring auto-dispatch) ──────────────────────────
   listMissions: (): Promise<ScheduledMission[]> => ipcRenderer.invoke('missions:list'),
