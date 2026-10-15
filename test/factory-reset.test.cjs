@@ -14,7 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const loadTs = require('./load-ts.cjs');
 
-const { eraseOfficeData, OFFICE_FOLDER_ENTRIES, PRIVATE_ENTRIES, APP_DATA_ENTRIES } = loadTs('src/main/factoryReset.ts');
+const { eraseOfficeData, OFFICE_FOLDER_ENTRIES, PRIVATE_ENTRIES, APP_DATA_ENTRIES, APP_DATA_KEPT } = loadTs('src/main/factoryReset.ts');
 const { writeOfficeRecord } = loadTs('src/main/officeFile.ts');
 
 function seed(dir, names) {
@@ -64,6 +64,8 @@ test('in a folder the owner chose, their own private folder and office.json stay
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-own-'));
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-own-data-'));
   t.after(() => { fs.rmSync(home, { recursive: true, force: true }); fs.rmSync(userData, { recursive: true, force: true }); });
+  fs.mkdirSync(path.join(home, 'hive'));
+  fs.writeFileSync(path.join(home, 'hive', 'registry.json'), '{}');
   fs.mkdirSync(path.join(home, 'private'));
   fs.writeFileSync(path.join(home, 'private', 'tax return.pdf'), 'mine');
   seed(path.join(home, 'private'), ['card-guard.json', 'owner']);
@@ -73,6 +75,34 @@ test('in a folder the owner chose, their own private folder and office.json stay
   assert.equal(fs.existsSync(path.join(home, 'private', 'card-guard.json')), false, 'the app\'s own file in it goes');
   assert.equal(fs.existsSync(path.join(home, 'private', 'owner')), false);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'office.json'), 'utf8')), { desks: 4, plants: 2 }, 'not the app\'s record, so it stays');
+});
+
+test('a folder that is not an office, or is the home folder, keeps everything in it', (t) => {
+  // Value: protects=a reset with a broad or wrong office folder never deletes the owner's own folders of the same names; fails_when=isOfficeFolder is dropped or the home folder check goes; why_new=ship security review; seam=HOME env; no_claim=Windows home resolution
+  const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-plain-'));
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'md-reset-plain-data-'));
+  const savedHome = process.env.HOME;
+  t.after(() => { process.env.HOME = savedHome; for (const d of [plain, userData]) fs.rmSync(d, { recursive: true, force: true }); });
+  seed(plain, ['agent-tmp', 'research-desk']);
+  assert.deepEqual(eraseOfficeData({ home: plain, userData }), []);
+  assert.ok(fs.existsSync(path.join(plain, 'agent-tmp', 'inside.txt')), 'no office in it, so nothing goes');
+  seed(plain, ['hive']);
+  fs.writeFileSync(path.join(plain, 'hive', 'registry.json'), '{}');
+  process.env.HOME = plain;
+  assert.deepEqual(eraseOfficeData({ home: plain, userData }), []);
+  assert.ok(fs.existsSync(path.join(plain, 'agent-tmp', 'inside.txt')), 'the home folder is never cleared, office or not');
+  assert.ok(fs.existsSync(path.join(plain, 'hive', 'registry.json')));
+});
+
+test('every app data file the main process names is erased by a reset or kept on purpose', () => {
+  // Value: protects=a new app data file can't silently carry across a reset; fails_when=a join(app.getPath('userData'), name) is added to neither list; why_new=ship testing review; seam=none; no_claim=names built at run time
+  const dir = path.join(__dirname, '..', 'src', 'main');
+  const names = new Set();
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.ts'))) {
+    for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/getPath\('userData'\),\s*'([^']+)'/g)) names.add(m[1]);
+  }
+  assert.ok(names.size >= 10, 'the scan finds the app data files');
+  for (const n of names) assert.ok(APP_DATA_ENTRIES.includes(n) || APP_DATA_KEPT.includes(n), `${n} is neither erased nor kept`);
 });
 
 test('a path it cannot remove is reported and the rest is still erased', { skip: process.platform === 'win32' ? 'POSIX permissions' : false }, (t) => {

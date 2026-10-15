@@ -110,7 +110,7 @@ import { emailCalendarAllowed } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { pastesDir, savePaste, sweepOldPastes } from './pastes';
-import { eraseOfficeData } from './factoryReset';
+import { CHECK_FOLDERS, eraseOfficeData } from './factoryReset';
 import { buildWorkerLaunch } from './workerLaunch';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
@@ -642,7 +642,7 @@ function sweepOldCheckTranscripts(): void {
   if (oldCheckTranscriptsSwept) return;
   oldCheckTranscriptsSwept = true;
   const cutoff = Date.now() - 60 * 60_000;
-  for (const folder of ['standing-check', 'trust-check']) {
+  for (const folder of CHECK_FOLDERS) {
     const dir = projectDir(join(app.getPath('userData'), folder));
     let names: string[] = [];
     try { names = readdirSync(dir); } catch { continue; }
@@ -6190,7 +6190,7 @@ ipcMain.handle('app:resetAll', () => {
     userData,
     extra: [
       hive.root() ?? '', memory.palacePath() ?? '', ...researchFolders(),
-      ...['standing-check', 'trust-check'].map((f) => projectDir(join(userData, f)))
+      ...CHECK_FOLDERS.map((f) => projectDir(join(userData, f)))
     ]
   });
   if (failed.length) console.error('[reset] could not remove:', failed);

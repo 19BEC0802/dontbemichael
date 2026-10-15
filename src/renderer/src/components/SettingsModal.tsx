@@ -1007,7 +1007,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                   <Icon name="bell" />
                 </div>
                 <div style={{ flex: 1, fontSize: 15, lineHeight: '22px', color: 'var(--cth-ink-700)' }}>
-                  {t('settings.resetConfirm.body', { godName })}
+                  {t('settings.resetConfirm.body')}
                 </div>
               </div>
 

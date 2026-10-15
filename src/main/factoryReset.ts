@@ -14,9 +14,13 @@
  * the updater's log and version stamp, the anonymous usage id, and the hero,
  * model and skill catalog caches.
  */
-import { readdirSync, rmdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, rmdirSync, rmSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, parse, resolve } from 'node:path';
 import { officeRecordPath, readOfficeRecord } from './officeFile';
+import { AGENT_TMP_DIR } from '../shared/folderAccess';
+import { RESEARCH_DESK_DIR } from '../shared/research';
+import { privateRoot } from '../shared/agentPrivatePaths';
 
 /** Created by the app in the office folder. office.json and private/ have
  *  plain names an owner could use too, so they are handled on their own below. */
@@ -24,8 +28,8 @@ export const OFFICE_FOLDER_ENTRIES = [
   'hive',
   'palace',
   'agent-settings',
-  'agent-tmp',
-  'research-desk',
+  AGENT_TMP_DIR,
+  RESEARCH_DESK_DIR,
   'hallways.json',
   'tunnels.json'
 ] as const;
@@ -45,6 +49,9 @@ export const PRIVATE_ENTRIES = [
   'research-mined'
 ] as const;
 
+/** The privacy and standing approval checks' own empty folders (index.ts). */
+export const CHECK_FOLDERS = ['standing-check', 'trust-check'] as const;
+
 /** Created by the app in its own data folder for the office it runs. */
 export const APP_DATA_ENTRIES = [
   'harness.db',
@@ -60,19 +67,30 @@ export const APP_DATA_ENTRIES = [
   'slack-done-notified.json',
   'slack-files',
   'pastes',
-  'standing-check',
-  'trust-check'
+  ...CHECK_FOLDERS
 ] as const;
+
+/** In the app's data folder and kept by a reset: they describe this install,
+ *  not the office (test/factory-reset.test.cjs checks every name is in one list). */
+export const APP_DATA_KEPT = ['config.json', 'hero.json', 'model-catalog.json', 'skill-catalog.json', 'last-run-version', 'updater.log'] as const;
+
+/** Is this folder an office the app made, and not the owner's home folder or a
+ *  disk's root? Only then are its app-made entries removed. */
+function isOfficeFolder(home: string): boolean {
+  const abs = resolve(home);
+  if (abs === resolve(homedir()) || abs === parse(abs).root) return false;
+  return existsSync(join(abs, 'hive', 'registry.json')) || readOfficeRecord(abs) !== null;
+}
 
 /** Erase the office's data. `extra` adds folders that live elsewhere (the
  *  hive and palace where they resolve, Research's and the checks' Claude Code
  *  conversations). Returns the paths it could not remove; a reset carries on
  *  past them rather than stopping half way. */
 export function eraseOfficeData(p: { home: string | null; userData: string; extra?: string[] }): string[] {
-  const home = p.home;
+  const home = p.home && isOfficeFolder(p.home) ? p.home : null;
   const targets = [
     ...(home ? OFFICE_FOLDER_ENTRIES.map((n) => join(home, n)) : []),
-    ...(home ? PRIVATE_ENTRIES.map((n) => join(home, 'private', n)) : []),
+    ...(home ? PRIVATE_ENTRIES.map((n) => join(privateRoot(home), n)) : []),
     // Only the app's own office record, never an owner's file of that name.
     ...(home && readOfficeRecord(home) ? [officeRecordPath(home)] : []),
     ...APP_DATA_ENTRIES.map((n) => join(p.userData, n)),
@@ -80,10 +98,12 @@ export function eraseOfficeData(p: { home: string | null; userData: string; extr
   ];
   const failed: string[] = [];
   for (const t of targets) {
-    try { rmSync(t, { recursive: true, force: true }); } catch { failed.push(t); }
+    // Retried for about a second: a file a stopping process still holds open
+    // (Windows) or is closing gets the time to let go.
+    try { rmSync(t, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { failed.push(t); }
   }
   if (home) {
-    const priv = join(home, 'private');
+    const priv = privateRoot(home);
     try { if (readdirSync(priv).length === 0) rmdirSync(priv); } catch { /* absent, or the owner's things stay */ }
   }
   return failed;
