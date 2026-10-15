@@ -1,6 +1,6 @@
 # Office floor: department plates and glass monitors
 
-Status: design approved (owner, 2026-10-15). Not built.
+Status: design approved and built (owner, 2026-10-15). HR is the department's name; a long word widens a one person pad just enough; an office tucked behind another stays partly hidden, like the rest of that pod.
 
 ## Problem
 

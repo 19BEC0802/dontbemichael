@@ -1147,16 +1147,32 @@ light (§3.8) and a faint dot grid masked to the edges.
 
 ### 8.3 Pods
 
-A department pod is a desk block, a monitor on a stand, a chair, a keyboard, and a small
-plant or mug, all in the department family (§3.4) on a paper pad slab. Each desk carries
+A department pod is a desk block, a glass monitor on a stand, a chair, a keyboard, and a
+small plant or mug, all in the department family (§3.4) on a paper pad slab. Each desk carries
 its person's prop (§3.4) at the front left corner, and Michael's desk his mug. Open floor
 holds three potted plants and a water cooler (`DECOR` in StudioArt), on spots clear of
 every ring slot, the mailbox row and Michael's office. A pod holds one to
 four desks (§8.9). The monitor screen is the status surface:
 
-- Lit: `l` fill with a soft inner light and a floor glow ellipse in `acc` at 42% core,
-  14% edge (dark 62% and 22%).
-- Off: `#5E5A74` (dark `#23212F`).
+- Glass (owner, 2026-10-15; `docs/designs/office-floor-plates-glass.md`): every monitor,
+  Michael's included, is a frameless slab 0.02 deep (faces `rgba(220,228,246,.35)`,
+  `rgba(226,234,250,.2)`, `rgba(200,210,236,.35)`), no bezel and no white edge; the pane
+  fills it. Before, a thick dark frame read as an old monitor.
+- Idle: a clear pane, `rgba(226,234,250,.38)`, with a soft white reflection
+  (`rgba(255,255,255,.55)`) across its left side.
+- At work: the glass takes the color it shows at about 13% (`acc`, `violet` while
+  thinking or compacting, `coral` when asking for help), its lines scroll while working,
+  looping, thinking or compacting, and a floor glow ellipse in `acc` at 42% core, 14% edge
+  (dark 62% and 22%). In dark theme the screen halo is 25%.
+
+**Department plate** (owner, 2026-10-15): owners who don't know the show see only
+names, so each pod says what it does. A plate lies on the pad in the floor's plane (the
+plane of Michael's name plate), right in front of the front chairs: its center 0.1 grid
+past the chair backs (0.53 past their desks). The pad grows only by what it needs: deeper
+at the front by `max(0, plate + 0.12 - half depth)`, and wider when the word is longer
+than a one person pad. White at 92% (dark `#24222F`), 9 px tall, 0.7 px `acc` border, `r`
+2.2; the department name (`studio.dept`, "HR" for people) in Sora 700 at 5.8 px, capitals
+spaced 0.5 for Latin words and unspaced for scripts that join, such as Arabic.
 
 ### 8.4 Michael's glass pod
 

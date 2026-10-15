@@ -16,6 +16,8 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 
 ### Changed
 
+- **Every office on the floor says what it does.** A small plate in front of the chairs names the department (Finance, Sales, HR, IT and so on), so you can tell who does what without knowing the show. The People department is now called HR.
+- **Glass monitors.** The desk monitors, Michael's too, are clear glass panes instead of thick black screens: plain glass when idle, tinted with scrolling lines while someone works.
 - **A team member stuck on a prompt is restarted, not handed to you.** When a member's session stops on a question only a person could answer, the app restarts them so they carry on, and Michael no longer asks you to open a 1:1 chat. If it comes back right after, Michael moves their work to a teammate and tells you plainly that they are stuck. (Agent behavior: what Michael is told and asks.)
 - **You never have to answer every question on a card.** Reply settles the ask with whatever you answered; the questions you left blank go through Michael to the team member who raised them, who works out what they can and comes back only for what they still need. Before, Michael asked you again at once. (Agent behavior: Michael and every team member.)
 
