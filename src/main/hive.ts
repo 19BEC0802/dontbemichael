@@ -2310,7 +2310,9 @@ export class HiveManager {
   /** Checked messages for Research whose delivery failed (a disk error), by
    *  id: each routing pass tries them again with the verdict they already have. */
   private readonly researchUndelivered = new Map<string, () => void>();
-  static readonly RESEARCH_DELIVERY_TRIES = 5;
+  /** About a minute of tries at the router's 1.5 s pace, so a disk that
+   *  fills up or locks for a moment doesn't cost the owner a note. */
+  static readonly RESEARCH_DELIVERY_TRIES = 40;
   private stampKey: Buffer | null = null;
 
   /** Research while it is on: the reserved id, the owner's switch, a live entry. */
@@ -2614,7 +2616,13 @@ export class HiveManager {
         // tells Michael instead of nobody.
         let outcome: 'done' | 'again' | 'recheck' | 'keep' = 'keep';
         try { outcome = deliverOrRefuse(); } catch (e) { console.error('[research] settling a checked message', e); }
-        if (outcome === 'again') { this.researchUndelivered.set(msg.id, settle); return; }
+        if (outcome === 'again') {
+          // Its row now says it passed its check, so a start after a close
+          // tells Michael it was not delivered, not that it was being checked.
+          if (tries === 1 && !fromAgent) this.researchPending(msg, true, true);
+          this.researchUndelivered.set(msg.id, settle);
+          return;
+        }
         if (outcome === 'keep') return;
         if (!fromAgent) this.researchPending(msg, false);
         if (outcome === 'recheck') this.queueForResearch(msg);
@@ -2628,22 +2636,23 @@ export class HiveManager {
   }
 
   /** The owner's and the app's messages for Research whose check is under
-   *  way, by id: what they were and who sent them, nothing more. */
-  private researchPending(msg: HiveMessage, add: boolean): void {
+   *  way, or that passed it and wait to be delivered (`checked`), by id: what
+   *  they were and who sent them, nothing more. */
+  private researchPending(msg: HiveMessage, add: boolean, checked = false): void {
     // Anything left from before this start is told first, never this run's.
     this.tellLostResearchPending();
     const home = this.getHome();
     if (!home) return;
     const file = join(privateRoot(home), 'research-pending.json');
-    let rows: Array<{ id: string; from: string; subject: string }> = [];
+    let rows: Array<{ id: string; from: string; subject: string; checked?: boolean }> = [];
     try { const r = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(r)) rows = r; } catch { /* none yet */ }
     rows = rows.filter((r) => r && r.id !== msg.id);
-    if (add) { rows.push({ id: msg.id, from: msg.from, subject: String(msg.subject ?? '').slice(0, 80) }); this.researchPendingMine.add(msg.id); }
+    if (add) { rows.push({ id: msg.id, from: msg.from, subject: String(msg.subject ?? '').slice(0, 80), ...(checked ? { checked: true } : {}) }); this.researchPendingMine.add(msg.id); }
     try { mkdirSync(privateRoot(home), { recursive: true }); this.atomicWriteJson(file, rows); } catch { /* best effort */ }
   }
 
-  /** At start: an owner or app message whose check never finished (the app
-   *  closed or crashed) is told to Michael (Codex review, D8.2). The rows are
+  /** At start: an owner or app message whose check or delivery never
+   *  finished (the app closed or crashed) is told to Michael (Codex review, D8.2). The rows are
    *  moved aside first, so this run's own checks start a fresh list, and each
    *  stays until Michael's inbox takes its note: tried again on every routing
    *  pass, and at the next start if the app closes first (Codex, second ship). */
@@ -2653,7 +2662,7 @@ export class HiveManager {
     if (!home) return;
     const file = join(privateRoot(home), 'research-pending.json');
     const lost = join(privateRoot(home), 'research-pending-lost.json');
-    let rows: Array<{ id: string; from: string; subject: string }> = [];
+    let rows: Array<{ id: string; from: string; subject: string; checked?: boolean }> = [];
     try { const r = JSON.parse(readFileSync(lost, 'utf8')); if (Array.isArray(r)) rows = r; } catch { /* none left over */ }
     if (!this.researchPendingMoved) {
       let earlier: typeof rows = [];
@@ -2676,7 +2685,7 @@ export class HiveManager {
       if (!r || (r.from !== 'human' && r.from !== 'system') || this.researchLostTold.has(r.id)) return false;
       const ok = this.deliver(this.normalize({
         to: godId, act: 'inform', subject: researchText(NOT_SENT_SUBJECT, this.researchName()),
-        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${this.researchName()} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being checked. Send it again if it still matters.`
+        body: `${r.from === 'human' ? 'A note from the owner' : 'A message from the app'} for ${this.researchName()} ("${String(r.subject ?? '').slice(0, 80)}") was not sent: the app closed while it was being ${r.checked === true ? 'delivered' : 'checked'}. Send it again if it still matters.`
       }, PRIVACY_CHECK_SENDER), godId);
       if (ok) this.researchLostTold.add(r.id);
       return !ok;
