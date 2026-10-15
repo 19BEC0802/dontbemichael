@@ -48,7 +48,6 @@ own memory, working on your computer.
 ## Contents
 
 - [What it is](#what-it-is)
-- [How it differs from Munder Difflin](#how-it-differs-from-munder-difflin)
 - [Your team](#your-team)
 - [A mailbox for every job](#a-mailbox-for-every-job)
 - [What the office does](#what-the-office-does)
@@ -70,31 +69,6 @@ decision.
 Everything runs on your computer, on the Claude plan you already have. Each team member has a
 desk in an office you can watch, a pod for each department around Michael's glass office, so you
 can see who is working on what.
-
-## How it differs from Munder Difflin
-
-Don't Be Michael grew out of [Munder Difflin](https://github.com/chaitanyagiri/munder-difflin),
-and it keeps that project's core: every team member is a real Claude Code process in its own
-terminal, and the team coordinates through the hive, a folder of plain files. What was built on
-top is a different product for a different person.
-
-Munder Difflin is an agent harness for developers: it turns the coding CLIs you already run into
-clones of you. Don't Be Michael is an office for a small business owner who never opens a
-terminal. That changes almost every decision:
-
-| | Munder Difflin | Don't Be Michael |
-|---|---|---|
-| **Made for** | Developers running coding agents | Small business owners in any line of work, with no technical background needed |
-| **Michael** | Your clone, routing work between your agents | Your office manager: the only one who assigns work, decides the team's day to day requests, and brings you only the calls that need you |
-| **Setting up** | Start agents in terminals and give them work | Pick your kind of business, get a suggested team, and hire in four steps with a real job and a work style for each; no two teammates do the same work |
-| **Email** | The one Gmail account on your Claude account, shared by every agent | As many mailboxes as the business runs on, one per team member, each set to Can send, Send on approval or Draft only; passwords stay encrypted on your computer |
-| **Access control** | None: every agent can reach every app connected to your Claude account and every tool you set up in Claude Code | You decide exactly which apps the office can use and which team member uses each one; the app enforces it on every call |
-| **Files and data** | Hard to give an agent a workspace of its own: agents work in code project folders, with no way to give each one its own set of files and data | Your business folder becomes the office's filing cabinet, with access that follows its hierarchy. Each team member works in its own folder with the files its job needs, such as product documentation and client lists for Sales, or survey results and user interviews for Marketing, and opens only that folder. Michael, above them, reads every folder and changes none. You organize your own work in the same folders the team uses |
-| **User experience** | Lots of low level details and out of place screens, which make the system hard to use and hard to focus on the right things | A modern office workspace, redesigned from the ground up for business users. Unneeded details and repetition are gone, and there is one clear way to talk to the office, instead of every option piled into an orchestrator panel |
-| **Cost and data** | Free, with a paid Pro plan; anonymous usage stats | Free, no paid plan, no usage data sent |
-
-If you write code and want a team of coding agents, Munder Difflin is the better fit. If you run a
-business and want the work done without watching terminals, this is the better fit.
 
 ## Your team
 
@@ -390,6 +364,12 @@ Contributions are welcome. Start with [`CONTRIBUTING.md`](./CONTRIBUTING.md). Fo
 idea? [Open an issue](https://github.com/agentvivekkumar/dontbemichael/issues).
 [`CONTRIBUTORS.md`](./CONTRIBUTORS.md) lists everyone with a merged pull request. Changes are in
 [`CHANGELOG.md`](./CHANGELOG.md).
+
+## Where it came from
+
+Don't Be Michael started as a fork of [Munder Difflin](https://github.com/chaitanyagiri/munder-difflin),
+an agent harness for developers by Chaitanya Giri. It has since grown into its own project, built
+for business owners rather than developers, and is developed independently.
 
 ## License
 

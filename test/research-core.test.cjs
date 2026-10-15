@@ -109,7 +109,8 @@ test('the renderer shows the Research agent\'s name from the floor, the archive,
     '@/store/store': { useStore, ACTION_CLOCKING_IN: 'clocking-in' },
     '@/store/config': { buildSpawnCommand: () => 'claude' },
     '@/components/terminalPool': { disposeTerminal: () => {} },
-    '@/scene/office/cast': { RESEARCH_CHARACTER: 'pete' }
+    '@/scene/office/cast': { RESEARCH_CHARACTER: 'pete' },
+    '@/scene/office/peteWelcome': loadTs('src/renderer/src/scene/office/peteWelcome.ts')
   };
   const resolve = Module._resolveFilename;
   Module._resolveFilename = function (req, ...rest) { return Object.hasOwn(stubs, req) ? `stub:${req}` : resolve.call(this, req, ...rest); };

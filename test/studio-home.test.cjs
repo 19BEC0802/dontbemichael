@@ -245,7 +245,7 @@ test('the idle quote belongs to the speaker\'s chip and never covers a card (own
   assert.match(chip.slice(0, 6000), /className=\{i === speakerAt \? 'cth-st-speak' : undefined\}/);
   assert.doesNotMatch(stage, /One in-character line over an idle pod/, 'no free floating bubble');
   // Only someone in a quiet pod (a chip) speaks; never someone clocking in.
-  assert.match(stage, /const quietPeople = \(\) => chatCandidates\(live\.current\.pods, live\.current\.gone, ACTIVE, ACTION_CLOCKING_IN\)\.filter\(\(p\) => p\.id !== RESEARCH_ID\);/);
+  assert.match(stage, /const quietPeople = \(\) => chatCandidates\(live\.current\.pods, live\.current\.gone, ACTIVE, ACTION_CLOCKING_IN\);/);
   assert.match(fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/shell/closingFloor.ts'), 'utf8'), /a\.status === 'idle' && a\.action !== clockingIn/);
   assert.match(stage, /const wait = first \? 8000 \+ Math\.random\(\) \* 7000 : 15_000 \+ Math\.random\(\) \* 15_000;/);
   // Up from the chip, up and leftward, or down under it: the first that covers no card.
