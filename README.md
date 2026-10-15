@@ -39,11 +39,11 @@ own memory, working on your computer.
 > brings you only the calls that need you.
 
 > [!TIP]
-> **New in 0.2.0: Pete, the one team member on the internet.**
-> In every office only Pete, the Research team member, opens web pages and searches; everyone else
-> asks them, and on a Mac nobody else's commands reach the internet. A trust layer checks every
-> message to Pete against what you keep private, and cleans Pete's answers. Pete is off until you
-> turn them on. In 0.1.9, Michael alone kept the task board and Done became final.
+> **New in 0.2.1: a real fresh start, and Michael hears what the privacy check stops.**
+> Reset & start over now erases everything the app made for your office and keeps your own files.
+> Michael is told about every message the privacy check keeps from Pete, and why. Pete joins the
+> office's idle chatter, and webhooks hold anything but a plain status question for your approval.
+> In 0.2.0, Pete became the one team member on the internet.
 
 ## Contents
 
