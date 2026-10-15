@@ -113,6 +113,32 @@
 **Priority:** P3
 **Depends on:** None
 
+## Team performance (from the CEO review of docs/designs/team-performance.md, 2026-10-15)
+
+### Move the cost ledger into the telemetry store
+
+**What:** Move the circuit breaker and lifetime totals from `hive/cost-ledger.jsonl` onto the telemetry store in harness.db, then stop writing the file.
+
+**Why:** After the team performance build, cost data lives in two places that can drift apart, and the file is agent writable and grows forever (403,830 rows in its first 3 weeks).
+
+**Context:** `db.ts` already reserves a `cost_ledger` table with the file's column names. Readers today: `costLifetime.ts`, `runBreakerBeat` in `index.ts`, `tools/agent-metrics.cjs`. The team performance processor already folds cost points from the store with `src/shared/costFold.ts`. Owner decision D17.
+
+**Effort:** M (human) / S (CC)
+**Priority:** P2
+**Depends on:** The team performance build (telemetry store)
+
+### Give Fable a tier and a price
+
+**What:** Add Fable's tier (top, middle or small) to `modelCatalog.json` and its price rows to `pricing.ts`, from Anthropic's published pricing.
+
+**Why:** Model advice in the Team view needs a tier, so members on Fable, the default model (`config.ts:525`), get no cheaper or stronger model advice until it has one.
+
+**Context:** The team performance build adds `tier` to Claude catalog entries and `knownPrice(model)`; a model without a tier gets no model advice. The remote catalog (`modelCatalog.ts`) must carry the field too. Owner decision D18.
+
+**Effort:** S (human) / S (CC)
+**Priority:** P2
+**Depends on:** The team performance build
+
 ## Named links (from the eng review of docs/designs/named-links.md, 2026-10-11)
 
 ### Copy a link's address from a card
