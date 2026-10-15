@@ -3,8 +3,10 @@
 // 2026-10-13, D5 and D7). A flag remembers it played, kept per office because
 // localStorage is shared by every office this origin opens (D9; the roster
 // claims it per office for the same reason, store.ts). Turning Research on
-// forgets it (startResearch), so the next turn on welcomes Pete again; a
-// restart or a restore never does.
+// forgets it (startResearch), so the next turn on welcomes Pete again. Once it
+// has played, a restart or a restore does not play it again; an office that had
+// Research on before this flag existed, or whose storage was cleared, has no
+// flag yet and plays it once on its next start.
 //
 // Pure, so the tests load it: the storage and the office come in as arguments.
 // A storage that throws or is missing falls back to this window's memory, so a

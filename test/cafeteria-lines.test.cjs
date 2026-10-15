@@ -232,12 +232,17 @@ test('every cast member is a named side of a bit or has a signature opener, and 
 test('a welcome draw is always one of Pete\'s bits and leaves the deck as it was', () => {
   // Value: protects=a must draw names Pete as a side, skips others' signature openers, is null when none fits, and leaves the normal deck order; fails_when=it pulls another bit or keyed opener, or reshuffles the deck; why_new=E3; seam=createBanter third argument (the welcome calls it); no_claim=none beyond protects
   const others = cast.filter((c) => c !== 'pete');
-  const welcome = createBanter(() => 0.5);
+  // A varying random, so every opener slot comes up, not one fixed index.
+  let wseed = 11;
+  const welcome = createBanter(() => ((wseed = (wseed * 16807) % 2147483647) - 1) / 2147483646);
+  const openers = new Set();
   for (let i = 0; i < 200; i++) {
     const own = welcome('pete', others, 'pete');
     assert.ok(own, 'Pete has bits to open with');
     assert.ok(/Plop|New Jim|Die Hard|nickname|junior|about Erin/.test(own.beats[0]), JSON.stringify(own.beats));
+    openers.add(own.beats[0]);
   }
+  assert.ok(openers.size >= 3, `several of Pete's bits came up (${openers.size})`);
   assert.deepEqual([...createBanter(() => 0.5)('stanley', ['pete'], 'pete').beats], ['you’re a junior Jim.', 'is that bad?', 'one Jim was plenty.'], 'Stanley\'s Pretzel Day opener is not a welcome');
   assert.equal(createBanter(() => 0.5)('michael', ['pete'], 'pete'), null, 'Michael and Pete never shared the show');
   assert.equal(createBanter(() => 0.5)('andy', ['jim'], 'pete'), null, 'no Pete, no welcome');

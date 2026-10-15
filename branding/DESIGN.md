@@ -1225,8 +1225,9 @@ Richard's after work, Kelly's old customer service desk, and the office sizing u
 guys. No line says "Pete", since the owner may rename him. The one exception to the deck:
 **his first day welcome.** After the owner turns Research on, the first conversation that
 can be one of Pete's is, with someone in another pod, under the same pod rules. It plays
-once per turn on, kept per office; a restart or a restore does not replay it, turning him
-on again does, and demo or lab banter never uses it up. Idle talk, his included, does not
+once per turn on, kept per office; once played, a restart or a restore does not replay it
+(an office with no record of it yet, such as one that had Research on before it existed,
+plays it once), turning him on again does, and demo or lab banter never uses it up. Idle talk, his included, does not
 run in the compact grid (§8.9).
 
 The first line or conversation comes 8 to 15 s after the office opens, then every 15 to
