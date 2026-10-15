@@ -2598,11 +2598,17 @@ export class HiveManager {
         if (v.decision === 'deny') { refuse(v.reason); return 'done'; }
         // Research may have been turned off while the check ran.
         if (!this.researchOn()) { refuse(REFUSAL_OFF, 'research-off'); return 'done'; }
+        const routedBefore = this.lastRouted;
         try { this.deliverToResearch(msg.from, msg, v.subject, v.body); } catch (e) {
           console.error('[research] delivering a checked message', e);
-          if (tries < HiveManager.RESEARCH_DELIVERY_TRIES) return 'again';
-          refuse(REFUSAL_NOT_DELIVERED, 'undelivered');
-          return 'done';
+          // It reached Research's inbox and a step after the write failed
+          // (the floor's envelope): delivered, so never sent twice.
+          const landed = this.lastRouted !== routedBefore && !!this.lastRouted?.delivered.includes(RESEARCH_ID);
+          if (!landed) {
+            if (tries < HiveManager.RESEARCH_DELIVERY_TRIES) return 'again';
+            refuse(REFUSAL_NOT_DELIVERED, 'undelivered');
+            return 'done';
+          }
         }
         try {
           if (v.decision === 'clean' && fromAgent) this.tellSender(msg.from, msg.id, msg.conversation, SENT_AS_SUBJECT, sentAsBody(v.subject, v.body, this.researchName()), true);

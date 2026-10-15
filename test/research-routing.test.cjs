@@ -1226,3 +1226,20 @@ test('a checked note still waiting to be delivered when the app closes is told t
   assert.equal(told.length, 1);
   assert.match(told[0].body, /^A note from the owner for Pete \("A note from the owner"\) was not sent: the app closed while it was being delivered\./);
 });
+
+test('a checked note that reached Research is never sent twice when a step after the write fails', async (t) => {
+  // Value: protects=a retry never hands Research a second copy of a note already in its inbox; fails_when=any error after the inbox write counts as a failed delivery; why_new=TODOS.md "A checked message for Pete is never dropped when delivery fails" (self review: the floor's envelope event runs after the write); seam=an emit that throws
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-research-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home, (channel) => { if (channel === 'hive:message') throw new Error('window gone'); });
+  await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: home, isGod: true });
+  await hive.ensureAgent({ id: 'research', name: 'Pete', provider: 'claude', cwd: path.join(home, 'research-desk'), isResearch: true });
+  hive.setResearchEnabled(() => true);
+  hive.setTrustLayer(fakeLayer());
+  hive.rememberOwnerNote('research', 'Focus on flour');
+  await tick();
+  for (let i = 0; i < 3; i++) hive.routeOnce();
+  assert.equal(msgsIn(hive, 'research').length, 1, 'one copy');
+  assert.equal(hive.researchWaiting(), 1, 'only the delivered copy waits');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'private', 'research-pending.json'), 'utf8')), []);
+});
