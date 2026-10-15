@@ -86,8 +86,8 @@ test('a message to Research waits for the trust layer, then only its clean copy 
   assert.equal(msgsIn(hive, 'research').length, 1, 'a stamped clean copy survives the sweep');
 });
 
-test('a denied message goes back to its sender only, in its thread, and is kept apart from sent mail', async (t) => {
-  // Value: protects=the sender learns what it depends on and nobody else sees it; fails_when=it is delivered, told to Michael, archived as sent, or loses its thread; why_new=owner decision 2026-10-13; seam=fake layer
+test('a denied message goes back to its sender in its thread, and Michael hears who, what and why', async (t) => {
+  // Value: protects=the sender learns what it depends on, and Michael can tell the owner what was stopped, why and where it is set (owner, 2026-10-14: a card said only that the privacy check stopped things); fails_when=it is delivered, Michael is not told or not told the setting, archived as sent, or loses its thread; why_new=owner decision 2026-10-14 replaced sender only (2026-10-13); seam=fake layer
   const layer = fakeLayer({ inbound: () => ({ decision: 'deny', reason: R.refusalForClass('names') }) });
   const { hive } = await office(t, { layer });
   send(hive, 'pam', { to: 'research', act: 'query', subject: 'Who is', body: 'Home address of Jane Smith', conversation: 'c-2' });
@@ -99,7 +99,11 @@ test('a denied message goes back to its sender only, in its thread, and is kept 
   assert.equal(back.length, 1);
   assert.equal(back[0].body, R.refusalForClass('names'));
   assert.equal(back[0].conversation, 'c-2');
-  assert.equal(notes(hive, 'god', R.NOT_SENT_SUBJECT).length, 0, 'Michael is not told');
+  const told = notes(hive, 'god', R.NOT_SENT_SUBJECT);
+  assert.equal(told.length, 1, 'Michael is told once');
+  assert.match(told[0].body, /'s message for Pete \("Who is"\) was not sent\./, 'who and what');
+  assert.ok(told[0].body.includes(R.refusalForClass('names')), 'why');
+  assert.match(told[0].body, /tell them what was stopped and why: what stays private is set in Settings, Research & privacy\./, 'what to do and where');
   const outbox = path.join(hive.root(), 'agents', 'pam', 'outbox');
   assert.ok(fs.existsSync(path.join(outbox, '.refused', 'm1.json')));
   assert.ok(!fs.existsSync(path.join(outbox, '.sent', 'm1.json')));
@@ -135,7 +139,8 @@ test('with Research off, files attached, or no layer wired, the message comes ba
   const unwired = await office(t, { layer: null });
   send(unwired.hive, 'pam', { to: 'research', act: 'query', subject: 'x', body: 'Pizza trends' });
   unwired.hive.routeOnce();
-  assert.equal(notes(unwired.hive, 'pam', R.NOT_SENT_SUBJECT)[0].body, R.REFUSAL_UNSURE);
+  assert.equal(notes(unwired.hive, 'pam', R.NOT_SENT_SUBJECT)[0].body, R.REFUSAL_CHECK_FAILED, 'a check that cannot run says so, not "plainer words"');
+  assert.match(notes(unwired.hive, 'god', R.NOT_SENT_SUBJECT)[0].body, /The privacy check itself could not run: an app problem, not the wording\./, 'Michael hears it is the app');
 });
 
 test('a message the app itself sends Research passes the same layer first', async (t) => {

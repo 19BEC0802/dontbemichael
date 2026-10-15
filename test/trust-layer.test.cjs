@@ -86,10 +86,10 @@ test('the whole subject is read, and only text too long to check is denied', asy
   assert.deepEqual(long, { decision: 'deny', reason: R.REFUSAL_TOO_LONG });
 });
 
-test('unsure, unreadable, failed or slow checks deny', async () => {
-  // Value: protects=the layer fails closed; fails_when=any failure lets a message through; why_new=trust layer; seam=fake runner and a short timeout
-  for (const answer of ['maybe', json({ decision: 'CLEAN', body: 'x' }), json({ decision: 'DENY', kinds: ['spaceships'] }), '', null, 'PASS']) {
-    assert.deepEqual(await layer(answer).l.inbound({ subject: 'x', body: 'Pizza trends' }), { decision: 'deny', reason: R.REFUSAL_UNSURE }, String(answer));
+test('unsure, unreadable, failed or slow checks deny, saying the check could not run', async () => {
+  // Value: protects=the layer fails closed, and a check that broke is not blamed on the wording (owner, 2026-10-14: Nick reworded three times); fails_when=any failure lets a message through, or a failure says ask in plainer words; why_new=trust layer; seam=fake runner and a short timeout
+  for (const answer of ['maybe', json({ decision: 'CLEAN', body: 'x' }), json({ decision: 'DENY', kinds: ['spaceships'] }), '', null, 'PASS', 'I think it passes: {"decision":"PASS"}']) {
+    assert.deepEqual(await layer(answer).l.inbound({ subject: 'x', body: 'Pizza trends' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, String(answer));
   }
   const thrower = T.makeTrustLayer({ run: async () => { throw new Error('no model'); }, settings: () => dataClassSettings(undefined) });
   assert.equal((await thrower.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'deny');
@@ -132,7 +132,7 @@ test('a question with no subject passes as written', async () => {
 test('unreadable or overlong outbound answers deny, and so do unreadable settings', async () => {
   // Value: protects=Research's text never goes out on a half answer; fails_when=parseOutbound defaults a missing flag or accepts an empty clean; why_new=testing review pass 2; seam=fake runner
   for (const a of [json({ decision: 'PASS' }), json({ decision: 'CLEAN', flag: false }), json({ decision: 'CLEAN', subject: ' ', body: '', flag: false }), 'maybe', null]) {
-    assert.deepEqual(await layer(a).l.outbound({ subject: 's', body: 'b' }), { decision: 'deny', reason: R.REFUSAL_UNSURE }, String(a));
+    assert.deepEqual(await layer(a).l.outbound({ subject: 's', body: 'b' }), { decision: 'deny', reason: R.REFUSAL_CHECK_FAILED }, String(a));
   }
   assert.deepEqual(await layer(json({ decision: 'PASS', flag: false })).l.outbound({ subject: 's', body: 'w '.repeat(T.TRUST_MAX_CHARS) }), { decision: 'deny', reason: R.REFUSAL_TOO_LONG });
   const bad = T.makeTrustLayer({ run: async () => json({ decision: 'PASS' }), settings: () => { throw new Error('mid write'); } });
@@ -158,4 +158,18 @@ test('a class the owner allows passes through the layer, and is never named in a
   assert.match(prompts[0], /Allowed kinds \(fine to send\):[\s\S]*contact/);
   const deny = layer(json({ decision: 'DENY', kinds: ['contact'] }), { classes: { contact: 'allowed' } });
   assert.deepEqual(await deny.l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.REFUSAL_UNSURE });
+});
+
+test('a verdict followed by a sentence of explanation is read; nothing after the verdict ever stands in for it', async () => {
+  // Value: protects=Haiku's real answers (seen live 2026-10-14: a fenced verdict, then a paragraph) count, so the check stops blocking everything; fails_when=trailing text makes a verdict unreadable, or a later quoted object is taken as the verdict; why_new=every check in an office failed as unreadable; seam=fake runner
+  const live = '```json\n{"decision":"PASS"}\n```\n\nThis message asks about public App Store review guidelines, a general industry standard with no private business data.';
+  assert.equal((await layer(live).l.inbound({ subject: 'Question for Research', body: 'What are the App Store review guidelines?' })).decision, 'pass');
+  assert.equal((await layer('{"decision":"PASS"} The message is general.').l.inbound({ subject: 'x', body: 'Pizza trends' })).decision, 'pass');
+  const clean = '```json\n{"decision":"CLEAN","subject":"Q","body":"Review rules for subscription apps on a mobile store, {braces} kept","removed":["companies"]}\n```\nI generalized the brand.';
+  const v = await layer(clean).l.inbound({ subject: 'Q', body: 'Apple review rules for subscription apps' });
+  assert.equal(v.decision, 'clean');
+  assert.equal(v.body, 'Review rules for subscription apps on a mobile store, {braces} kept');
+  const deny = '{"decision":"DENY","kinds":["names"]}\nIt depends on {"decision":"PASS"} quoted in the message.';
+  assert.deepEqual(await layer(deny).l.inbound({ subject: 'x', body: 'y' }), { decision: 'deny', reason: R.refusalForClass('names') }, 'the leading verdict wins, never a later object');
+  assert.equal((await layer('```json\n{"decision":"PASS","flag":false}\n```\nNothing to remove.').l.outbound({ subject: 's', body: 'b' })).decision, 'pass', 'outbound too');
 });

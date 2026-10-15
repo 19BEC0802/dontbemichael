@@ -8,6 +8,16 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 
 ## [Unreleased]
 
+### Changed
+
+- **Michael hears every message the privacy check keeps from Pete:** who sent it, its subject, why, and that what stays private is set in Settings, Research & privacy, so his ask can tell you exactly what was stopped. Before, only the sender was told. When the check itself could not run, the sender is told it is not about the wording and Michael that it is an app problem, instead of "ask again in plainer words". (Agent behavior: what the team and Michael are told.)
+- **An Ask me card that needs you to do something on a website links straight to it.** When you need to sign in, accept terms or pay, the team member who found it now passes on the email's own link for it, and Michael puts it in the ask as a named link, so you no longer dig the email out of your mailbox. Only a link on the sender's own site, never a tracking or shortened one; when there is none, the ask says where to go. (Agent behavior: team members and Michael.)
+
+### Fixed
+
+- **The privacy check no longer stops everything going to Pete.** Its answer was thrown away as unreadable whenever it added a sentence after its verdict, so every question to Pete, and the app's closing and office open notices, came back refused.
+- **Reset & start over now starts truly fresh.** It used to erase only the team's memory and the office's work, so Pete's research desk and threads, Company knowledge, saved keys, the history and mail and Slack files carried into the next office. Now everything the app made for the office goes, and setup opens as a new owner sees it. Files in your business folder, your Claude sign in and the saved copies of your team list stay. The confirm screen says what is erased and what is kept.
+
 ## [0.2.0] (2026-10-13)
 
 ### Added
