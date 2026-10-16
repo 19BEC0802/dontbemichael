@@ -2560,6 +2560,7 @@
       "none": "尚未记录工作时间。",
       "headTop": "{{a}} 和 {{b}} 完成了团队 {{pct}} 的工作时间。",
       "headQuiet": "{{names}} 大多比较清闲。",
+      "headQuietOne": "{{names}} 大多比较清闲。",
       "headCostly": "{{name}} 以最少的工作花费最多：{{time}} 花费 {{usd}}。",
       "member": "成员",
       "time": "工作时间",

@@ -2560,6 +2560,7 @@
       "none": "No working time recorded yet.",
       "headTop": "{{a}} and {{b}} did {{pct}} of the team's working time.",
       "headQuiet": "{{names}} were mostly quiet.",
+      "headQuietOne": "{{names}} was mostly quiet.",
       "headCostly": "{{name}} cost the most for the least work: {{usd}} for {{time}}.",
       "member": "Member",
       "time": "Working time",

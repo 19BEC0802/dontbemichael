@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import type { PulseView as PulseData } from '@shared/pulseView';
 import type { Advice } from '@shared/teamAdvice';
 import { teamAtWork, MIN_BUSY_FOR_RATE_MS, type Outcome, type Period, type WorkChip, type WorkKind } from '@shared/teamPerformance';
-import { keptSafe, type RefusalGate } from '@shared/pulseSafety';
+import { keptSafe, REFUSAL_GATES, type RefusalGate } from '@shared/pulseSafety';
 import { useStore } from '@/store/store';
 import { useAppTheme } from '@/design/theme';
 import { family } from '@/scene/studio/theme';
@@ -210,7 +210,9 @@ export function PulseView() {
     const safe = view.keptSafe ?? keptSafe([]);
     const toNet = safe.toInternet.pass + safe.toInternet.clean + safe.toInternet.stop;
     const answers = safe.webAnswers.pass + safe.webAnswers.clean;
-    const rulesTotal = Object.values(safe.rules).reduce((n, x) => n + (x ?? 0), 0);
+    // Only the gates this view can name: a count from another build is left out.
+    const rules = (Object.entries(safe.rules) as Array<[RefusalGate, number]>).filter(([g, n]) => REFUSAL_GATES.includes(g) && n > 0);
+    const rulesTotal = rules.reduce((n, [, x]) => n + x, 0);
     const learn = view.learning ?? { weeks: [], notes: 0, procedures: 0, knows: {} };
     const rated = learn.weeks.filter((w) => w.per100 !== null);
     const maxKnown = Math.max(1, ...learn.weeks.map((w) => w.total));
@@ -291,7 +293,7 @@ export function PulseView() {
             {s.outcomes.map((o) => (
               <div key={o.kind} style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: 'var(--cth-ink-2)' }}><Icon name={KIND_ICON[o.kind]} size={1.125} /></div>
-                <div style={{ ...mono, fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{o.total}</div>
+                <div style={{ ...mono, fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{o.total.toLocaleString(i18n.language)}</div>
                 <div style={{ fontSize: 12, color: 'var(--cth-ink-2)' }}>{outcomeLabel(o)}</div>
                 {o.kind === 'check'
                   ? <WhoBar by={[{ agentId: '__work', count: o.sub ?? 0 }, { agentId: '__none', count: o.total - (o.sub ?? 0) }]} colorOf={(id) => (id === '__work' ? 'var(--cth-ink-2)' : 'var(--cth-line-2)')} nameOf={(id) => t(id === '__work' ? 'pulse.foundWork' : 'pulse.nothingToDo')} aria={outcomeLabel(o)} />
@@ -309,7 +311,7 @@ export function PulseView() {
               parts={[{ n: safe.webAnswers.clean, name: t('pulse.safe.cleaned'), color: 'var(--cth-green)' }, { n: safe.webAnswers.pass, name: t('pulse.safe.nothingToRemove'), color: 'var(--cth-ink-4)' }, { n: safe.webAnswers.flagged, name: t('pulse.safe.flagged'), color: 'var(--cth-amber)' }]} />
             <StatTile icon="pause" value={safe.held} text={t(safe.held > 0 ? 'pulse.safe.held' : 'pulse.safe.heldNone')} amber={safe.held > 0} />
             <StatTile icon="lock" value={rulesTotal} text={t(rulesTotal > 0 ? 'pulse.safe.rules' : 'pulse.safe.rulesNone')}
-              parts={(Object.entries(safe.rules) as Array<[RefusalGate, number]>).sort((a, b) => b[1] - a[1]).map(([g, n], i) => ({ n, name: t(`pulse.safe.gate.${g}`), color: ['var(--cth-ink-2)', 'var(--cth-ink-3)', 'var(--cth-ink-4)', 'var(--cth-line-2)'][Math.min(i, 3)] }))} />
+              parts={[...rules].sort((a, b) => b[1] - a[1]).map(([g, n], i) => ({ n, name: t(`pulse.safe.gate.${g}`), color: ['var(--cth-ink-2)', 'var(--cth-ink-3)', 'var(--cth-ink-4)', 'var(--cth-line-2)'][Math.min(i, 3)] }))} />
           </div>
         </Section>
 
@@ -392,7 +394,7 @@ export function PulseView() {
             {work.totalMs <= 0 ? <div style={{ fontSize: 13, color: 'var(--cth-ink-2)', padding: '6px 0' }}>{t('pulse.work.none')}</div> : <>
               <div style={{ fontSize: 13, color: 'var(--cth-ink-2)', lineHeight: '19px' }}>
                 {work.topTwo && <b style={{ color: 'var(--cth-ink)' }}>{t('pulse.work.headTop', { a: nameOf(work.topTwo.ids[0]), b: nameOf(work.topTwo.ids[1]), pct: pct(work.topTwo.share) })}</b>}
-                {work.quiet.length > 0 && <> {t('pulse.work.headQuiet', { names: listNames(work.quiet.map(nameOf)) })}</>}
+                {work.quiet.length > 0 && <> {t(work.quiet.length === 1 ? 'pulse.work.headQuietOne' : 'pulse.work.headQuiet', { names: listNames(work.quiet.map(nameOf)) })}</>}
                 {work.costliest && <> {t('pulse.work.headCostly', { name: nameOf(work.costliest.agentId), usd: money(work.costliest.usd), time: duration(work.costliest.busyMs, t) })}</>}
               </div>
               <div role="list" aria-label={t('pulse.work.title')} style={{ marginTop: 6 }}>
@@ -475,12 +477,12 @@ export function PulseView() {
 
 /** A Kept safe tile: an icon, a number, what it counts, and its parts (proposal 3). */
 function StatTile({ icon, value, of, text, parts, amber }: { icon: IconName; value: number; of?: number; text: string; parts?: Array<{ n: number; name: string; color: string }>; amber?: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const shown = (parts ?? []).filter((p) => p.n > 0 || (parts ?? []).length <= 3);
   return (
     <div style={{ ...(amber ? { background: 'var(--cth-amber-soft)', borderRadius: 'var(--cth-r-xl)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--cth-amber) 40%, transparent)' } : card), padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: amber ? 'var(--cth-card)' : 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: amber ? 'var(--cth-amber-text)' : 'var(--cth-ink-2)' }}><Icon name={icon} size={1.125} /></div>
-      <div style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{value}{of !== undefined && <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 400, color: 'var(--cth-ink-3)', marginInlineStart: 6 }}>{t('pulse.safe.of', { n: of })}</span>}</div>
+      <div style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{value.toLocaleString(i18n.language)}{of !== undefined && <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 400, color: 'var(--cth-ink-3)', marginInlineStart: 6 }}>{t('pulse.safe.of', { n: of })}</span>}</div>
       <div style={{ fontSize: 12, color: 'var(--cth-ink-2)', lineHeight: '17px' }}>{text}</div>
       {shown.length > 0 && shown.some((p) => p.n > 0) && <Stack parts={shown} aria={shown.map((p) => `${p.name} ${p.n}`).join(', ')} />}
       {shown.length > 0 && <Legend items={shown.map((p) => [p.name, p.color, p.n])} />}
