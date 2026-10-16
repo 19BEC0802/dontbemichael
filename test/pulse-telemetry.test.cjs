@@ -51,7 +51,7 @@ test('the migration makes the tables once, and nothing but kind, time, value and
   // Value: protects=the store shape and no text in telemetry; fails_when=a migration is edited or prompt text lands in a row; why_new=D16; seam=none; no_claim=a database made by an older build (user_version 1 upgrades here)
   const { persist, store } = setup(t);
   const db = persist.database();
-  assert.equal(db.pragma('user_version', { simple: true }), 2);
+  assert.equal(db.pragma('user_version', { simple: true }), 3);
   store.record({ agentId: 'pam', kind: 'tool', ts: 1, attrs: { tool: 'Write' } });
   store.flush();
   const row = db.prepare('SELECT * FROM telemetry_events').get();
@@ -179,7 +179,7 @@ function service(t, opts = {}) {
     members: () => [{ id: 'toby', isGod: false }, { id: 'god', isGod: true }], godId: () => 'god', tasks: () => [],
     missions: () => missions, models: () => models, ladder: () => [], priceOf: () => undefined,
     applyMissions: (change) => { const next = change(missions); if (!next) return { ok: false, error: 'not found' }; missions = next; return { ok: true }; },
-    billing: () => 'account', now: env.clock.now
+    billing: () => 'account', memory: () => ({ notes: [], procedures: {} }), now: env.clock.now
   });
   return { ...env, svc, missions: () => missions, setMissions: (m) => { missions = m; } };
 }
@@ -219,4 +219,110 @@ test('a model suggestion is checked here and made by the roster; the owner\'s st
   assert.deepEqual(svc.undo(id), { ok: true, kind: 'model', agentId: 'toby', to: 'claude-opus-5-5' });
   const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
   assert.equal((src.match(/pulse\.apply\(/g) || []).length, 1, 'only the pulse:apply handler applies advice');
+});
+
+// ─── proposal 3: Team at work, Kept safe, backfill ───────────────────────
+
+const { runBackfill, backfilled } = loadTs('src/main/pulseBackfill.ts');
+
+test('working time runs from each request to its stop, capped; a request with no stop ends at the next one', (t) => {
+  // Value: protects=Team at work's hours and requests; fails_when=a turn is counted from dispatch, is not capped at an hour, or an unstopped turn is lost or counted twice; why_new=owner proposal 3; seam=none; no_claim=Claude Code's own Stop timing
+  const { store, proc, clock, persist } = setup(t);
+  const t0 = clock.now();
+  store.record({ agentId: 'pam', kind: 'prompt', ts: t0 });
+  store.record({ agentId: 'pam', kind: 'tool', ts: t0 + 60_000, attrs: { tool: 'Read' } });
+  store.record({ agentId: 'pam', kind: 'stop', ts: t0 + 120_000 });                 // 2 minutes
+  store.record({ agentId: 'pam', kind: 'prompt', ts: t0 + 200_000 });
+  store.record({ agentId: 'pam', kind: 'tool', ts: t0 + 230_000, attrs: { tool: 'Read' } });
+  store.record({ agentId: 'pam', kind: 'prompt', ts: t0 + 300_000 });              // no stop before: ends at its last activity (30 s)
+  store.record({ agentId: 'pam', kind: 'stop', ts: t0 + 300_000 + 3 * 3600_000 }); // left open: capped at an hour
+  proc.tick('/office');
+  const d = persist.database().prepare('SELECT busy_ms, turns FROM telemetry_daily WHERE agent_id = ?').get('pam');
+  assert.equal(d.turns, 3);
+  assert.equal(d.busy_ms, 120_000 + 30_000 + 3600_000);
+});
+
+test('points from the past count for their day but never touch open runs or presence, and never start recommendations', (t) => {
+  // Value: protects=backfill isolation; fails_when=a backfilled email lands in a live run, counts as work while the owner is away, or moves the live start date; why_new=owner proposal 3 backfill; seam=none; no_claim=none beyond protects
+  const { store, proc, clock, persist } = setup(t);
+  const t0 = clock.now();
+  store.record({ agentId: null, kind: 'presence', ts: t0 - 10, value: 1 });  // the owner is away now
+  store.record({ agentId: 'pam', kind: 'run-dispatch', ts: t0, attrs: { mission: 'm1' } });
+  store.record({ agentId: 'pam', kind: 'prompt', ts: t0 + 1000 });
+  store.record({ agentId: 'pam', kind: 'email', ts: t0 - 5 * 86_400_000, value: 4, attrs: { bf: 1 } });
+  store.record({ agentId: 'pam', kind: 'busy', ts: t0 - 5 * 86_400_000, value: 600_000, attrs: { bf: 1 } });
+  proc.tick('/office');
+  const db = persist.database();
+  const past = db.prepare('SELECT * FROM telemetry_daily WHERE agent_id = ? AND day < ?').get('pam', new Date(t0).toISOString().slice(0, 10));
+  assert.equal(past.emails, 4);
+  assert.equal(past.away_pieces, 0, 'a past email is not work while the owner is away');
+  assert.equal(past.busy_ms, 600_000);
+  assert.equal(db.prepare('SELECT work FROM telemetry_runs').get().work, 0, 'nor work in today\'s run');
+  assert.notEqual(proc.firstDay('/office'), proc.firstDay('/office', true), 'live start ignores the past');
+});
+
+test('trust layer decisions and refusals become Kept safe counters', (t) => {
+  // Value: protects=Kept safe tiles; fails_when=a failed check counts as stopped, a flag is lost, or an unknown gate is counted; why_new=owner proposal 3; seam=none; no_claim=the trust layer's own judgement
+  const { store, proc, clock } = setup(t);
+  const ts = clock.now();
+  for (const a of [{ way: 'in', decision: 'pass' }, { way: 'in', decision: 'clean' }, { way: 'in', decision: 'deny', by: 'model' }, { way: 'in', decision: 'deny', by: 'no-answer' },
+    { way: 'out', decision: 'clean', flagged: true }, { way: 'out', decision: 'pass', flagged: false }, { way: 'out', decision: 'deny', by: 'unreadable' }]) store.record({ agentId: null, kind: 'trust', ts, attrs: a });
+  store.record({ agentId: 'pam', kind: 'refused', ts, attrs: { gate: 'quickbooks' } });
+  store.record({ agentId: 'pam', kind: 'refused', ts, attrs: { gate: 'nonsense' } });
+  proc.tick('/office');
+  const { keptSafe } = loadTs('src/shared/pulseSafety.ts');
+  const day = new Date(ts); const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  assert.deepEqual(keptSafe(proc.safetyRows('/office', key, key)), {
+    toInternet: { pass: 1, clean: 1, stop: 1 }, webAnswers: { pass: 1, clean: 1, flagged: 1 }, held: 2, rules: { quickbooks: 1 }, any: true
+  });
+});
+
+test('the backfill reads the office log, sessions and cost ledger once, before the first live point', async (t) => {
+  // Value: protects=a fresh Pulse not starting at zero; fails_when=the backfill reads past the live start, counts twice on a second start, misses a session's working time or a refused step, or loses a member's cost across an app restart; why_new=owner proposal 3; seam=temp hive, projects root and db; no_claim=real transcripts' every line shape
+  const { persist, store, proc, clock } = setup(t);
+  const live = clock.now();
+  store.record({ agentId: 'pam', kind: 'prompt', ts: live });
+  store.flush();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'md-bf-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const hive = path.join(root, 'hive'); const projects = path.join(root, 'projects', '-x');
+  fs.mkdirSync(hive, { recursive: true }); fs.mkdirSync(projects, { recursive: true });
+  const day = 86_400_000; const past = live - 2 * day;
+  fs.writeFileSync(path.join(hive, 'log.jsonl'), [
+    { ts: past - 50 * day, kind: 'session', agentId: 'pam', sessionId: 'S1' },
+    { ts: past, kind: 'mail-organize', agentId: 'pam', ids: ['a', 'b', 'c'] },
+    { ts: past, kind: 'mail-sent', agentId: 'dwight' },
+    { ts: past, kind: 'trust-layer', way: 'out', decision: 'clean', flagged: false },
+    { ts: live + 1000, kind: 'mail-sent', agentId: 'dwight' },          // after the live start: not read
+    { ts: past - 90 * day, kind: 'mail-sent', agentId: 'dwight' }       // too old: not read
+  ].map((e) => JSON.stringify(e)).join('\n') + '\n');
+  const iso = (ms) => new Date(ms).toISOString();
+  fs.writeFileSync(path.join(projects, 'S1.jsonl'), [
+    { type: 'user', timestamp: iso(past), message: { content: 'sort the inbox' } },
+    { type: 'assistant', timestamp: iso(past + 60_000), message: { content: [{ type: 'tool_use' }] } },
+    { type: 'user', timestamp: iso(past + 90_000), message: { content: [{ type: 'tool_result', tool_use_id: 'u1', content: 'PreToolUse:mcp__claude_ai_Intuit_QuickBooks__report hook error: The owner has not given you QuickBooks.' }] } },
+    { type: 'assistant', timestamp: iso(past + 300_000), message: { content: [{ type: 'text', text: 'done' }] } }
+  ].map((e) => JSON.stringify(e)).join('\n') + '\n');
+  fs.writeFileSync(path.join(hive, 'cost-ledger.jsonl'), [
+    { agent_id: 'pam', session_id: 'S1', ts: past - 60 * day, usd: 1 },  // before the window: only a starting point
+    { agent_id: 'pam', session_id: 'S1', ts: past, usd: 3 },            // +2 in the window
+    { agent_id: 'pam', session_id: 'S1', ts: past + 1000, usd: 0.5 },   // app restart: +0.5
+    { agent_id: 'pam', session_id: 'S1', ts: live + 1000, usd: 9 }      // after the live start: not read
+  ].map((e) => JSON.stringify(e)).join('\n') + '\n');
+  const deps = { db: persist.database(), office: '/office', hiveRoot: hive, projectsRoot: path.join(root, 'projects'), members: new Set(['pam', 'dwight']), now: live + 5000 };
+  const n = await runBackfill(deps);
+  assert.ok(n > 0);
+  assert.equal(backfilled(persist.database(), '/office'), true);
+  assert.equal(await runBackfill(deps), 0, 'once per office');
+  proc.tick('/office');
+  const pastDay = proc.days('/office', '2000-01-01').filter((d) => d.day !== proc.firstDay('/office', true));
+  const pam = pastDay.find((d) => d.agentId === 'pam');
+  assert.equal(pam.emails, 3);
+  assert.equal(pam.busyMs, 300_000);
+  assert.equal(pam.turns, 1);
+  assert.ok(Math.abs(pam.usd - 2.5) < 1e-9, `value ${pam.usd}`);
+  assert.equal(pastDay.find((d) => d.agentId === 'dwight').sent, 1);
+  const { keptSafe } = loadTs('src/shared/pulseSafety.ts');
+  const ks = keptSafe(proc.safetyRows('/office', '2000-01-01', '2999-01-01'));
+  assert.deepEqual([ks.webAnswers.clean, ks.rules.quickbooks], [1, 1]);
 });

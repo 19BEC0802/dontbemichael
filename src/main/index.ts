@@ -77,6 +77,8 @@ import { parseModelCatalog, type ModelCatalog } from '../shared/modelCatalogPayl
 import type { Period } from '../shared/teamPerformance';
 import { makeResearchGoal } from './researchGoal';
 import { ownResearchDir, readResearchNotes } from './researchNotes';
+import { backfilled, runBackfill } from './pulseBackfill';
+import { readTeamMemory } from './teamMemory';
 import { claudeProjectsRoot, projectDir, projectDirs, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
@@ -472,6 +474,8 @@ const hookServer = new HookServer(
   memberPresent,
   (signal) => onPlanSignal(signal)
 );
+// Pulse's Kept safe: each step a setting stopped, by gate (proposal 3).
+hookServer.onRefused = (agentId, gate) => pulseTelemetry.record({ agentId: agentId ?? null, kind: 'refused', ts: Date.now(), attrs: { gate } });
 // A member stopped on a prompt is restarted by the window, the same restart as
 // Restart & Continue (owner, 2026-10-15: no terminals or 1:1 for the owner).
 hookServer.restartStuck = (agentId) => {
@@ -537,6 +541,24 @@ const persist = new PersistStore();
 const pulseOffice = (): string | null => { const h = readConfig().harnessHome; return h ? expandTilde(h) : null; };
 const pulseTelemetry = new TelemetryStore(() => persist.database(), pulseOffice);
 const pulseProcessor = new TelemetryProcessor(() => persist.database(), pulseTelemetry);
+/** Pulse's backfill (proposal 3): once per office, the weeks before Pulse began,
+ *  read in the background from the office log, members' sessions and the cost
+ *  ledger. The view refreshes when it lands. */
+let pulseBackfilling: string | null = null;
+function pulseBackfillOnce(office: string): void {
+  const db = persist.database();
+  const root = hive.root();
+  if (!db || !root || pulseBackfilling === office || backfilled(db, office)) return;
+  pulseBackfilling = office;
+  pulseTelemetry.flush();
+  void runBackfill({ db, office, hiveRoot: root, projectsRoot: claudeProjectsRoot(), members: new Set(Object.keys(hive.registry().agents ?? {})), now: Date.now() })
+    .then((n) => {
+      console.log(`[pulse] backfill wrote ${n} points for ${office}`);
+      if (n > 0 && pulseProcessor.tick(office) > 0) liveWebContents()?.send('pulse:updated');
+    })
+    .catch((e) => console.error('[pulse] backfill:', e))
+    .finally(() => { if (pulseBackfilling === office) pulseBackfilling = null; });
+}
 /** The model ladder: the remote catalog when cached and valid, else the baked one. */
 function pulseLadder(): Array<{ provider: string; id: string; label: string; tier?: 'top' | 'middle' | 'small' }> {
   let cat: ModelCatalog = bakedModelCatalog as ModelCatalog;
@@ -574,7 +596,8 @@ const pulse = new PulseService({
   ladder: pulseLadder,
   priceOf: (m) => knownPrice(m),
   applyMissions: (change) => applyMissions(change),
-  billing: () => (readConfig().claudeAuth === 'apiKey' ? 'apiKey' : 'account')
+  billing: () => (readConfig().claudeAuth === 'apiKey' ? 'apiKey' : 'account'),
+  memory: () => { const root = hive.root(); return root ? readTeamMemory(root, Object.keys(hive.registry().agents ?? {})) : { notes: [], procedures: {} }; }
 });
 // The office log kinds Pulse counts, and the board each tick reads.
 hive.logObserver = (e) => {
@@ -764,7 +787,11 @@ const trustLayer = makeTrustLayer({
     return r.ok && r.text ? r.text : null;
   },
   settings: () => dataClassSettings(readConfig().dataClasses),
-  log: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
+  log: (event) => {
+    try { hive.appendLog(event); } catch { /* best-effort */ }
+    // Pulse's Kept safe: the decision only, never the text it judged.
+    if (event.kind === 'trust-layer') pulseTelemetry.record({ agentId: null, kind: 'trust', ts: Date.now(), attrs: { way: event.way, decision: event.decision, by: event.by ?? null, flagged: event.flagged === true } });
+  }
 });
 
 /** Research's notes reach the team's shared memory only as a copy the trust
@@ -7888,6 +7915,7 @@ function armAlwaysOnBeats(): void {
   pulseTickTimer = setInterval(() => {
     try {
       const office = pulseOffice();
+      if (office) pulseBackfillOnce(office);
       if (office && pulseProcessor.tick(office) > 0) liveWebContents()?.send('pulse:updated');
     } catch (e) { console.error('[pulse] tick', e); }
   }, 30_000);

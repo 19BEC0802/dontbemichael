@@ -135,6 +135,22 @@ const MIGRATIONS: Array<(db: Database.Database) => void> = [
         undone_at INTEGER
       );
     `);
+  },
+  // → user_version 3: Pulse's Team at work and Kept safe (owner, 2026-10-15,
+  // proposal 3). Working time and turns per member and day; trust layer
+  // decisions and rule refusals per day, one counter per key.
+  (db) => {
+    db.exec(`
+      ALTER TABLE telemetry_daily ADD COLUMN busy_ms INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE telemetry_daily ADD COLUMN turns INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE IF NOT EXISTS telemetry_safety (
+        office TEXT NOT NULL,
+        day    TEXT NOT NULL,
+        key    TEXT NOT NULL,
+        n      INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (office, day, key)
+      );
+    `);
   }
 ];
 

@@ -64,6 +64,26 @@ test('a frame is its secret owner\'s; a missing, wrong, cross agent or retired s
   assert.equal(server.rejectedFrames().get('pam'), 1);
 });
 
+test('every refused frame and every gated step reaches Pulse with its gate; a question sent on to Michael does not', () => {
+  // Value: protects=Kept safe's "Your rules held" counts; fails_when=a refusal is not reported, is reported without its gate, or routing to Michael counts as a protection; why_new=owner proposal 3; seam=source pins on hooks.ts gates; no_claim=each gate's own decision (their own tests)
+  const fsm = require('node:fs');
+  const src = fsm.readFileSync(require('node:path').join(__dirname, '..', 'src/main/hooks.ts'), 'utf8');
+  for (const g of ['paused', 'connector', 'quickbooks', 'mail', 'sandbox', 'internet', 'office-files', 'folder']) assert.match(src, new RegExp(`this\\.emitRefused\\(agentId, event, p, '${g}'\\)`), g);
+  assert.match(src, /permissionDecisionReason: ASK_TOOL_REFUSAL/);
+  assert.match(src, /this\.emitRefused\(agentId, event, p\);\n\s+return \{\n\s+hookSpecificOutput: \{\n\s+hookEventName: 'PreToolUse',\n\s+permissionDecision: 'deny',\n\s+permissionDecisionReason: ASK_TOOL_REFUSAL/, 'the question tool passes no gate');
+  assert.match(src, /this\.onRefused\?\.\(claimed \?\? undefined, 'sender'\)/);
+});
+
+test('a refused frame is reported to Pulse as a sender the app could not confirm', (t) => {
+  // Value: protects=Kept safe sender count; fails_when=authenticate stops reporting; why_new=owner proposal 3; seam=none; no_claim=none beyond protects
+  const { hive } = office(t);
+  const server = new HookServer(hive, () => null, () => ({}));
+  const seen = [];
+  server.onRefused = (agentId, gate) => seen.push([agentId, gate]);
+  server.authenticate({ hook_event_name: 'Stop', agent_id: 'god' });
+  assert.deepEqual(seen, [['god', 'sender']]);
+});
+
 test('over the socket, a tool check without a valid secret is refused and nothing else reaches a consumer', { skip: process.platform === 'win32' ? 'unix socket paths' : false }, async (t) => {
   // Value: protects=an unauthenticated tool check fails closed, never allowed; fails_when=a refused frame answers {} to PreToolUse or still calls handle; why_new=#61 strict contract; seam=none; no_claim=named pipes on Windows (POSIX socket here)
   const { home, hive } = office(t);

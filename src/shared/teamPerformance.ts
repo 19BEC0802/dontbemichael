@@ -30,6 +30,10 @@ export interface MemberDay {
   checksNothing: number;
   /** Pieces of work done while the owner was away (D11). */
   awayPieces: number;
+  /** Working time: from each request a member takes to its last reply (proposal 3). */
+  busyMs?: number;
+  /** Requests the member took. */
+  turns?: number;
 }
 
 /** A card the office finished (or reopened), for speed and kept as is. */
@@ -131,6 +135,11 @@ export interface MemberMeasures {
   kept: { kept: number; decisions: number; share: number | null };
   speedMs: number | null;
   awayShare: number | null;
+  /** Working time in the period, and requests taken (Team at work). */
+  busyMs: number;
+  turns: number;
+  /** Working time per day of the period, first day first. */
+  dayBusy: number[];
 }
 
 export interface PulseSnapshot {
@@ -216,6 +225,8 @@ export function pulseSnapshot(input: {
   const byMember = new Map<string, MemberDay[]>();
   for (const d of days) byMember.set(d.agentId, [...(byMember.get(d.agentId) ?? []), d]);
   const totalUsd = days.reduce((s, d) => s + d.usd, 0);
+  const periodDays: string[] = [];
+  for (let t = fromMs; dayKey(t) <= to; t += 86_400_000) { const k = dayKey(t); if (!periodDays.includes(k)) periodDays.push(k); }
 
   const pieces = new Map(ids.map((id) => [id, perPieceOf(byMember.get(id) ?? [])]));
   const officeMedian: Partial<Record<WorkKind, number>> = {};
@@ -231,6 +242,13 @@ export function pulseSnapshot(input: {
     for (const d of mine) {
       counts.email += d.emails; counts.sent += d.sent; counts.task += d.tasks; counts.check += d.checks;
       usd += d.usd; nothing += d.checksNothing; away += d.awayPieces; all += piecesOf(d);
+    }
+    let busyMs = 0, turns = 0;
+    const dayBusy = periodDays.map(() => 0);
+    for (const d of mine) {
+      busyMs += d.busyMs ?? 0; turns += d.turns ?? 0;
+      const i = periodDays.indexOf(d.day);
+      if (i >= 0) dayBusy[i] += d.busyMs ?? 0;
     }
     const asks = input.asks.filter((a) => a.raisedBy === agentId && inRange(a.askedAt));
     const waits = asks.filter((a) => a.answeredAt !== undefined).map((a) => a.answeredAt! - a.askedAt);
@@ -248,7 +266,10 @@ export function pulseSnapshot(input: {
       askWaitMs: median(waits),
       kept: keptAsIs(agentId, input.decisions.filter((d) => inRange(d.at)), input.cards.filter((c) => inRange(c.doneAt))),
       speedMs: speed,
-      awayShare: all > 0 ? away / all : null
+      awayShare: all > 0 ? away / all : null,
+      busyMs,
+      turns,
+      dayBusy
     };
   });
 
@@ -316,4 +337,48 @@ export function measuredSaving(days: MemberDay[], appliedAt: number, now: number
   const since = after.reduce((s, d) => s + piecesOf(d), 0);
   if (b === null || a === null) return { state: 'measured', usd: 0 };
   return { state: 'measured', usd: (b - a) * since };
+}
+
+/** A Team at work callout (owner, 2026-10-15, proposal 3). */
+export type WorkChip = { kind: 'busiest' } | { kind: 'times'; times: number } | { kind: 'quiet' } | { kind: 'costly'; perHour: number };
+
+/** Below this much working time a member's value per hour is not judged. */
+export const MIN_BUSY_FOR_RATE_MS = 10 * 60_000;
+
+/** Team at work: the average, each member's callout, and what the headline says. */
+export function teamAtWork(members: Array<{ agentId: string; busyMs: number; usd: number }>): {
+  avgMs: number;
+  totalMs: number;
+  chips: Record<string, WorkChip>;
+  /** The two busiest members' share of all working time, when there are three or more members. */
+  topTwo: { ids: string[]; share: number } | null;
+  quiet: string[];
+  /** The member who cost the most for the least work, if one stands out. */
+  costliest: { agentId: string; usd: number; busyMs: number } | null;
+} {
+  const totalMs = members.reduce((s, m) => s + m.busyMs, 0);
+  const avgMs = members.length ? totalMs / members.length : 0;
+  const chips: Record<string, WorkChip> = {};
+  if (totalMs <= 0) return { avgMs, totalMs, chips, topTwo: null, quiet: [], costliest: null };
+  const byBusy = [...members].sort((a, b) => b.busyMs - a.busyMs);
+  const rates = members.filter((m) => m.busyMs >= MIN_BUSY_FOR_RATE_MS && m.usd > 0).map((m) => m.usd / (m.busyMs / 3_600_000));
+  const usual = median(rates);
+  let costliest: { agentId: string; usd: number; busyMs: number; perHour: number } | null = null;
+  for (const m of members) {
+    if (m.busyMs < MIN_BUSY_FOR_RATE_MS || m.usd < 1 || usual === null || rates.length < 3) continue;
+    const perHour = m.usd / (m.busyMs / 3_600_000);
+    if (perHour >= 2 * usual) {
+      chips[m.agentId] = { kind: 'costly', perHour };
+      if (!costliest || perHour > costliest.perHour) costliest = { agentId: m.agentId, usd: m.usd, busyMs: m.busyMs, perHour };
+    }
+  }
+  const quiet: string[] = [];
+  byBusy.forEach((m, i) => {
+    if (chips[m.agentId]) return;
+    if (i === 0) chips[m.agentId] = { kind: 'busiest' };
+    else if (avgMs > 0 && m.busyMs >= 2 * avgMs) chips[m.agentId] = { kind: 'times', times: Math.round((m.busyMs / avgMs) * 10) / 10 };
+    else if (m.busyMs < avgMs * 0.25) { chips[m.agentId] = { kind: 'quiet' }; quiet.push(m.agentId); }
+  });
+  const topTwo = members.length >= 3 ? { ids: byBusy.slice(0, 2).map((m) => m.agentId), share: (byBusy[0].busyMs + byBusy[1].busyMs) / totalMs } : null;
+  return { avgMs, totalMs, chips, topTwo, quiet, costliest: costliest ? { agentId: costliest.agentId, usd: costliest.usd, busyMs: costliest.busyMs } : null };
 }

@@ -21,13 +21,16 @@ import type Database from 'better-sqlite3';
 import { CostFold } from '../shared/costFold';
 import { dayKey, type MemberDay, type CardFact, type MailDecision, type MailDecisionKind } from '../shared/teamPerformance';
 import type { TelemetryStore, TelemetryRow } from './telemetryStore';
+import { trustKeys, refusalKey, REFUSAL_GATES, type RefusalGate } from '../shared/pulseSafety';
 
 export const RUN_IDLE_END_MS = 2 * 60_000;
 export const RUN_CAP_MS = 60 * 60_000;
 export const RAW_KEEP_MS = 400 * 86_400_000;
+/** One request's working time counts at most this much (a reply left open overnight is not work). */
+export const TURN_CAP_MS = 60 * 60_000;
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
-interface AgentState { lastStop: number; lastActivity: number }
+interface AgentState { lastStop: number; lastActivity: number; turnStart?: number }
 interface OpenRun { id: number; agentId: string; missionId: string; dispatched: number; start: number | null; usd: number; work: number; relay: boolean }
 interface FoldState { cursor: number; costs: Record<string, number>; agents: Record<string, AgentState>; away: boolean; lastPrune: number }
 
@@ -92,6 +95,21 @@ export class TelemetryProcessor {
       ON CONFLICT(office, agent_id, day) DO UPDATE SET ${col} = ${col} + excluded.${col}`).run(office, agentId, day, by);
   }
 
+  private safety(db: Database.Database, office: string, day: string, key: string, by = 1): void {
+    db.prepare(`INSERT INTO telemetry_safety (office, day, key, n) VALUES (?, ?, ?, ?)
+      ON CONFLICT(office, day, key) DO UPDATE SET n = n + excluded.n`).run(office, day, key, by);
+  }
+
+  /** A request's working time, from the request to its last reply, on the day it began. */
+  private endTurn(db: Database.Database, office: string, agentId: string, a: AgentState, end: number): void {
+    if (!a.turnStart) return;
+    const ms = Math.max(0, Math.min(end - a.turnStart, TURN_CAP_MS));
+    const day = dayKey(a.turnStart);
+    this.bump(db, office, agentId, day, 'busy_ms', Math.round(ms));
+    this.bump(db, office, agentId, day, 'turns', 1);
+    a.turnStart = undefined;
+  }
+
   private openRun(db: Database.Database, office: string, agentId: string): OpenRun | null {
     const r = db.prepare('SELECT id, agent_id, mission_id, dispatched, start, usd, work, relay FROM telemetry_runs WHERE office = ? AND agent_id = ? AND end IS NULL ORDER BY id DESC LIMIT 1')
       .get(office, agentId) as { id: number; agent_id: string; mission_id: string; dispatched: number; start: number | null; usd: number; work: number; relay: number } | undefined;
@@ -115,7 +133,10 @@ export class TelemetryProcessor {
   private apply(db: Database.Database, office: string, state: FoldState, fold: CostFold, r: TelemetryRow): void {
     const agent = r.agentId;
     const day = dayKey(r.ts);
-    const away = (n: number): void => { if (agent && state.away) this.bump(db, office, agent, day, 'away_pieces', n); };
+    // A point a backfill read from the past: counted for its day, but it never
+    // touches today's open runs or presence.
+    const past = r.attrs?.bf === 1;
+    const away = (n: number): void => { if (agent && state.away && !past) this.bump(db, office, agent, day, 'away_pieces', n); };
     switch (r.kind) {
       case 'presence': state.away = (r.value ?? 0) > 0; return;
       case 'cost': {
@@ -145,6 +166,10 @@ export class TelemetryProcessor {
         const run = this.openRun(db, office, agent);
         if (run && run.start === null && r.ts >= run.dispatched) db.prepare('UPDATE telemetry_runs SET start = ?, day = ? WHERE id = ?').run(r.ts, day, run.id);
         const a = state.agents[agent] ?? (state.agents[agent] = { lastStop: 0, lastActivity: 0 });
+        // A request while the last one never stopped (a queued message): the
+        // last one ends at its last activity.
+        if (a.turnStart) this.endTurn(db, office, agent, a, Math.max(a.turnStart, a.lastActivity));
+        a.turnStart = r.ts;
         a.lastActivity = Math.max(a.lastActivity, r.ts);
         return;
       }
@@ -156,20 +181,34 @@ export class TelemetryProcessor {
         const a = state.agents[agent] ?? (state.agents[agent] = { lastStop: 0, lastActivity: 0 });
         a.lastStop = Math.max(a.lastStop, r.ts);
         a.lastActivity = Math.max(a.lastActivity, r.ts);
+        this.endTurn(db, office, agent, a, r.ts);
         return;
       }
-      case 'message': if (agent) this.work(db, office, state, agent, r.ts, 1); return;
+      case 'busy':
+        if (!agent) return;
+        this.bump(db, office, agent, day, 'busy_ms', Math.max(0, Math.min(Math.round(r.value ?? 0), TURN_CAP_MS)));
+        this.bump(db, office, agent, day, 'turns', 1);
+        return;
+      case 'trust':
+        for (const k of trustKeys(r.attrs ?? {})) this.safety(db, office, day, k);
+        return;
+      case 'refused': {
+        const gate = String(r.attrs?.gate ?? '') as RefusalGate;
+        if (REFUSAL_GATES.includes(gate)) this.safety(db, office, day, refusalKey(gate));
+        return;
+      }
+      case 'message': if (agent && !past) this.work(db, office, state, agent, r.ts, 1); return;
       case 'email': {
         if (!agent) return;
         const n = Math.max(1, Math.round(r.value ?? 1));
         this.bump(db, office, agent, day, 'emails', n); away(n);
-        this.work(db, office, state, agent, r.ts, n);
+        if (!past) this.work(db, office, state, agent, r.ts, n);
         return;
       }
       case 'sent':
         if (!agent) return;
         this.bump(db, office, agent, day, 'sent', 1); away(1);
-        this.work(db, office, state, agent, r.ts, 1);
+        if (!past) this.work(db, office, state, agent, r.ts, 1);
         return;
       case 'card-status':
         if (agent && r.attrs?.to === 'done' && !r.attrs?.excluded) { this.bump(db, office, agent, day, 'tasks', 1); away(1); }
@@ -218,8 +257,16 @@ export class TelemetryProcessor {
     return (db.prepare('SELECT * FROM telemetry_daily WHERE office = ? AND day >= ?').all(office, fromDay) as Array<Record<string, number | string>>).map((r) => ({
       agentId: String(r.agent_id), day: String(r.day), usd: Number(r.usd), runUsd: Number(r.run_usd),
       emails: Number(r.emails), sent: Number(r.sent), tasks: Number(r.tasks), checks: Number(r.checks),
-      checksNothing: Number(r.checks_nothing), awayPieces: Number(r.away_pieces)
+      checksNothing: Number(r.checks_nothing), awayPieces: Number(r.away_pieces),
+      busyMs: Number(r.busy_ms ?? 0), turns: Number(r.turns ?? 0)
     }));
+  }
+
+  /** Kept safe counters between two days, inclusive. */
+  safetyRows(office: string, fromDay: string, toDay: string): Array<{ key: string; n: number }> {
+    const db = this.db();
+    if (!db) return [];
+    return db.prepare('SELECT key, SUM(n) AS n FROM telemetry_safety WHERE office = ? AND day >= ? AND day <= ? GROUP BY key').all(office, fromDay, toDay) as Array<{ key: string; n: number }>;
   }
 
   runs(office: string, since: number): Array<{ missionId: string; agentId: string; start: number; outcome: 'did-work' | 'nothing' | 'failed' | 'unknown'; workCount: number; usd: number; day: string }> {
@@ -273,11 +320,16 @@ export class TelemetryProcessor {
     return { routed, cardsOpened };
   }
 
-  /** The first day this office has any point, for "Collecting since". */
-  firstDay(office: string): string | null {
+  /** The first day this office has any point, for "Collecting since". With
+   *  `live`, only points recorded as they happened: a backfill's points (bf)
+   *  never start recommendations early. */
+  firstDay(office: string, live = false): string | null {
     const db = this.db();
     if (!db) return null;
-    const r = db.prepare('SELECT MIN(ts) AS t FROM telemetry_events WHERE office = ?').get(office) as { t: number | null } | undefined;
+    const sql = live
+      ? `SELECT MIN(ts) AS t FROM telemetry_events WHERE office = ? AND (attrs IS NULL OR json_extract(attrs, '$.bf') IS NULL)`
+      : 'SELECT MIN(ts) AS t FROM telemetry_events WHERE office = ?';
+    const r = db.prepare(sql).get(office) as { t: number | null } | undefined;
     return r?.t ? dayKey(r.t) : null;
   }
 }

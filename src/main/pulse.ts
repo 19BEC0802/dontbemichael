@@ -16,6 +16,8 @@ import {
   type AskFact, type Period, type PlanReading, type PulseSnapshot
 } from '../shared/teamPerformance';
 import { adviceFor, visibleAdvice, ADVICE_WINDOW_MS, type Advice, type Dismissal, type LadderModel, type MissionFact } from '../shared/teamAdvice';
+import { keptSafe } from '../shared/pulseSafety';
+import { learning, type Learning, type NoteFact } from '../shared/teamLearning';
 import type { TelemetryStore } from './telemetryStore';
 import type { TelemetryProcessor } from './telemetryProcessor';
 
@@ -35,6 +37,8 @@ export interface PulseDeps {
   priceOf: (model: string) => number | undefined;
   applyMissions: (change: (list: ScheduledMission[]) => ScheduledMission[] | null) => { ok: boolean; error?: string };
   billing: () => 'account' | 'apiKey';
+  /** Members' memory notes (date and source only) and procedure counts. */
+  memory: () => { notes: NoteFact[]; procedures: Record<string, number> };
   now?: () => number;
 }
 
@@ -130,7 +134,7 @@ export class PulseService {
     const godId = this.d.godId();
     const db = this.d.db();
     const empty = pulseSnapshot({ period, now, days: [], cards: [], decisions: [], asks: [], members: [] });
-    if (!office || !db) return { available: false, billing, collectingSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [], trend: {} };
+    if (!office || !db) return { available: false, billing, collectingSince: null, liveSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [], trend: {}, keptSafe: keptSafe([]), learning: learning({ now, notes: [], procedures: {}, asks: [], turns: [] }) };
     const range = periodRange(period, now);
     const from = Math.min(range.fromMs, now - ADVICE_WINDOW_MS);
     const ids = this.d.members().map((m) => m.id);
@@ -146,21 +150,37 @@ export class PulseService {
       ...(godId ? { michael: { agentId: godId, ...this.d.processor.michaelCounts(office, godId, range.fromMs) } } : {})
     });
     const first = this.d.processor.firstDay(office);
-    const firstMs = first ? new Date(`${first}T00:00:00`).getTime() : now;
+    // Recommendations count from live recording, never from a backfill.
+    const live = this.d.processor.firstDay(office, true);
+    const firstMs = live ? new Date(`${live}T00:00:00`).getTime() : now;
     const adviceReady = now - firstMs >= ADVICE_WINDOW_MS;
     const applied = this.appliedChanges(office);
     return {
       available: true,
       billing,
       collectingSince: first,
+      liveSince: live,
       snapshot,
       advice: adviceReady ? visibleAdvice(this.allAdvice(office), this.dismissed(office), now) : [],
       adviceFrom: adviceReady ? null : dayKey(firstMs + ADVICE_WINDOW_MS),
       saved: this.saved(office, applied),
       headroom: billing === 'account' ? planHeadroom(this.reading) : null,
       applied,
-      trend: this.trend(office, ids)
+      trend: this.trend(office, ids),
+      keptSafe: keptSafe(this.d.processor.safetyRows(office, range.from, range.to)),
+      learning: this.learning(office)
     };
+  }
+
+  /** The Learning row: four weeks of notes and of questions per request. */
+  private learning(office: string): Learning {
+    const now = this.now();
+    const from = periodRange('4-weeks', now).from;
+    const turns = new Map<string, number>();
+    for (const d of this.d.processor.days(office, from)) turns.set(d.day, (turns.get(d.day) ?? 0) + (d.turns ?? 0));
+    let mem: { notes: NoteFact[]; procedures: Record<string, number> } = { notes: [], procedures: {} };
+    try { mem = this.d.memory(); } catch { /* memory unreadable: the row shows what it has */ }
+    return learning({ now, notes: mem.notes, procedures: mem.procedures, asks: this.asks(), turns: [...turns].map(([day, t]) => ({ day, turns: t })) });
   }
 
   /** Value per week, last four weeks (this week last), per member. */

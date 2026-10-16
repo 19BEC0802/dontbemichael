@@ -10,6 +10,7 @@
  *
  * Runs in the Electron main process.
  */
+import type { RefusalGate } from '../shared/pulseSafety';
 import { createServer, type Server } from 'node:net';
 import { existsSync, lstatSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
@@ -368,6 +369,7 @@ export class HookServer {
     }
     const who = claimed ?? 'unknown';
     this.rejected.set(who, (this.rejected.get(who) ?? 0) + 1);
+    try { this.onRefused?.(claimed ?? undefined, 'sender'); } catch { /* counting never blocks a refusal */ }
     const now = Date.now();
     if (now - (this.rejectLogged.get(who) ?? 0) > 10 * 60_000) {
       this.rejectLogged.set(who, now);
@@ -580,7 +582,7 @@ export class HookServer {
     if (event === 'PreToolUse' && agentId && this.control) {
       const d = this.control.toolDecision(agentId, p.tool_name ?? '');
       if (d.deny) {
-        this.emitRefused(agentId, event, p);
+        this.emitRefused(agentId, event, p, 'paused');
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -606,7 +608,7 @@ export class HookServer {
       const d = connectorAccess(cfg, agentId, p.tool_name ?? '', p.tool_input, agentId ? (this.roleReadsBooks?.(agentId) ?? false) : false);
       if (!d.ok) {
         console.log(`[connectors] refused ${p.tool_name} for ${agentId ?? 'no agent'}: ${d.reason}`);
-        this.emitRefused(agentId, event, p);
+        this.emitRefused(agentId, event, p, 'connector');
         return mcpDeny(d.reason);
       }
     }
@@ -621,7 +623,7 @@ export class HookServer {
       const cap = quickbooksCapability(cfg.agentCapabilities?.[agentId]?.quickbooks, this.roleReadsBooks?.(agentId) ?? false);
       const d = quickbooksAccess(cfg.quickbooksClaude === true, cap, p.tool_name ?? '');
       if (!d.ok) {
-        this.emitRefused(agentId, event, p);
+        this.emitRefused(agentId, event, p, 'quickbooks');
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -649,7 +651,7 @@ export class HookServer {
       const refs = { forward: named(input.forward), attachFrom: Array.isArray(input.attach_from) && input.attach_from.some(named) };
       const d = op ? mailAccess(cfg, agentId, typeof input.mailbox === 'string' ? input.mailbox : undefined, op, proposal, { refs, present: this.memberPresent }) : { ok: false as const, reason: 'Unknown mail tool.' };
       if (!d.ok) {
-        this.emitRefused(agentId, event, p);
+        this.emitRefused(agentId, event, p, 'mail');
         return mcpDeny(d.reason);
       }
     }
@@ -664,7 +666,7 @@ export class HookServer {
     // up at its restart.
     if (event === 'PreToolUse' && agentId && agentId !== RESEARCH_ID && p.tool_name === 'Bash'
       && (p.tool_input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true) {
-      this.emitRefused(agentId, event, p);
+      this.emitRefused(agentId, event, p, 'sandbox');
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
@@ -683,7 +685,7 @@ export class HookServer {
         d = { ok: false, reason: WEB_SETTINGS_UNREADABLE };
       }
       if (!d.ok) {
-        this.emitRefused(agentId, event, p);
+        this.emitRefused(agentId, event, p, 'internet');
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -705,7 +707,7 @@ export class HookServer {
       let cfg: ReturnType<typeof this.getConfig>;
       let hiveRoot: string | null | undefined;
       try { cfg = this.getConfig(); hiveRoot = this.hive.root(); }
-      catch { this.emitRefused(agentId, event, p); return mcpDeny(RESEARCH_UNCHECKED_TOOL); }
+      catch { this.emitRefused(agentId, event, p, 'office-files'); return mcpDeny(RESEARCH_UNCHECKED_TOOL); }
       if ((cfg.businessFolder || cfg.officeFolder) && cfg.harnessHome && hiveRoot) {
         let d: { deny: boolean; reason?: string };
         try { d = harnessWriteDecision({
@@ -719,7 +721,7 @@ export class HookServer {
           caseInsensitive: process.platform !== 'linux'
         }); } catch { d = { deny: true, reason: RESEARCH_UNCHECKED_TOOL }; }
         if (d.deny) {
-          this.emitRefused(agentId, event, p);
+          this.emitRefused(agentId, event, p, 'office-files');
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
@@ -762,7 +764,7 @@ export class HookServer {
       try { d = unjudged ? { deny: true, reason: HOOK_PATH_UNCHECKED } : this.folderCheck(agentId, toolName, p.tool_input, p.cwd); }
       catch { d = { deny: true, reason: RESEARCH_UNCHECKED_TOOL }; }
       if (d.deny) {
-        this.emitRefused(agentId, event, p);
+        this.emitRefused(agentId, event, p, 'folder');
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
@@ -1157,7 +1159,12 @@ export class HookServer {
 
   // A refused call sends no step and is marked blocked, so the sidebar and
   // the office floor show nothing for a call that never ran.
-  private emitRefused(agentId: string | undefined, event: string, p: HookPayload): void {
+  /** Pulse's Kept safe (proposal 3): each step a setting stopped, by gate.
+   *  A question sent on to Michael is routing, so it passes no gate. */
+  onRefused?: (agentId: string | undefined, gate: RefusalGate) => void;
+
+  private emitRefused(agentId: string | undefined, event: string, p: HookPayload, gate?: RefusalGate): void {
+    if (gate) { try { this.onRefused?.(agentId, gate); } catch { /* counting never blocks a refusal */ } }
     this.emit(agentId, event, p, true, true);
   }
 

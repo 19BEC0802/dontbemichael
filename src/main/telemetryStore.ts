@@ -22,7 +22,10 @@ export type TelemetryKind =
   | 'card-status' | 'card-reopen'
   | 'mail-decision' | 'email' | 'sent' | 'message' | 'filing'
   | 'presence'
-  | 'advice-applied';
+  | 'advice-applied'
+  // Team at work and Kept safe (proposal 3): working time a backfill read from
+  // a past session, a trust layer decision, a step a setting stopped.
+  | 'busy' | 'trust' | 'refused';
 
 export interface TelemetryEvent {
   agentId: string | null;
