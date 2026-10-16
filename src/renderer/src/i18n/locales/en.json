@@ -2531,7 +2531,7 @@
         "folder": "Private folders",
         "office-files": "App files",
         "paused": "Paused by you",
-        "sender": "Sender the app could not confirm"
+        "impostor": "Sender the app could not confirm"
       }
     },
     "learning": {

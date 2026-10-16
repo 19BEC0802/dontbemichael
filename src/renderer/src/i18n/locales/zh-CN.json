@@ -2531,7 +2531,7 @@
         "folder": "私人文件夹",
         "office-files": "应用文件",
         "paused": "被你暂停",
-        "sender": "应用无法确认的发送者"
+        "impostor": "应用无法确认的发送者"
       }
     },
     "learning": {

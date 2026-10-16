@@ -369,11 +369,15 @@ export class HookServer {
     }
     const who = claimed ?? 'unknown';
     this.rejected.set(who, (this.rejected.get(who) ?? 0) + 1);
-    try { this.onRefused?.(claimed ?? undefined, 'sender'); } catch { /* counting never blocks a refusal */ }
+    // No secret, or another member's: something is speaking for someone it is
+    // not. A secret this start never made is a process left from an earlier
+    // start, shutting down: refused, but not a protection worth showing.
+    const reason = owner ? 'wrong-sender' : typeof token === 'string' && token ? 'old-secret' : 'no-secret';
+    if (reason !== 'old-secret') { try { this.onRefused?.(claimed ?? undefined, 'impostor'); } catch { /* counting never blocks a refusal */ } }
     const now = Date.now();
     if (now - (this.rejectLogged.get(who) ?? 0) > 10 * 60_000) {
       this.rejectLogged.set(who, now);
-      try { this.hive.appendLog({ kind: 'hook-frame-rejected', reason: owner ? 'wrong-sender' : 'no-secret', agentId: who, event: p.hook_event_name ?? null }); } catch { /* best-effort */ }
+      try { this.hive.appendLog({ kind: 'hook-frame-rejected', reason, agentId: who, event: p.hook_event_name ?? null }); } catch { /* best-effort */ }
     }
     return false;
   }

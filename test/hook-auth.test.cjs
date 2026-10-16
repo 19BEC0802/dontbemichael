@@ -71,17 +71,20 @@ test('every refused frame and every gated step reaches Pulse with its gate; a qu
   for (const g of ['paused', 'connector', 'quickbooks', 'mail', 'sandbox', 'internet', 'office-files', 'folder']) assert.match(src, new RegExp(`this\\.emitRefused\\(agentId, event, p, '${g}'\\)`), g);
   assert.match(src, /permissionDecisionReason: ASK_TOOL_REFUSAL/);
   assert.match(src, /this\.emitRefused\(agentId, event, p\);\n\s+return \{\n\s+hookSpecificOutput: \{\n\s+hookEventName: 'PreToolUse',\n\s+permissionDecision: 'deny',\n\s+permissionDecisionReason: ASK_TOOL_REFUSAL/, 'the question tool passes no gate');
-  assert.match(src, /this\.onRefused\?\.\(claimed \?\? undefined, 'sender'\)/);
+  assert.match(src, /if \(reason !== 'old-secret'\) \{ try \{ this\.onRefused\?\.\(claimed \?\? undefined, 'impostor'\)/);
 });
 
-test('a refused frame is reported to Pulse as a sender the app could not confirm', (t) => {
+test('a frame with no secret or another member\'s is reported to Pulse; one from a leftover process is not', (t) => {
   // Value: protects=Kept safe sender count; fails_when=authenticate stops reporting; why_new=owner proposal 3; seam=none; no_claim=none beyond protects
   const { hive } = office(t);
   const server = new HookServer(hive, () => null, () => ({}));
   const seen = [];
   server.onRefused = (agentId, gate) => seen.push([agentId, gate]);
-  server.authenticate({ hook_event_name: 'Stop', agent_id: 'god' });
-  assert.deepEqual(seen, [['god', 'sender']]);
+  const pam = hive.mintHookToken('pam');
+  server.authenticate({ hook_event_name: 'Stop', agent_id: 'god' });                       // no secret
+  server.authenticate({ hook_event_name: 'Stop', agent_id: 'god', hook_token: pam });      // Pam's secret
+  server.authenticate({ hook_event_name: 'Status', agent_id: 'pam', hook_token: 'from-an-earlier-start' }); // a leftover process
+  assert.deepEqual(seen, [['god', 'impostor'], ['god', 'impostor']], 'a leftover process is refused but not counted');
 });
 
 test('over the socket, a tool check without a valid secret is refused and nothing else reaches a consumer', { skip: process.platform === 'win32' ? 'unix socket paths' : false }, async (t) => {
