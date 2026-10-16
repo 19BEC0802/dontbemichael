@@ -337,11 +337,11 @@ export function PulseView() {
           </div>
           <div style={tight}>
             <TileTitle icon="help" title={t('pulse.learning.questions')} sub={t('pulse.learning.questionsSub')} />
-            <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{rate ?? '…'}</div>
+            <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{rate !== null ? rate.toFixed(1) : '…'}</div>
             <div style={{ fontSize: 11, color: 'var(--cth-ink-2)', lineHeight: '15px' }}>
               {rate === null ? t('pulse.learning.tooFewRate')
                 : prevRate === null ? t('pulse.learning.counts', { asks: cur.asks, turns: cur.turns.toLocaleString(i18n.language) })
-                : t(rate < prevRate ? 'pulse.learning.down' : rate > prevRate ? 'pulse.learning.up' : 'pulse.learning.same', { from: prevRate, before: t(`pulse.learning.before.${s.period}`) })}
+                : t(rate < prevRate ? 'pulse.learning.down' : rate > prevRate ? 'pulse.learning.up' : 'pulse.learning.same', { from: prevRate.toFixed(1), before: t(`pulse.learning.before.${s.period}`) })}
             </div>
             {rate !== null && prevRate !== null && <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.learning.counts', { asks: cur.asks, turns: cur.turns.toLocaleString(i18n.language) })}</div>}
           </div>
