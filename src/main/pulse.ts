@@ -16,7 +16,7 @@ import {
   type AskFact, type Period, type PlanReading, type PulseSnapshot
 } from '../shared/teamPerformance';
 import { adviceFor, visibleAdvice, ADVICE_WINDOW_MS, type Advice, type Dismissal, type LadderModel, type MissionFact } from '../shared/teamAdvice';
-import { keptSafe } from '../shared/pulseSafety';
+import { keptSafe, REFUSAL_GATES } from '../shared/pulseSafety';
 import { planCostFor, scaleSnapshot, type PlanPrice } from '../shared/claudePlan';
 import { learning, type Learning, type NoteFact } from '../shared/teamLearning';
 import type { TelemetryStore } from './telemetryStore';
@@ -46,7 +46,7 @@ export interface PulseDeps {
 }
 
 export type { AppliedChange, PulseView } from '../shared/pulseView';
-import type { AppliedChange, PulseView } from '../shared/pulseView';
+import type { AppliedChange, PulseView, PulseWeeks } from '../shared/pulseView';
 
 /** Window lengths by Claude Code's rate limit names. */
 function windowMs(name: string): number {
@@ -137,7 +137,7 @@ export class PulseService {
     const godId = this.d.godId();
     const db = this.d.db();
     const empty = pulseSnapshot({ period, now, days: [], cards: [], decisions: [], asks: [], members: [] });
-    if (!office || !db) return { available: false, billing, collectingSince: null, liveSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [], trend: {}, keptSafe: keptSafe([]), learning: learning({ now, notes: [], procedures: {}, asks: [], turns: [] }), plan: null };
+    if (!office || !db) return { available: false, billing, collectingSince: null, liveSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [], trend: {}, keptSafe: keptSafe([]), learning: learning({ now, notes: [], procedures: {}, asks: [], turns: [] }), plan: null, weeks: null };
     const range = periodRange(period, now);
     const from = Math.min(range.fromMs, now - ADVICE_WINDOW_MS);
     const ids = this.d.members().map((m) => m.id);
@@ -178,8 +178,41 @@ export class PulseService {
       trend: this.trend(office, ids, price),
       keptSafe: keptSafe(this.d.processor.safetyRows(office, range.from, range.to)),
       learning: this.learning(office),
-      plan
+      plan,
+      weeks: period === '4-weeks' ? this.weeks(office, range.fromMs, price) : null
     };
+  }
+
+  /** Last 4 weeks, week by week, for the tiles' trend charts (owner, 2026-10-15). */
+  private weeks(office: string, startMs: number, price: PlanPrice | null): PulseWeeks {
+    const now = this.now();
+    const week = 7 * 86_400_000;
+    const starts = [0, 1, 2, 3].map((w) => startMs + w * week);
+    const keys = starts.map((t) => dayKey(t));
+    const days = this.d.processor.days(office, keys[0]);
+    const asks = this.asks();
+    const out: PulseWeeks = { from: keys, emails: [], sent: [], tasks: [], checks: [], usd: [], asks: [], away: [], toInternet: [], cleaned: [], held: [], rules: [] };
+    starts.forEach((t0, w) => {
+      const from = keys[w];
+      const to = dayKey(t0 + 6 * 86_400_000);
+      const mine = days.filter((d) => d.day >= from && d.day <= to);
+      const sum = (f: (d: typeof mine[number]) => number): number => mine.reduce((s, d) => s + f(d), 0);
+      const pieces = sum((d) => d.emails + d.sent + d.tasks + d.checks);
+      const value = sum((d) => d.usd);
+      out.emails.push(sum((d) => d.emails));
+      out.sent.push(sum((d) => d.sent));
+      out.tasks.push(sum((d) => d.tasks));
+      out.checks.push(sum((d) => d.checks + d.checksNothing));
+      out.usd.push(price && value > 0 ? planCostFor(price.monthly, t0, t0 + week - 1, now) : value);
+      out.asks.push(asks.filter((a) => a.askedAt >= t0 && a.askedAt < t0 + week).length);
+      out.away.push(pieces > 0 ? sum((d) => d.awayPieces) / pieces : null);
+      const k = keptSafe(this.d.processor.safetyRows(office, from, to));
+      out.toInternet.push(k.toInternet.pass + k.toInternet.clean + k.toInternet.stop);
+      out.cleaned.push(k.webAnswers.clean);
+      out.held.push(k.held);
+      out.rules.push(REFUSAL_GATES.reduce((s, g) => s + (k.rules[g] ?? 0), 0));
+    });
+    return out;
   }
 
   private planPrice(): PlanPrice | null {

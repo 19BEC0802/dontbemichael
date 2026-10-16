@@ -352,3 +352,21 @@ test("on a plan, each member's cost is their part of the plan's cost so far this
   assert.equal(k.plan, null);
   assert.equal(k.snapshot.totalUsd, 4);
 });
+
+test('Last 4 weeks comes with week by week figures that add up to the period; a single week has none', (t) => {
+  // Value: protects=the trend charts on a multi week period (owner, 2026-10-15); fails_when=a week is missing, the weeks do not add up to the period, or one week periods carry weeks; why_new=owner ask; seam=none; no_claim=chart drawing (source pins in pulse-view)
+  const env = service(t);
+  const now = env.clock.now();
+  for (const back of [1, 8, 15]) {
+    env.store.record({ agentId: 'toby', kind: 'email', ts: now - back * 86_400_000, value: back });
+    env.store.record({ agentId: 'toby', kind: 'sent', ts: now - back * 86_400_000 });
+  }
+  env.proc.tick('/office');
+  assert.equal(env.svc.snapshot('this-week').weeks, null);
+  const v = env.svc.snapshot('4-weeks');
+  assert.equal(v.weeks.from.length, 4);
+  const total = (k) => v.snapshot.outcomes.find((o) => o.kind === k).total;
+  assert.equal(v.weeks.emails.reduce((a, b) => a + b, 0), total('email'));
+  assert.equal(v.weeks.sent.reduce((a, b) => a + b, 0), total('sent'));
+  assert.equal(v.weeks.toInternet.length, 4);
+});

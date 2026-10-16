@@ -1179,6 +1179,10 @@ half written message survives the switch.
   for its work" (twice the usual value per hour, with ten minutes of work and three peers at
   least). A row opens the member detail, an overlay like Task detail (§7.21): six facts in
   `card-2` boxes and a four week value bar.
+- **Trends on Last 4 weeks** (owner, 2026-10-15): every top tile adds its week by week
+  trend under its total: four small bars (value above, week below; stacked by source on What
+  the team learned; who did it bars give way to them) for counts and money, a small line for
+  rates (questions per 100, while you were away). A one week period shows none.
 - Layout by the window's width: 1100 px and wider, 4 a row and every Team at work column;
   760 to 1099, tiles 2 by 2; under 760, one
   column and Team at work with name, bar, hours and value. Coral is never used on Pulse. Every chart has an

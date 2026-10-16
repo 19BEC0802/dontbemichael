@@ -69,7 +69,8 @@ test('line icons, never emoji; Team at work lists everyone on the team busiest f
 
 test('Kept safe counts what was stopped apart from what could not be checked, and held work is the only amber tile', () => {
   // Value: protects=Kept safe honesty; fails_when=held messages read as protection, or held turns calm while messages wait; why_new=owner proposal 3; seam=none; no_claim=none beyond protects
-  assert.match(view, /icon="pause" value=\{safe\.held\} tip=\{t\('pulse\.safe\.heldTip'\)\} text=\{t\(safe\.held > 0 \? 'pulse\.safe\.held' : 'pulse\.safe\.heldNone'\)\} amber=\{safe\.held > 0\}/);
+  const held = view.slice(view.indexOf('<StatTile icon="pause"'), view.indexOf('<StatTile icon="lock"'));
+  assert.match(held, /text=\{t\(safe\.held > 0 \? 'pulse\.safe\.held' : 'pulse\.safe\.heldNone'\)\} amber=\{safe\.held > 0\}/);
   assert.equal(en.pulse.safe.held, 'messages held back because the safety check could not run. Nothing went out unchecked.');
   assert.doesNotMatch(view, /<Section title=\{t\('pulse\.safe\.title'\)\}/, 'no Kept safe header; each tile says what it guards (owner, 2026-10-15)');
   assert.match(view, /since: fmtDay\(view\.liveSince \?\? Date\.now\(\)\)/, 'recommendations count from live recording, not the backfill');
@@ -102,4 +103,11 @@ test('Learning follows the period: the period\'s new notes and question rate, ag
   assert.doesNotMatch(view, /function RateLine|remembersSub/, 'no all time chart');
   assert.equal(en.pulse.learning.sub['this-week'], 'new notes this week');
   assert.match(read('src/main/pulse.ts'), /count: 8 \}\);/, 'eight weeks, so four can be compared with four');
+});
+
+test('on Last 4 weeks every top tile shows its week by week trend', () => {
+  // Value: protects=the owner\'s 2026-10-15 ask (trends on multi week periods); fails_when=a tile drops its weekly chart; why_new=owner ask; seam=source pins; no_claim=pixel layout
+  assert.equal((view.match(/<WeekBars /g) || []).length, 8, 'got done, four Kept safe, learned, spent, your time');
+  assert.equal((view.match(/<WeekLine /g) || []).length, 2, 'questions per 100 and while you were away');
+  assert.match(view, /const wks = view\.weeks \?\? null;/);
 });

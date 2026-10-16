@@ -232,6 +232,10 @@ export function PulseView() {
     const rate = rateOf(cur);
     const prevRate = prevWeeks.length === span ? rateOf(prev) : null;
     const curAdded = cur.you + cur.job + cur.michael;
+    // Last 4 weeks: each tile shows its week by week trend (owner, 2026-10-15).
+    const wks = view.weeks ?? null;
+    const wkLabels = (wks?.from ?? []).map(fmtShort);
+    const lastFour = wk.slice(-4);
     // Team at work: everyone on the team now, Michael included, busiest first.
     const rows = s.members.filter((m) => byId.has(m.agentId))
       .map((m) => ({ ...m, busyMs: m.busyMs ?? 0, turns: m.turns ?? 0, dayBusy: m.dayBusy ?? [] }))
@@ -304,7 +308,8 @@ export function PulseView() {
                 <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: 'var(--cth-ink-2)' }}><Icon name={KIND_ICON[o.kind]} size={1.125} /></div>
                 <div style={{ ...mono, fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{o.total.toLocaleString(i18n.language)}</div>
                 <div style={{ fontSize: 12, color: 'var(--cth-ink-2)' }}>{outcomeLabel(o)}</div>
-                {o.kind === 'check'
+                {wks ? <WeekBars labels={wkLabels} series={[{ values: wks[o.kind === 'email' ? 'emails' : o.kind === 'sent' ? 'sent' : o.kind === 'task' ? 'tasks' : 'checks'], color: 'var(--cth-ink-2)' }]} aria={outcomeLabel(o)} />
+                  : o.kind === 'check'
                   ? <WhoBar by={[{ agentId: '__work', count: o.sub ?? 0 }, { agentId: '__none', count: o.total - (o.sub ?? 0) }]} colorOf={(id) => (id === '__work' ? 'var(--cth-ink-2)' : 'var(--cth-line-2)')} nameOf={(id) => t(id === '__work' ? 'pulse.foundWork' : 'pulse.nothingToDo')} aria={outcomeLabel(o)} />
                   : <WhoBar by={o.by} colorOf={colorOf} nameOf={nameOf} aria={outcomeAria(o)} />}
               </div>
@@ -315,12 +320,12 @@ export function PulseView() {
         {/* Kept safe (owner, 2026-10-15): no header; each tile says what it guards. */}
         <section aria-label={t('pulse.safe.title')}>
           <div style={grid(cols)}>
-            <StatTile icon="shield" value={toNet} tip={t('pulse.safe.trustTip')} text={t(toNet > 0 && safe.toInternet.clean + safe.toInternet.stop === 0 ? 'pulse.safe.toInternetNone' : 'pulse.safe.toInternet')}
+            <StatTile icon="shield" value={toNet} trend={wks && <WeekBars labels={wkLabels} series={[{ values: wks.toInternet, color: 'var(--cth-ink-2)' }]} aria={t('pulse.safe.toInternet')} />} tip={t('pulse.safe.trustTip')} text={t(toNet > 0 && safe.toInternet.clean + safe.toInternet.stop === 0 ? 'pulse.safe.toInternetNone' : 'pulse.safe.toInternet')}
               parts={[{ n: safe.toInternet.pass, name: t('pulse.safe.sentAsWritten'), color: 'var(--cth-ink-2)' }, { n: safe.toInternet.clean, name: t('pulse.safe.privateOut'), color: 'var(--cth-green)' }, { n: safe.toInternet.stop, name: t('pulse.safe.stopped'), color: 'var(--cth-amber)' }]} />
-            <StatTile icon="search" value={safe.webAnswers.clean} of={answers} tip={t('pulse.safe.trustTip')} text={t('pulse.safe.answersCleaned')}
+            <StatTile icon="search" value={safe.webAnswers.clean} of={answers} trend={wks && <WeekBars labels={wkLabels} series={[{ values: wks.cleaned, color: 'var(--cth-green)' }]} aria={t('pulse.safe.answersCleaned')} />} tip={t('pulse.safe.trustTip')} text={t('pulse.safe.answersCleaned')}
               parts={[{ n: safe.webAnswers.clean, name: t('pulse.safe.cleaned'), color: 'var(--cth-green)' }, { n: safe.webAnswers.pass, name: t('pulse.safe.nothingToRemove'), color: 'var(--cth-ink-4)' }, { n: safe.webAnswers.flagged, name: t('pulse.safe.flagged'), color: 'var(--cth-amber)' }]} />
-            <StatTile icon="pause" value={safe.held} tip={t('pulse.safe.heldTip')} text={t(safe.held > 0 ? 'pulse.safe.held' : 'pulse.safe.heldNone')} amber={safe.held > 0} />
-            <StatTile icon="lock" value={rulesTotal} tip={t('pulse.safe.rulesTip')} text={t(rulesTotal > 0 ? 'pulse.safe.rules' : 'pulse.safe.rulesNone')}
+            <StatTile icon="pause" value={safe.held} trend={wks && <WeekBars labels={wkLabels} series={[{ values: wks.held, color: 'var(--cth-amber)' }]} aria={t('pulse.safe.held')} />} tip={t('pulse.safe.heldTip')} text={t(safe.held > 0 ? 'pulse.safe.held' : 'pulse.safe.heldNone')} amber={safe.held > 0} />
+            <StatTile icon="lock" value={rulesTotal} trend={wks && <WeekBars labels={wkLabels} series={[{ values: wks.rules, color: 'var(--cth-ink-3)' }]} aria={t('pulse.safe.rules')} />} tip={t('pulse.safe.rulesTip')} text={t(rulesTotal > 0 ? 'pulse.safe.rules' : 'pulse.safe.rulesNone')}
               parts={[...rules].sort((a, b) => b[1] - a[1]).map(([g, n], i) => ({ n, name: t(`pulse.safe.gate.${g}`), color: ['var(--cth-ink-2)', 'var(--cth-ink-3)', 'var(--cth-ink-4)', 'var(--cth-line-2)'][Math.min(i, 3)] }))} />
           </div>
         </section>
@@ -331,7 +336,8 @@ export function PulseView() {
           <div style={tight}>
             <TileTitle icon="book" title={t('pulse.learning.learned')} sub={t(`pulse.learning.sub.${s.period}`)} tip={t('pulse.learning.tip')} />
             <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{curAdded.toLocaleString(i18n.language)}</div>
-            {curAdded > 0 && <Stack parts={[{ n: cur.you, color: 'var(--cth-green)' }, { n: cur.job, color: 'var(--cth-ink-4)' }, { n: cur.michael, color: 'var(--cth-indigo)' }]} aria={`${t('pulse.learning.fromYou')} ${cur.you}, ${t('pulse.learning.onJob')} ${cur.job}, ${t('pulse.learning.fromMichael')} ${cur.michael}`} />}
+            {wks && <WeekBars labels={wkLabels} series={[{ values: lastFour.map((w) => w.added.you), color: 'var(--cth-green)' }, { values: lastFour.map((w) => w.added.job), color: 'var(--cth-ink-4)' }, { values: lastFour.map((w) => w.added.michael), color: 'var(--cth-indigo)' }]} aria={t(`pulse.learning.sub.${s.period}`)} />}
+            {!wks && curAdded > 0 && <Stack parts={[{ n: cur.you, color: 'var(--cth-green)' }, { n: cur.job, color: 'var(--cth-ink-4)' }, { n: cur.michael, color: 'var(--cth-indigo)' }]} aria={`${t('pulse.learning.fromYou')} ${cur.you}, ${t('pulse.learning.onJob')} ${cur.job}, ${t('pulse.learning.fromMichael')} ${cur.michael}`} />}
             {curAdded > 0 && <Legend items={[[t('pulse.learning.fromYou'), 'var(--cth-green)', cur.you], [t('pulse.learning.onJob'), 'var(--cth-ink-4)', cur.job], [t('pulse.learning.fromMichael'), 'var(--cth-indigo)', cur.michael]]} />}
             <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.learning.inAll', { notes: learn.notes.toLocaleString(i18n.language), procedures: learn.procedures })}</div>
           </div>
@@ -344,6 +350,7 @@ export function PulseView() {
                 : t(rate < prevRate ? 'pulse.learning.down' : rate > prevRate ? 'pulse.learning.up' : 'pulse.learning.same', { from: prevRate.toFixed(1), before: t(`pulse.learning.before.${s.period}`) })}
             </div>
             {rate !== null && prevRate !== null && <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.learning.counts', { asks: cur.asks, turns: cur.turns.toLocaleString(i18n.language) })}</div>}
+            {wks && <WeekLine labels={wkLabels} values={lastFour.map((w) => w.per100)} format={(v) => v.toFixed(1)} aria={t('pulse.learning.questionsSub')} />}
           </div>
           {/* One total (owner, 2026-10-15): who spent what is Team at work's job.
               Plan use sits in the same tile, beside what was spent. */}
@@ -359,6 +366,7 @@ export function PulseView() {
                   ? t('pulse.plan.ofPlan', { plan: view.plan.label ?? t('pulse.plan.yourPlan'), monthly: dollars(view.plan.monthly) })
                   : t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.plan.noPrice')}
               </div>
+              {wks && <WeekBars labels={wkLabels} series={[{ values: wks.usd, color: 'var(--cth-ink-2)' }]} format={(v) => `$${Math.round(v)}`} aria={t('pulse.whereMoneyWent')} />}
             </div>
             {view.headroom && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flex: 'none' }}>
@@ -379,11 +387,13 @@ export function PulseView() {
               <div style={label}>{t('pulse.yourTime')}<InfoTip text={t('pulse.yourTimeTip')} /></div>
               <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.yourTime.asks}</div>
               <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{s.yourTime.medianWaitMs !== null ? t('pulse.questionsAnswered', { time: duration(s.yourTime.medianWaitMs, t) }) : t('pulse.questions')}</div>
+              {wks && <WeekBars labels={wkLabels} series={[{ values: wks.asks, color: 'var(--cth-ink-2)' }]} aria={t('pulse.yourTime')} />}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0, paddingInlineStart: 14, boxShadow: 'inset 1px 0 0 var(--cth-line)' }}>
               <div style={label}>{t('pulse.whileAway')}<InfoTip text={t('pulse.awayTip')} /></div>
               <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.awayShare === null ? '0%' : pct(s.awayShare)}</div>
               <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.awayLine')}</div>
+              {wks && <WeekLine labels={wkLabels} values={wks.away} format={(v) => pct(v)} aria={t('pulse.whileAway')} />}
             </div>
           </div>
         </section>
@@ -466,7 +476,7 @@ export function PulseView() {
 }
 
 /** A Kept safe tile: an icon, a number, what it counts, and its parts (proposal 3). */
-function StatTile({ icon, value, of, text, parts, amber, tip }: { icon: IconName; value: number; of?: number; text: string; parts?: Array<{ n: number; name: string; color: string }>; amber?: boolean; tip?: string }) {
+function StatTile({ icon, value, of, text, parts, amber, tip, trend }: { icon: IconName; value: number; of?: number; text: string; parts?: Array<{ n: number; name: string; color: string }>; amber?: boolean; tip?: string; trend?: ReactNode }) {
   const { t, i18n } = useTranslation();
   const shown = (parts ?? []).filter((p) => p.n > 0 || (parts ?? []).length <= 3);
   return (
@@ -474,8 +484,10 @@ function StatTile({ icon, value, of, text, parts, amber, tip }: { icon: IconName
       <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: amber ? 'var(--cth-card)' : 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: amber ? 'var(--cth-amber-text)' : 'var(--cth-ink-2)' }}><Icon name={icon} size={1.125} /></div>
       <div style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{value.toLocaleString(i18n.language)}{of !== undefined && <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 400, color: 'var(--cth-ink-3)', marginInlineStart: 6 }}>{t('pulse.safe.of', { n: of })}</span>}</div>
       <div style={{ fontSize: 12, color: 'var(--cth-ink-2)', lineHeight: '17px' }}>{text}{tip && <> <InfoTip text={tip} /></>}</div>
-      {shown.length > 0 && shown.some((p) => p.n > 0) && <Stack parts={shown} aria={shown.map((p) => `${p.name} ${p.n}`).join(', ')} />}
-      {shown.length > 0 && <Legend items={shown.map((p) => [p.name, p.color, p.n])} />}
+      {trend ? trend : <>
+        {shown.length > 0 && shown.some((p) => p.n > 0) && <Stack parts={shown} aria={shown.map((p) => `${p.name} ${p.n}`).join(', ')} />}
+        {shown.length > 0 && <Legend items={shown.map((p) => [p.name, p.color, p.n])} />}
+      </>}
     </div>
   );
 }
@@ -510,6 +522,50 @@ function TileTitle({ icon, title, sub, tip }: { icon: IconName; title: string; s
         <div style={{ fontSize: 12, color: 'var(--cth-ink-2)' }}>{sub}</div>
       </div>
     </div>
+  );
+}
+
+/** Four weeks as small bars, stacked when there is more than one series, the
+ *  total above each and the week below (owner, 2026-10-15). */
+function WeekBars({ labels, series, aria, format = (v) => String(v) }: { labels: string[]; series: Array<{ values: number[]; color: string }>; aria: string; format?: (v: number) => string }) {
+  const totals = labels.map((_, i) => series.reduce((s, x) => s + (x.values[i] ?? 0), 0));
+  const max = Math.max(1, ...totals);
+  return (
+    <div role="img" aria-label={`${aria}: ${labels.map((l, i) => `${l} ${format(totals[i])}`).join(', ')}`} style={{ display: 'grid', gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))`, gap: 6, alignItems: 'end' }}>
+      {labels.map((l, i) => (
+        <div key={l} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 10, color: 'var(--cth-ink-2)' }}>{format(totals[i])}</span>
+          <div style={{ width: '70%', maxWidth: 28, height: Math.max(2, (totals[i] / max) * 34), display: 'flex', flexDirection: 'column-reverse', borderRadius: 3, overflow: 'hidden', background: 'var(--cth-neutral-soft)' }}>
+            {series.map((x, k) => <i key={k} style={{ display: 'block', flex: x.values[i] ?? 0, background: x.color }} />)}
+          </div>
+          <span style={{ fontSize: 9, color: 'var(--cth-ink-3)', whiteSpace: 'nowrap' }}>{l}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Four weeks of a rate as a small line; a week with no rate is a gap. */
+function WeekLine({ labels, values, aria, format }: { labels: string[]; values: Array<number | null>; aria: string; format: (v: number) => string }) {
+  const W = 200, H = 52;
+  const vals = values.filter((v): v is number => v !== null);
+  const hi = Math.max(0.0001, ...vals) * 1.2;
+  const x = (i: number): number => 14 + (i * (W - 28)) / Math.max(1, labels.length - 1);
+  const y = (v: number): number => H - 14 - (v / hi) * (H - 28);
+  const pts = values.map((v, i) => (v === null ? null : `${x(i).toFixed(0)},${y(v).toFixed(0)}`)).filter(Boolean).join(' ');
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${aria}: ${labels.map((l, i) => `${l} ${values[i] === null ? '…' : format(values[i]!)}`).join(', ')}`} style={{ maxWidth: 260 }}>
+      {vals.length > 1 && <polyline points={pts} fill="none" stroke="var(--cth-ink-2)" strokeWidth={1.75} />}
+      {values.map((v, i) => (
+        <g key={i}>
+          {v !== null && <>
+            <circle cx={x(i)} cy={y(v)} r={3} fill="var(--cth-card)" stroke="var(--cth-ink)" strokeWidth={1.75} />
+            <text x={x(i)} y={y(v) - 7} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={9.5} fill="var(--cth-ink-2)">{format(v)}</text>
+          </>}
+          <text x={x(i)} y={H - 1} textAnchor="middle" fontSize={8.5} fill="var(--cth-ink-3)">{labels[i]}</text>
+        </g>
+      ))}
+    </svg>
   );
 }
 
