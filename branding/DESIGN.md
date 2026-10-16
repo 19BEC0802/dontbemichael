@@ -1159,15 +1159,16 @@ half written message survives the switch.
   `ink-4` on the job, `indigo` Michael, `neutral-soft` known before), Questions to you per 100
   requests (an SVG line; a week under 20 requests is a gap), and Taught by you (this week's
   share of new notes from the owner's answers).
-- **Office row** next (owner, 2026-10-15): Spent, one mono 28 px total with what it is
-  beneath (no bar: who spent what is Team at work's job). On a Claude plan with a known price (Settings > Agents, else
-  the plan found in the owner's Claude account), every dollar on Pulse is a member's part of
-  the plan's real cost for the days so far in the period, split by their share of the work
-  (their pay per use value); the line beneath reads "of your Claude Max 20x ($200 a month)" and the
-  pay per use figure sits behind its (i). On an
-  API key the dollars are what was spent; on a plan with no known price, pay per use with a
-  pointer to Settings. Team at work's column then reads Cost, not Value. plan use (SVG ring, on a Claude plan only, with an `amber` soft
-  "Runs out around …" when the pace says so), Your time and While you were away.
+- **Office row** next (owner, 2026-10-15): one card with Spent (a mono 28 px total with what
+  it is beneath; no bar, who spent what is Team at work's job) and, beside it past a hairline,
+  plan use (SVG ring, on a Claude plan only, with an `amber` soft "Runs out around …" when the
+  pace says so); then Your time and While you were away. On a Claude plan with a known price
+  (Settings > Agents, else the plan found in the owner's Claude account), every dollar on Pulse
+  is a member's part of the plan's real cost for the days so far in the period, split by their
+  share of the work (their pay per use value); the line beneath reads "of your Claude Max 20x
+  ($200 a month)" and the pay per use figure sits behind its (i). On an API key the dollars
+  are what was spent; on a plan with no known price, pay per use with a pointer to Settings.
+  Team at work's column then reads Cost, not Value.
 - **Team at work** last, in place of the member tiles (owner, 2026-10-15): one card with a
   headline (the two busiest members' share of working time, who was quiet, who cost the most
   for the least work), then a row per member on the team, Michael included, busiest first:

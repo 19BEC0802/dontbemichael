@@ -353,9 +353,11 @@ export function PulseView() {
           </div>
         </Section>
 
-        <div style={{ display: 'grid', gridTemplateColumns: layout === 'wide' ? '1fr 1fr 1fr' : layout === 'mid' ? '1fr 1fr' : '1fr', gap: 12 }}>
-          {/* One total (owner, 2026-10-15): who spent what is Team at work's job. */}
-          <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: layout === 'narrow' ? '1fr' : '2fr 1fr', gap: 12 }}>
+          {/* One total (owner, 2026-10-15): who spent what is Team at work's job.
+              Plan use sits in the same card, beside what was spent. */}
+          <div style={{ ...card, padding: '14px 16px', display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 180px' }}>
             <div style={label}>
               {t('pulse.whereMoneyWent')}
               <InfoTip text={view.plan ? t('pulse.plan.tip', { monthly: dollars(view.plan.monthly), payPerUse: money(view.plan.payPerUse) }) : t('pulse.valueTip')} />
@@ -368,7 +370,7 @@ export function PulseView() {
             </div>
           </div>
           {view.headroom && (
-            <div style={{ ...card, padding: '14px 16px', display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', flex: '1 1 220px', paddingInlineStart: 18, boxShadow: 'inset 1px 0 0 var(--cth-line)' }}>
               <svg width={88} height={88} viewBox="0 0 88 88" role="img" aria-label={t('pulse.planAria', { pct: Math.round(view.headroom.usedPct) })}>
                 <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-neutral-soft)" strokeWidth={10} />
                 <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-ink-2)" strokeWidth={10} strokeLinecap="round" strokeDasharray={`${(Math.min(100, view.headroom.usedPct) / 100) * 226} 226`} transform="rotate(-90 44 44)" />
@@ -381,6 +383,7 @@ export function PulseView() {
               </div>
             </div>
           )}
+          </div>
           <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={label}>{t('pulse.yourTime')}<InfoTip text={t('pulse.yourTimeTip')} /></div>
             <div style={{ ...mono, fontSize: 22, fontWeight: 600 }}>{s.yourTime.asks} <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-3)', fontWeight: 400 }}>{t('pulse.questions')}</span></div>
