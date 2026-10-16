@@ -64,7 +64,7 @@ test('line icons, never emoji; Team at work lists everyone on the team busiest f
   assert.doesNotMatch(view, /pulse\.learning\.headline|pulse\.learning\.trend/, 'no Learning header or headline (owner, 2026-10-15)');
   assert.doesNotMatch(view, /pulse\.work\.perHour|stripOf\(|pulse\.work\.knows/, 'no day strip, per hour or Knows column (owner, 2026-10-15)');
   assert.match(view, /onClick=\{\(\) => setDetail\(m\.agentId\)\}/);
-  for (const i of ['shield', 'search', 'pause', 'lock', 'book', 'help', 'learn']) assert.match(view, new RegExp(`icon="${i}"`), i);
+  for (const i of ['shield', 'search', 'pause', 'lock', 'book', 'help']) assert.match(view, new RegExp(`icon="${i}"`), i);
 });
 
 test('Kept safe counts what was stopped apart from what could not be checked, and held work is the only amber tile', () => {

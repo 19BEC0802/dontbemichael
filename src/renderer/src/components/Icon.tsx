@@ -9,7 +9,7 @@ export type IconName =
   | 'bell' | 'folder' | 'terminal' | 'code' | 'web' | 'mcp' | 'sparkle'
   | 'expand' | 'minimize' | 'clock' | 'mic' | 'ledger' | 'info' | 'sidebar'
   | 'image' | 'edit' | 'git' | 'file' | 'sheet' | 'help' | 'external' | 'mail' | 'lock' | 'send'
-  | 'shield' | 'search' | 'book' | 'learn';
+  | 'shield' | 'search' | 'book';
 
 /** Each icon is one or more path `d` strings on a 24 unit grid. */
 const paths: Record<IconName, string[]> = {
@@ -56,8 +56,7 @@ const paths: Record<IconName, string[]> = {
   send: ['M22 2 11 13', 'M22 2l-7 20-4-9-9-4z'],
   shield: ['M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z', 'm9 12 2 2 4-4'],
   search: ['M11 17a6 6 0 1 0 0-12 6 6 0 0 0 0 12z', 'm20 20-4.5-4.5'],
-  book: ['M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z', 'M4 19V5'],
-  learn: ['M3 9 12 5l9 4-9 4z', 'M7 11v4c3 2 7 2 10 0v-4']
+  book: ['M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z', 'M4 19V5']
 };
 
 export interface IconProps {

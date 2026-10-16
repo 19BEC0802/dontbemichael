@@ -2476,7 +2476,6 @@
     "yourTime": "你的时间",
     "yourTimeTip": "团队带给你的问题，以及他们等你回答的时间。",
     "questions": "个问题",
-    "answeredIn": "平均 {{time}} 内回答",
     "whileAway": "你不在时",
     "awayTip": "你 30 分钟没有使用这台电脑或电脑休眠时完成的工作。",
     "awayLine": "的工作在那时完成",
@@ -2551,10 +2550,8 @@
       "questionsSub": "每 100 个团队处理的请求",
       "questionsAria": "每 100 个请求中向你提出的问题：{{list}}",
       "tooFewShort": "请求太少",
-      "taught": "由你教会",
-      "taughtSub": "本周",
-      "taughtLine": "的新笔记来自你的回答：{{total}} 条中的 {{you}} 条。",
-      "taughtNone": "本周尚无新笔记。"
+      "taughtNone": "本周尚无新笔记。",
+      "taughtShort": "本周新笔记中 {{pct}} 来自你的回答"
     },
     "work": {
       "title": "团队工作情况",
@@ -2586,6 +2583,7 @@
       "noPrice": "按用量付费价格计算。在设置中填写你的套餐价格，即可看到工作的真实成本。",
       "memberTip": "该成员在本期按其工作份额分摊的套餐费用。",
       "ofPlan": "来自你的 {{plan}}（每月 {{monthly}}）"
-    }
+    },
+    "questionsAnswered": "个问题，平均 {{time}} 内回答"
   }
 }
