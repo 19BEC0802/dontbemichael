@@ -39,11 +39,11 @@ own memory, working on your computer.
 > brings you only the calls that need you.
 
 > [!TIP]
-> **New in 0.2.1: a real fresh start, and Michael hears what the privacy check stops.**
-> Reset & start over now erases everything the app made for your office and keeps your own files.
-> Michael is told about every message the privacy check keeps from Pete, and why. Pete joins the
-> office's idle chatter, and webhooks hold anything but a plain status question for your approval.
-> In 0.2.0, Pete became the one team member on the internet.
+> **New in 0.2.2: Pulse, and Ask me cards you answer with a click.**
+> Pulse shows what the office got done, what it costs (on a Claude plan, your plan's real price
+> split by each member's share of the work), what the team learned and what was kept safe, with
+> ways to save you apply with one click. Michael's choices show as rows to pick, and you can delete
+> a team member for good. In 0.2.1, Reset & start over started truly fresh.
 
 ## Contents
 

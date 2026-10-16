@@ -1,6 +1,6 @@
 # Don't Be Michael: features and changes
 
-Everything the app does today, and every release that got it here (0.0.1 to 0.2.1). Part 1 is
+Everything the app does today, and every release that got it here (0.0.1 to 0.2.2). Part 1 is
 written to be lifted onto the GitHub page and the website as it is; Part 2 is the full list, release
 by release.
 
@@ -143,6 +143,24 @@ moving, and brings you only the decisions that need you.
   the file was kept.
 
 ## Part 2: Every change, release by release
+
+### 0.2.2 (2026-10-16)
+- Pulse, a new tab beside Tasks: recommendations to save (a check run less often, a lighter or
+  stronger model) applied only on Apply and undone with Undo; what got done; what was kept safe;
+  what the team learned and whether it asks you less; what was spent and your time; and Team at
+  work. It fills in the eight weeks before it started. On a Claude plan, cost is your plan's real
+  price split by each member's share of the work, with a price you can set in Settings.
+- Ask me cards with choices as rows to pick and a line per question; you never have to answer
+  every question, and what you leave blank goes back through Michael to whoever asked.
+- Delete a team member for good from the Danger zone in Edit agent.
+- Every office on the floor names its department on a plate, and the desk monitors are glass.
+- A team member stuck on a prompt is restarted and told to carry on, never handed to you.
+- Hook events carry a secret for each start, so a frame with no secret or an old one reaches
+  nothing (issue #61).
+- Pete's privacy check answers at launch, Pete no longer stops on permission prompts, and the app
+  never answers a permission prompt for an agent.
+- Six contributor fixes: Yesterday across clock changes, release notes with &, <, >, a damaged
+  pause notice, close button feedback, a street address example and more local currencies.
 
 ### 0.2.1 (2026-10-14)
 - Reset & start over starts truly fresh: it erases everything the app made for the office (the
