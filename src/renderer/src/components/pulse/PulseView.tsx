@@ -217,7 +217,9 @@ export function PulseView() {
     const last = learn.weeks[learn.weeks.length - 1];
     const lastAdded = last ? last.added.you + last.added.job + last.added.michael : 0;
     // Team at work: everyone on the team now, Michael included, busiest first.
-    const rows = s.members.filter((m) => byId.has(m.agentId)).sort((a, b) => b.busyMs - a.busyMs);
+    const rows = s.members.filter((m) => byId.has(m.agentId))
+      .map((m) => ({ ...m, busyMs: m.busyMs ?? 0, turns: m.turns ?? 0, dayBusy: m.dayBusy ?? [] }))
+      .sort((a, b) => b.busyMs - a.busyMs);
     const work = teamAtWork(rows);
     const maxBusy = Math.max(1, ...rows.map((m) => m.busyMs));
     const maxKnows = Math.max(1, ...rows.map((m) => learn.knows[m.agentId] ?? 0));

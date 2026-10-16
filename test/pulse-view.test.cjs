@@ -58,7 +58,7 @@ test('line icons, never emoji; Team at work lists everyone on the team busiest f
   // Value: protects=D11 icons and proposal 3 Team at work; fails_when=emoji return, a removed member shows, Michael is left out, a short worker is judged on cost, or a row stops opening the detail; why_new=owner proposal 3; seam=none; no_claim=pixel layout (visual QA)
   assert.match(view, /KIND_ICON: Record<WorkKind, IconName> = \{ email: 'mail', sent: 'send', task: 'check', check: 'clock' \}/);
   assert.doesNotMatch(view, /\p{Extended_Pictographic}/u);
-  assert.match(view, /const rows = s\.members\.filter\(\(m\) => byId\.has\(m\.agentId\)\)\.sort\(\(a, b\) => b\.busyMs - a\.busyMs\);/);
+  assert.match(view, /const rows = s\.members\.filter\(\(m\) => byId\.has\(m\.agentId\)\)\n\s+\.map\(\(m\) => \(\{ \.\.\.m, busyMs: m\.busyMs \?\? 0, turns: m\.turns \?\? 0, dayBusy: m\.dayBusy \?\? \[\] \}\)\)\n\s+\.sort\(\(a, b\) => b\.busyMs - a\.busyMs\);/);
   assert.match(view, /const work = teamAtWork\(rows\);/);
   assert.match(view, /m\.agentId === godId \? t\('pulse\.officeManager'\)/);
   assert.match(view, /m\.busyMs >= MIN_BUSY_FOR_RATE_MS && m\.usd > 0/);
