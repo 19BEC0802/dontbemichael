@@ -25,7 +25,7 @@ Don't Be Michael keeps its own version line, starting at 0.0.1.
 
 ### Security
 
-- **Hook events carry a secret for each start (issue #61).** Every team member's events (a turn starting, a tool used, a turn finished, its cost) now carry a secret the app gives it when it starts, and the app takes the sender from that secret. An event with no secret, someone else's, or one from an earlier start reaches nothing, and a tool check from it is refused. Behavior change for agents: none in what they do; an engine bridge that drops the secret loses its hook features until fixed.
+- **Hook events carry a secret for each start (issue #61).** Every team member's events (a turn starting, a tool used, a turn finished, its cost) now carry a secret the app gives it when it starts, and the app takes the sender from that secret. An event with no secret, someone else's, or one from an earlier start reaches nothing, and a tool check from it is refused. Behavior change for agents: none in what they do; an engine bridge that drops the secret loses its hook features until fixed. Thanks to @codedbygo, who built the same design independently in #327.
 
 ### Fixed
 
