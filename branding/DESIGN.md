@@ -1160,7 +1160,13 @@ half written message survives the switch.
   requests (an SVG line; a week under 20 requests is a gap), and Taught by you (this week's
   share of new notes from the owner's answers).
 - **Office row** next (owner, 2026-10-15): Where the money went (one bar,
-  department colors, named), plan use (SVG ring, on a Claude plan only, with an `amber` soft
+  department colors, named). On a Claude plan with a known price (Settings > Agents, else
+  the plan found in the owner's Claude account), every dollar on Pulse is a member's part of
+  the plan's real cost for the days so far in the period, split by their share of the work
+  (their pay per use value); the line reads "$N of your Claude Max 20x ($200 a month), split
+  by each member's share of the work" and the pay per use figure sits behind its (i). On an
+  API key the dollars are what was spent; on a plan with no known price, pay per use with a
+  pointer to Settings. Team at work's column then reads Cost, not Value. plan use (SVG ring, on a Claude plan only, with an `amber` soft
   "Runs out around …" when the pace says so), Your time and While you were away.
 - **Team at work** last, in place of the member tiles (owner, 2026-10-15): one card with a
   headline (the two busiest members' share of working time, who was quiet, who cost the most

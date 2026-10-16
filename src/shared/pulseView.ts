@@ -31,5 +31,10 @@ export interface PulseView {
   keptSafe: KeptSafe;
   /** The last four weeks of what the team learned, and its questions to the owner. */
   learning: Learning;
+  /** On a Claude plan with a known price: every dollar above is the member's
+   *  part of the plan's real cost for the period, split by share of the work;
+   *  `payPerUse` is what the same work would cost per use. Null on an API key
+   *  (dollars are what was spent) or a plan with no known price. */
+  plan: { label: string | null; monthly: number; source: 'owner' | 'detected'; periodCost: number; payPerUse: number } | null;
 }
 

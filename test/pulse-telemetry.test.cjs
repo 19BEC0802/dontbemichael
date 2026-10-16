@@ -179,7 +179,7 @@ function service(t, opts = {}) {
     members: () => [{ id: 'toby', isGod: false }, { id: 'god', isGod: true }], godId: () => 'god', tasks: () => [],
     missions: () => missions, models: () => models, ladder: () => [], priceOf: () => undefined,
     applyMissions: (change) => { const next = change(missions); if (!next) return { ok: false, error: 'not found' }; missions = next; return { ok: true }; },
-    billing: () => 'account', memory: () => ({ notes: [], procedures: {} }), now: env.clock.now
+    billing: () => opts.billing ?? 'account', plan: () => opts.plan ?? null, memory: () => ({ notes: [], procedures: {} }), now: env.clock.now
   });
   return { ...env, svc, missions: () => missions, setMissions: (m) => { missions = m; } };
 }
@@ -325,4 +325,30 @@ test('the backfill reads the office log, sessions and cost ledger once, before t
   const { keptSafe } = loadTs('src/shared/pulseSafety.ts');
   const ks = keptSafe(proc.safetyRows('/office', '2000-01-01', '2999-01-01'));
   assert.deepEqual([ks.webAnswers.clean, ks.rules.quickbooks], [1, 1]);
+});
+
+test("on a plan, each member's cost is their part of the plan's cost so far this period; on an API key nothing is split", (t) => {
+  // Value: protects=the owner's realistic cost (2026-10-15); fails_when=members' costs do not add up to the period's plan cost, a share changes, the pay per use figure is lost, or an API key is split; why_new=owner 2026-10-15; seam=none; no_claim=the plan price itself (owner or list)
+  const { planCostFor } = loadTs('src/shared/claudePlan.ts');
+  const { periodRange } = loadTs('src/shared/teamPerformance.ts');
+  const add = (env) => {
+    const now = env.clock.now();
+    env.store.cost('toby', 'x', 3, 100, null, now - 3600_000);
+    env.store.cost('pam', 'y', 1, 100, null, now - 3600_000);
+    env.proc.tick('/office');
+  };
+  const onPlan = service(t, { plan: { plan: 'max-20x', label: 'Claude Max 20x', monthly: 200, source: 'detected' } });
+  add(onPlan);
+  const v = onPlan.svc.snapshot('this-week');
+  const r = periodRange('this-week', onPlan.clock.now());
+  const cost = planCostFor(200, r.fromMs, r.toMs, onPlan.clock.now());
+  assert.ok(Math.abs(v.snapshot.totalUsd - cost) < 1e-9);
+  assert.ok(Math.abs(v.snapshot.members.reduce((s, m) => s + m.usd, 0) - cost) < 1e-9);
+  assert.equal(v.plan.payPerUse, 4);
+  assert.ok(Math.abs(v.snapshot.members.find((m) => m.agentId === 'toby').share - 0.75) < 1e-9);
+  const onKey = service(t, { billing: 'apiKey', plan: { plan: 'max-20x', label: 'Claude Max 20x', monthly: 200, source: 'detected' } });
+  add(onKey);
+  const k = onKey.svc.snapshot('this-week');
+  assert.equal(k.plan, null);
+  assert.equal(k.snapshot.totalUsd, 4);
 });

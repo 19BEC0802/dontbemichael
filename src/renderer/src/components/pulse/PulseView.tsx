@@ -34,6 +34,7 @@ const KIND_ICON: Record<WorkKind, IconName> = { email: 'mail', sent: 'send', tas
 /** The team average mark: a dashed line drawn as a gradient. */
 const AVG_DASH = 'repeating-linear-gradient(to bottom, var(--cth-ink-3) 0 3px, transparent 3px 6px)';
 const money = (v: number): string => `$${(Math.round(v * 100) / 100).toFixed(2)}`;
+const dollars = (v: number): string => `$${Math.round(v)}`;
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 function duration(ms: number, t: (k: string, o?: Record<string, unknown>) => string): string {
   const m = Math.round(ms / 60_000);
@@ -232,6 +233,8 @@ export function PulseView() {
       return { label: weekly ? d.toLocaleDateString(i18n.language, { day: 'numeric', month: 'numeric' }) : d.toLocaleDateString(i18n.language, { weekday: 'narrow' }) };
     });
     const workGrid: CSSProperties = { display: 'grid', alignItems: 'center', gap: 14, gridTemplateColumns: layout === 'wide' ? `190px minmax(0, 1fr) 66px ${weekly ? 64 : 112}px 110px 76px 60px` : layout === 'mid' ? '170px minmax(0, 1fr) 66px 76px 60px' : 'minmax(0, 1fr) minmax(0, 1fr) 60px 70px' };
+    // On a plan or an API key the dollars are a real cost; otherwise a pay per use value.
+    const costWord = view.plan || view.billing === 'apiKey' ? 'pulse.work.cost' : 'pulse.work.value';
     const outcomeLabel = (o: Outcome): string => t(`pulse.outcome.${o.kind}`, { sub: o.sub ?? 0 });
     const outcomeAria = (o: Outcome): string => `${outcomeLabel(o)}: ${o.by.map((b) => `${nameOf(b.agentId)} ${b.count}`).join(', ')}`;
     // Saved by your changes shows only once a change was applied (owner, 2026-10-15).
@@ -361,7 +364,12 @@ export function PulseView() {
           <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8, gridColumn: layout === 'mid' ? '1 / -1' : undefined }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{t('pulse.whereMoneyWent')}</h2>
-              <span style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}><b style={{ ...mono, color: 'var(--cth-ink)' }}>{money(s.totalUsd)}</b> {t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.atApiPrices')}</span>
+              <span style={{ fontSize: 11, color: 'var(--cth-ink-3)', display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                <b style={{ ...mono, color: 'var(--cth-ink)' }}>{money(s.totalUsd)}</b>
+                {view.plan
+                  ? <>{t('pulse.plan.partOf', { plan: view.plan.label ?? t('pulse.plan.yourPlan'), monthly: dollars(view.plan.monthly) })}<InfoTip text={t('pulse.plan.tip', { monthly: dollars(view.plan.monthly), payPerUse: money(view.plan.payPerUse) })} /></>
+                  : t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.plan.noPrice')}
+              </span>
             </div>
             <WhoBar by={s.members.filter((m) => m.usd > 0).map((m) => ({ agentId: m.agentId, count: Math.round(m.usd * 100) / 100 }))} colorOf={colorOf} nameOf={nameOf} height={14} aria={s.members.map((m) => `${nameOf(m.agentId)} ${money(m.usd)}`).join(', ')} />
           </div>
@@ -404,7 +412,7 @@ export function PulseView() {
                   <span style={label}>{t('pulse.work.hours')}</span>
                   {layout === 'wide' && <span style={{ display: 'grid', gridTemplateColumns: `repeat(${strip.length}, 12px)`, gap: 4, fontSize: 9, color: 'var(--cth-ink-3)', textAlign: 'center' }}>{strip.map((d, i) => <span key={i}>{d.label}</span>)}</span>}
                   {layout === 'wide' && <span style={label}>{t('pulse.work.knows')}</span>}
-                  <span style={{ ...label, justifyContent: 'flex-end' }}>{t('pulse.work.value')}</span>
+                  <span style={{ ...label, justifyContent: 'flex-end' }}>{t(costWord)}</span>
                   {layout !== 'narrow' && <span style={{ ...label, justifyContent: 'flex-end' }}>{t('pulse.work.perHour')}</span>}
                 </div>
                 {rows.map((m) => {
@@ -442,7 +450,7 @@ export function PulseView() {
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, color: 'var(--cth-ink-3)', alignItems: 'center', paddingTop: 8, borderTop: '1px solid var(--cth-line)' }}>
                 <span><span style={{ display: 'inline-block', width: 1.5, height: 12, background: AVG_DASH, marginInlineEnd: 5, verticalAlign: 'middle' }} />{t('pulse.work.average', { time: duration(work.avgMs, t) })}</span>
                 {layout === 'wide' && <span>{t('pulse.work.knowsLegend')}</span>}
-                <span>{t(view.billing === 'apiKey' ? 'pulse.work.valueSpent' : 'pulse.work.valueLegend')}</span>
+                <span>{t(view.plan ? 'pulse.work.planLegend' : view.billing === 'apiKey' ? 'pulse.work.valueSpent' : 'pulse.work.valueLegend')}</span>
                 <span style={{ marginInlineStart: 'auto' }}>{t('pulse.work.open')}</span>
               </div>
             </>}
@@ -580,7 +588,7 @@ function MemberDetail({ id, data, name, onClose, money }: { id: string; data: Pu
         </div>
         {m && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-            {fact(t('pulse.value'), money(m.usd), t('pulse.shareOfOffice', { pct: Math.round(m.share * 100) }), t('pulse.valueTip'))}
+            {fact(t(data.plan || data.billing === 'apiKey' ? 'pulse.work.cost' : 'pulse.value'), money(m.usd), t('pulse.shareOfOffice', { pct: Math.round(m.share * 100) }), t(data.plan ? 'pulse.plan.memberTip' : 'pulse.valueTip'))}
             {fact(t('pulse.perPiece'), m.costForWork.perPiece !== null ? `$${m.costForWork.perPiece.toFixed(2)}` : '…', m.costForWork.kind ? t(`pulse.per.${m.costForWork.kind}`) : t('pulse.tooFew'), t('pulse.perPieceTip'))}
             {fact(t('pulse.yourTime'), t('pulse.asksCount', { count: m.asks }), m.askWaitMs !== null ? t('pulse.waited', { time: duration(m.askWaitMs, t) }) : '', t('pulse.yourTimeTip'))}
             {fact(t('pulse.keptAsIs'), m.kept.share !== null ? `${Math.round(m.kept.share * 100)}%` : `${m.kept.kept}/${m.kept.decisions}`, t('pulse.keptLine', { kept: m.kept.kept, decisions: m.kept.decisions }), t('pulse.keptTip'))}

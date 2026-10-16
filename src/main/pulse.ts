@@ -17,6 +17,7 @@ import {
 } from '../shared/teamPerformance';
 import { adviceFor, visibleAdvice, ADVICE_WINDOW_MS, type Advice, type Dismissal, type LadderModel, type MissionFact } from '../shared/teamAdvice';
 import { keptSafe } from '../shared/pulseSafety';
+import { planCostFor, scaleSnapshot, type PlanPrice } from '../shared/claudePlan';
 import { learning, type Learning, type NoteFact } from '../shared/teamLearning';
 import type { TelemetryStore } from './telemetryStore';
 import type { TelemetryProcessor } from './telemetryProcessor';
@@ -37,6 +38,8 @@ export interface PulseDeps {
   priceOf: (model: string) => number | undefined;
   applyMissions: (change: (list: ScheduledMission[]) => ScheduledMission[] | null) => { ok: boolean; error?: string };
   billing: () => 'account' | 'apiKey';
+  /** The owner's plan and its monthly price (Settings first, else detected); null on an API key. */
+  plan: () => PlanPrice | null;
   /** Members' memory notes (date and source only) and procedure counts. */
   memory: () => { notes: NoteFact[]; procedures: Record<string, number> };
   now?: () => number;
@@ -134,11 +137,11 @@ export class PulseService {
     const godId = this.d.godId();
     const db = this.d.db();
     const empty = pulseSnapshot({ period, now, days: [], cards: [], decisions: [], asks: [], members: [] });
-    if (!office || !db) return { available: false, billing, collectingSince: null, liveSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [], trend: {}, keptSafe: keptSafe([]), learning: learning({ now, notes: [], procedures: {}, asks: [], turns: [] }) };
+    if (!office || !db) return { available: false, billing, collectingSince: null, liveSince: null, snapshot: empty, advice: [], adviceFrom: null, saved: { state: 'none' }, headroom: null, applied: [], trend: {}, keptSafe: keptSafe([]), learning: learning({ now, notes: [], procedures: {}, asks: [], turns: [] }), plan: null };
     const range = periodRange(period, now);
     const from = Math.min(range.fromMs, now - ADVICE_WINDOW_MS);
     const ids = this.d.members().map((m) => m.id);
-    const snapshot = pulseSnapshot({
+    const raw = pulseSnapshot({
       period, now,
       days: this.d.processor.days(office, dayKey(from)),
       cards: this.d.processor.cards(office, from),
@@ -149,6 +152,12 @@ export class PulseService {
       gapDays: this.d.store.failureDays(office),
       ...(godId ? { michael: { agentId: godId, ...this.d.processor.michaelCounts(office, godId, range.fromMs) } } : {})
     });
+    // On a plan, each member's dollars are their part of the plan's real cost
+    // for the period, by share of the work (owner, 2026-10-15).
+    const price = billing === 'account' ? this.planPrice() : null;
+    const periodCost = price ? planCostFor(price.monthly, range.fromMs, range.toMs, now) : 0;
+    const snapshot = price && raw.totalUsd > 0 ? scaleSnapshot(raw, periodCost / raw.totalUsd) : raw;
+    const plan = price ? { label: price.label, monthly: price.monthly, source: price.source, periodCost, payPerUse: raw.totalUsd } : null;
     const first = this.d.processor.firstDay(office);
     // Recommendations count from live recording, never from a backfill.
     const live = this.d.processor.firstDay(office, true);
@@ -166,10 +175,15 @@ export class PulseService {
       saved: this.saved(office, applied),
       headroom: billing === 'account' ? planHeadroom(this.reading) : null,
       applied,
-      trend: this.trend(office, ids),
+      trend: this.trend(office, ids, price),
       keptSafe: keptSafe(this.d.processor.safetyRows(office, range.from, range.to)),
-      learning: this.learning(office)
+      learning: this.learning(office),
+      plan
     };
+  }
+
+  private planPrice(): PlanPrice | null {
+    try { return this.d.plan(); } catch { return null; }
   }
 
   /** The Learning row: four weeks of notes and of questions per request. */
@@ -183,8 +197,9 @@ export class PulseService {
     return learning({ now, notes: mem.notes, procedures: mem.procedures, asks: this.asks(), turns: [...turns].map(([day, t]) => ({ day, turns: t })) });
   }
 
-  /** Value per week, last four weeks (this week last), per member. */
-  private trend(office: string, ids: string[]): Record<string, number[]> {
+  /** Value per week, last four weeks (this week last), per member; on a plan,
+   *  each week's part of the plan's cost for that week. */
+  private trend(office: string, ids: string[], price: PlanPrice | null): Record<string, number[]> {
     const now = this.now();
     const start = periodRange('4-weeks', now).fromMs;
     const days = this.d.processor.days(office, dayKey(start));
@@ -193,6 +208,15 @@ export class PulseService {
     for (const d of days) {
       const w = Math.floor((new Date(`${d.day}T12:00:00`).getTime() - start) / (7 * 86_400_000));
       if (w >= 0 && w < 4) (out[d.agentId] ??= [0, 0, 0, 0])[w] += d.usd;
+    }
+    if (price) {
+      const week = 7 * 86_400_000;
+      for (let w = 0; w < 4; w++) {
+        const total = Object.values(out).reduce((s, v) => s + v[w], 0);
+        if (total <= 0) continue;
+        const factor = planCostFor(price.monthly, start + w * week, start + (w + 1) * week - 1, now) / total;
+        for (const v of Object.values(out)) v[w] *= factor;
+      }
     }
     return out;
   }

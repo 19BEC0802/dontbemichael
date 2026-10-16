@@ -334,6 +334,15 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
     stage({ defaultModel: id } as Partial<HarnessConfig>);
   };
   const [maxTurnsVal, setMaxTurnsVal] = useState<string>(cfgX.maxTurns != null ? String(cfgX.maxTurns) : '');
+  // The Claude plan's price a month, for Pulse's split by share of the work.
+  // Blank uses the plan found in the owner's Claude account.
+  const [planPriceVal, setPlanPriceVal] = useState<string>(cfgX.planPriceMonthly != null ? String(cfgX.planPriceMonthly) : '');
+  const [detectedPlan, setDetectedPlan] = useState<{ label: string | null; listMonthly: number | null } | null>(null);
+  useEffect(() => { void window.cth.claudePlan().then(setDetectedPlan).catch(() => setDetectedPlan(null)); }, []);
+  const planPricePatch = (): Partial<HarnessConfig> => {
+    const n = planPriceVal.trim() === '' ? undefined : Number(planPriceVal);
+    return { planPriceMonthly: Number.isFinite(n as number) && (n as number) > 0 ? Math.round((n as number) * 100) / 100 : undefined } as Partial<HarnessConfig>;
+  };
   const maxTurnsPatch = (): Partial<HarnessConfig> => {
     const n = maxTurnsVal.trim() === '' ? undefined : Number(maxTurnsVal);
     return { maxTurns: Number.isFinite(n as number) && (n as number) > 0 ? Math.round(n as number) : undefined } as Partial<HarnessConfig>;
@@ -401,6 +410,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
     try {
       const patch: Partial<HarnessConfig> = {
         ...maxTurnsPatch(),
+        ...planPricePatch(),
         ...budgetPatch(),
         ...pending
       };
@@ -1349,6 +1359,31 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           </div>
                         </div>
                       </div>
+
+                      {/* The Claude plan's price (owner, 2026-10-15): Pulse splits it
+                          across the team by share of the work. Not on an API key. */}
+                      {cfgX.claudeAuth !== 'apiKey' && (
+                        <>
+                          <div style={{ height: 1, background: 'var(--cth-line)' }} />
+                          <div>
+                            <div style={{ ...sectionHead, display: 'flex', gap: 6, alignItems: 'center' }}>
+                              {t('settings.agentsModels.planPrice')}<InfoTip text={t('settings.agentsModels.planPriceTip')} />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, color: 'var(--cth-ink-900)' }}>{detectedPlan?.label ?? t('settings.agentsModels.planUnknown')}</span>
+                              <span style={{ fontSize: 13, color: 'var(--cth-ink-500)' }}>$</span>
+                              <input
+                                type="number" min="0" step="1" value={planPriceVal}
+                                aria-label={t('settings.agentsModels.planPriceAria')}
+                                onChange={(e) => setPlanPriceVal(e.target.value)}
+                                placeholder={detectedPlan?.listMonthly != null ? String(detectedPlan.listMonthly) : ''}
+                                className="cth-input" style={{ ...slackInputStyle, width: 100 }}
+                              />
+                              <span style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>{t('settings.agentsModels.aMonth')}</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
 
                       <div style={{ height: 1, background: 'var(--cth-line)' }} />
 

@@ -365,7 +365,8 @@ export function teamAtWork(members: Array<{ agentId: string; busyMs: number; usd
   const usual = median(rates);
   let costliest: { agentId: string; usd: number; busyMs: number; perHour: number } | null = null;
   for (const m of members) {
-    if (m.busyMs < MIN_BUSY_FOR_RATE_MS || m.usd < 1 || usual === null || rates.length < 3) continue;
+    // Dollars may be a share of a flat plan, so any cost counts; the rate is what is compared.
+    if (m.busyMs < MIN_BUSY_FOR_RATE_MS || m.usd <= 0 || usual === null || rates.length < 3) continue;
     const perHour = m.usd / (m.busyMs / 3_600_000);
     if (perHour >= 2 * usual) {
       chips[m.agentId] = { kind: 'costly', perHour };

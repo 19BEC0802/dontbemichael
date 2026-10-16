@@ -120,6 +120,8 @@ export interface HarnessConfig {
   godProvider?: AgentProvider;
   /** How Claude Code signs in: the owner's Claude account, or an Anthropic API key (mirrors src/main/config.ts). */
   claudeAuth?: 'account' | 'apiKey';
+  /** The owner's monthly Claude plan price in USD; unset uses the detected plan's (mirrors src/main/config.ts). */
+  planPriceMonthly?: number;
   godModel?: string;
   /** Per-server consent for the default MCP bundle, keyed by catalog id (mirrors
    *  src/main/config.ts; seeded from MCP_CATALOG). */

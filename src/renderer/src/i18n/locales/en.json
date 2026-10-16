@@ -293,7 +293,12 @@
       "advanced": "Advanced",
       "maxTurns": "Max turns per run",
       "unlimited": "Unlimited",
-      "blankUnlimited": "Blank = unlimited"
+      "blankUnlimited": "Blank = unlimited",
+      "planPrice": "Your Claude plan",
+      "planPriceTip": "Pulse splits this price across the team by each member's share of the work. Leave it blank to use the plan found in your Claude account.",
+      "planUnknown": "Plan not found",
+      "planPriceAria": "Plan price a month",
+      "aMonth": "a month"
     },
     "autonomy": {
       "autonomy": "Autonomy",
@@ -2463,7 +2468,6 @@
     "officeManager": "Office manager",
     "whereMoneyWent": "Where the money went",
     "spentApiKey": "billed to your API key",
-    "atApiPrices": "at API prices; your plan cost doesn't change",
     "planAria": "Plan use {{pct}} percent",
     "planUse": "Plan use",
     "planTip": "The fullest usage window on your Claude plan. Every team member shares it.",
@@ -2492,7 +2496,7 @@
     },
     "value": "Value",
     "shareOfOffice": "{{pct}}% of the office",
-    "valueTip": "What this work would cost at API prices. On a Claude plan, your bill does not change.",
+    "valueTip": "What this work would cost at pay per use prices.",
     "perPiece": "Per piece",
     "perPieceTip": "An estimate: scheduled runs by their own cost, other work sharing the rest.",
     "asksCount": "{{count}} asks",
@@ -2556,7 +2560,7 @@
     },
     "work": {
       "title": "Team at work",
-      "tip": "Working time runs from each request a member takes to its last reply, up to an hour each. Value is at API prices.",
+      "tip": "Working time runs from each request a member takes to its last reply, up to an hour each. Cost is each member's part of your plan by their share of the work.",
       "none": "No working time recorded yet.",
       "headTop": "{{a}} and {{b}} did {{pct}} of the team's working time.",
       "headQuiet": "{{names}} were mostly quiet.",
@@ -2574,10 +2578,19 @@
       "costly": "Costly for its work",
       "average": "Team average, {{time}}",
       "knowsLegend": "Knows: notes and written ways of working",
-      "valueLegend": "Value at API prices",
+      "valueLegend": "Value at pay per use prices",
       "valueSpent": "Value is what was spent",
       "open": "Click a member for their week",
-      "rowAria": "{{name}}: {{time}} of work, {{value}}"
+      "rowAria": "{{name}}: {{time}} of work, {{value}}",
+      "cost": "Cost",
+      "planLegend": "Cost: each member's part of your plan"
+    },
+    "plan": {
+      "partOf": "of your {{plan}} ({{monthly}} a month), split by each member's share of the work",
+      "yourPlan": "Claude plan",
+      "tip": "Your plan costs {{monthly}} a month. This is its share for the days so far in this period, split by how much of the work each member did. The same work would cost {{payPerUse}} at pay per use prices.",
+      "noPrice": "at pay per use prices. Set your plan's price in Settings to see what the work really costs.",
+      "memberTip": "This member's part of your plan's cost for the period, by their share of the work."
     }
   }
 }

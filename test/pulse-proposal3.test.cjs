@@ -135,3 +135,68 @@ test('team memory reads dates and sources only, for the members asked about', (t
   assert.deepEqual(m.notes, [{ agentId: 'pam', source: 'owner', date: '2026-10-01' }, { agentId: 'pam', source: 'task', date: '2026-10-02' }]);
   assert.deepEqual(m.procedures, { pam: 1 });
 });
+
+// ─── the plan's real cost, split by share of the work (owner, 2026-10-15) ──
+
+const { planFromAccount, planPrice, planCostFor, scaleSnapshot, DAYS_PER_MONTH } = loadTs('src/shared/claudePlan.ts');
+const { readClaudePlan, forgetClaudePlan } = loadTs('src/main/claudeAccount.ts');
+
+test('the plan comes from Claude Code\'s account record, and the owner\'s price wins over the list price', () => {
+  // Value: protects=a realistic cost on a plan; fails_when=Max 20x reads as 5x, a team plan gets a made up price, or the owner's price is ignored; why_new=owner 2026-10-15; seam=none; no_claim=current list prices (the owner's figure covers drift)
+  assert.equal(planFromAccount({ organizationType: 'claude_max', organizationRateLimitTier: 'default_claude_max_20x' }), 'max-20x');
+  assert.equal(planFromAccount({ organizationType: 'claude_max', organizationRateLimitTier: 'default_claude_max_5x' }), 'max-5x');
+  assert.equal(planFromAccount({ organizationType: 'claude_pro' }), 'pro');
+  assert.equal(planFromAccount({ organizationType: 'claude_team' }), 'team');
+  assert.equal(planFromAccount({}), null);
+  assert.deepEqual(planPrice('max-20x', undefined), { plan: 'max-20x', label: 'Claude Max 20x', monthly: 200, source: 'detected' });
+  assert.deepEqual(planPrice('max-20x', 180), { plan: 'max-20x', label: 'Claude Max 20x', monthly: 180, source: 'owner' });
+  assert.equal(planPrice('team', undefined), null, 'a seat priced plan needs the owner\'s figure');
+  assert.equal(planPrice('team', 150).monthly, 150);
+  assert.equal(planPrice(null, 0), null);
+});
+
+test('the period\'s plan cost counts only the days that have passed, and the split keeps each member\'s share', () => {
+  // Value: protects=the numbers on a plan; fails_when=a whole week is charged on Monday, a member's share changes, or per piece costs stay at pay per use prices; why_new=owner 2026-10-15; seam=none; no_claim=none beyond protects
+  const from = new Date(2026, 9, 12).getTime();
+  const to = from + 7 * 86_400_000 - 1;
+  assert.ok(Math.abs(planCostFor(200, from, to, from + 3.5 * 86_400_000) - (200 * 3.5) / DAYS_PER_MONTH) < 1e-9);
+  assert.ok(Math.abs(planCostFor(200, from, to, to + 86_400_000 * 9) - (200 * 7) / DAYS_PER_MONTH) < 1e-6, 'a past week counts whole');
+  const snap = { totalUsd: 100, members: [
+    { agentId: 'a', usd: 75, share: 0.75, perPiece: { email: 2 }, costForWork: { kind: 'email', perPiece: 2, usual: 1, verdict: 'pricier', position: 0.9 } },
+    { agentId: 'b', usd: 25, share: 0.25, perPiece: {}, costForWork: { kind: null, perPiece: null, usual: null, verdict: 'too-few', position: 0.5 } }
+  ] };
+  const s = scaleSnapshot(snap, 0.2);
+  assert.deepEqual([s.totalUsd, s.members[0].usd, s.members[1].usd, s.members[0].share], [20, 15, 5, 0.75]);
+  assert.deepEqual([s.members[0].perPiece.email, s.members[0].costForWork.perPiece, s.members[0].costForWork.usual, s.members[1].costForWork.perPiece], [0.4, 0.4, 0.2, null]);
+});
+
+test('the plan is read from plan fields only, and a missing or broken record is no plan', (t) => {
+  // Value: protects=detection without touching secrets; fails_when=a token field is read, or a broken file throws; why_new=owner 2026-10-15; seam=temp file; no_claim=Claude Code's future record shape
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'md-plan-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, '.claude.json');
+  fs.writeFileSync(file, JSON.stringify({ oauthAccount: { organizationType: 'claude_max', organizationRateLimitTier: 'default_claude_max_20x', emailAddress: 'owner@example.com' } }));
+  forgetClaudePlan();
+  assert.equal(readClaudePlan(1, file), 'max-20x');
+  fs.writeFileSync(file, '{ not json');
+  forgetClaudePlan();
+  assert.equal(readClaudePlan(2, file), null);
+  forgetClaudePlan();
+  assert.equal(readClaudePlan(3, path.join(dir, 'missing.json')), null);
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/claudeAccount.ts'), 'utf8');
+  assert.doesNotMatch(src, /accessToken|refreshToken|credentials/, 'never near a secret');
+});
+
+test('Pulse shows the plan\'s cost with the pay per use figure behind the (i), and Settings takes an override', () => {
+  // Value: protects=the owner's ask; fails_when=the money line shows pay per use dollars on a known plan, the (i) loses the pay per use figure, or the Settings price is not saved; why_new=owner 2026-10-15; seam=source pins; no_claim=pixel layout
+  const view = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/components/pulse/PulseView.tsx'), 'utf8');
+  assert.match(view, /t\('pulse\.plan\.partOf', \{ plan: view\.plan\.label \?\? t\('pulse\.plan\.yourPlan'\), monthly: dollars\(view\.plan\.monthly\) \}\)\}<InfoTip text=\{t\('pulse\.plan\.tip', \{ monthly: dollars\(view\.plan\.monthly\), payPerUse: money\(view\.plan\.payPerUse\) \}\)\} \/>/);
+  const svc = fs.readFileSync(path.join(__dirname, '..', 'src/main/pulse.ts'), 'utf8');
+  assert.match(svc, /const price = billing === 'account' \? this\.planPrice\(\) : null;/, 'an API key shows what was spent');
+  assert.match(svc, /scaleSnapshot\(raw, periodCost \/ raw\.totalUsd\)/);
+  const settings = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/components/SettingsModal.tsx'), 'utf8');
+  assert.match(settings, /\.\.\.planPricePatch\(\),/);
+  assert.match(settings, /\{cfgX\.claudeAuth !== 'apiKey' && \(/);
+  const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/i18n/locales/en.json'), 'utf8'));
+  assert.match(en.pulse.plan.tip, /\{\{payPerUse\}\} at pay per use prices/);
+});

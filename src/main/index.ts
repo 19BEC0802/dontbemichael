@@ -79,6 +79,8 @@ import { makeResearchGoal } from './researchGoal';
 import { ownResearchDir, readResearchNotes } from './researchNotes';
 import { backfilled, runBackfill } from './pulseBackfill';
 import { readTeamMemory } from './teamMemory';
+import { readClaudePlan } from './claudeAccount';
+import { planPrice, PLAN_LABELS, PLAN_PRICES } from '../shared/claudePlan';
 import { claudeProjectsRoot, projectDir, projectDirs, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
@@ -597,6 +599,7 @@ const pulse = new PulseService({
   priceOf: (m) => knownPrice(m),
   applyMissions: (change) => applyMissions(change),
   billing: () => (readConfig().claudeAuth === 'apiKey' ? 'apiKey' : 'account'),
+  plan: () => planPrice(readClaudePlan(), readConfig().planPriceMonthly),
   memory: () => { const root = hive.root(); return root ? readTeamMemory(root, Object.keys(hive.registry().agents ?? {})) : { notes: [], procedures: {} }; }
 });
 // The office log kinds Pulse counts, and the board each tick reads.
@@ -6506,6 +6509,11 @@ ipcMain.handle('missions:upsert', (_evt, mission: unknown): MissionOpResult => {
 });
 // ─── IPC: Pulse (docs/designs/team-performance.md) ───────────────────────────
 const PULSE_PERIODS: readonly string[] = ['this-week', 'last-week', '4-weeks'];
+// The detected Claude plan and its list price, for Settings > Agents.
+ipcMain.handle('claude:plan', () => {
+  const id = readClaudePlan();
+  return { label: id ? PLAN_LABELS[id] : null, listMonthly: id ? PLAN_PRICES[id] : null };
+});
 ipcMain.handle('pulse:snapshot', (_evt, period: unknown) => {
   try { pulseTelemetry.flush(); const office = pulseOffice(); if (office) pulseProcessor.tick(office); } catch (e) { console.error('[pulse] snapshot tick', e); }
   return pulse.snapshot(PULSE_PERIODS.includes(String(period)) ? (period as Period) : 'this-week');

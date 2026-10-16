@@ -1367,6 +1367,8 @@ const api = {
   // ─── Pulse (docs/designs/team-performance.md) ─────────────────────────────
   /** What the Pulse view shows for a period. */
   pulseSnapshot: (period: Period): Promise<PulseView> => ipcRenderer.invoke('pulse:snapshot', period),
+  /** The Claude plan found in the owner's Claude account, and its list price a month. */
+  claudePlan: (): Promise<{ label: string | null; listMonthly: number | null }> => ipcRenderer.invoke('claude:plan'),
   /** The owner's Apply on a way to save. A model change comes back for the store to make. */
   pulseApply: (id: string, expected: unknown): Promise<{ ok: true; kind: 'schedule'; appliedId: number } | { ok: true; kind: 'model'; agentId: string; to: string; from: string | null } | { ok: false; error: 'stale' | 'unavailable' | 'failed' }> =>
     ipcRenderer.invoke('pulse:apply', id, expected),

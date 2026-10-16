@@ -293,7 +293,12 @@
       "advanced": "高级",
       "maxTurns": "每次运行最大轮数",
       "unlimited": "无限制",
-      "blankUnlimited": "留空 = 无限制"
+      "blankUnlimited": "留空 = 无限制",
+      "planPrice": "你的 Claude 套餐",
+      "planPriceTip": "Pulse 会按每位成员的工作份额把这个价格分摊到团队。留空则使用在你的 Claude 账户中找到的套餐。",
+      "planUnknown": "未找到套餐",
+      "planPriceAria": "每月套餐价格",
+      "aMonth": "每月"
     },
     "autonomy": {
       "autonomy": "自主权",
@@ -2463,7 +2468,6 @@
     "officeManager": "办公室经理",
     "whereMoneyWent": "钱花在哪里",
     "spentApiKey": "计入你的 API 密钥",
-    "atApiPrices": "按 API 价格；你的套餐费用不变",
     "planAria": "套餐用量百分之 {{pct}}",
     "planUse": "套餐用量",
     "planTip": "你 Claude 套餐中用得最满的用量窗口。所有团队成员共用。",
@@ -2492,7 +2496,7 @@
     },
     "value": "价值",
     "shareOfOffice": "占办公室 {{pct}}%",
-    "valueTip": "这些工作按 API 价格的成本。在 Claude 套餐上，你的账单不变。",
+    "valueTip": "这些工作按用量付费价格计算的费用。",
     "perPiece": "每项",
     "perPieceTip": "估算：定时运行按其自身成本，其他工作分摊其余部分。",
     "asksCount": "{{count}} 个问题",
@@ -2556,7 +2560,7 @@
     },
     "work": {
       "title": "团队工作情况",
-      "tip": "工作时间从成员接到每个请求起，到其最后一次回复为止，每个请求最多计一小时。价值按 API 价格计算。",
+      "tip": "工作时间从成员接到每个请求起，到其最后一次回复为止，每个请求最多计一小时。成本为每位成员按工作份额分摊的套餐费用。",
       "none": "尚未记录工作时间。",
       "headTop": "{{a}} 和 {{b}} 完成了团队 {{pct}} 的工作时间。",
       "headQuiet": "{{names}} 大多比较清闲。",
@@ -2574,10 +2578,19 @@
       "costly": "相对工作量花费高",
       "average": "团队平均，{{time}}",
       "knowsLegend": "掌握：笔记和书面工作方法",
-      "valueLegend": "价值按 API 价格计算",
+      "valueLegend": "按用量付费价格计算的价值",
       "valueSpent": "价值即实际花费",
       "open": "点击成员查看其本周",
-      "rowAria": "{{name}}：工作 {{time}}，{{value}}"
+      "rowAria": "{{name}}：工作 {{time}}，{{value}}",
+      "cost": "成本",
+      "planLegend": "成本：每位成员分摊的套餐费用"
+    },
+    "plan": {
+      "partOf": "来自你的 {{plan}}（每月 {{monthly}}），按每位成员承担的工作份额分摊",
+      "yourPlan": "Claude 套餐",
+      "tip": "你的套餐每月 {{monthly}}。这是本期已过天数对应的费用，按每位成员完成的工作量分摊。同样的工作按用量付费需 {{payPerUse}}。",
+      "noPrice": "按用量付费价格计算。在设置中填写你的套餐价格，即可看到工作的真实成本。",
+      "memberTip": "该成员在本期按其工作份额分摊的套餐费用。"
     }
   }
 }
