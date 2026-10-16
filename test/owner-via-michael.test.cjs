@@ -48,6 +48,8 @@ test('Michael may still ask the owner in his own session', async (t) => {
 test('a team member stuck on a prompt is restarted by the app, told to carry on, and Michael asks the owner plainly only if it comes back', async (t) => {
   // Value: protects=the owner is never told to open a terminal or 1:1, a stuck member gets going again, and Ask me never flaps; fails_when=the relay asks for a 1:1 again, a restarted member is left idle, Michael is told a restart worked before the session started, or a returning prompt restarts in a loop; why_new=owner 2026-10-15 (Pete's permission card), ship review 2026-10-16 (D3); seam=HookServer.restartStuck
   const { hive, server } = await office(t);
+  // A business office: SessionStart returns the company profile, so it ends early in handle().
+  server.getCompanyProfile = () => 'Acme Dental, a clinic in Austin.';
   let clock = 1_000_000;
   server.now = () => clock;
   const restarted = [];
@@ -62,7 +64,8 @@ test('a team member stuck on a prompt is restarted by the app, told to carry on,
   assert.ok(told, 'the member is told to carry on');
   assert.match(told.body, /Carry on with your current work\./);
   assert.equal(hive.inbox('god').length, 0, 'Michael hears nothing until the session starts again');
-  await server.handle({ agent_id: 'pam', session_id: 's2', hook_event_name: 'SessionStart', source: 'resume' });
+  const started = await server.handle({ agent_id: 'pam', session_id: 's2', hook_event_name: 'SessionStart', source: 'resume' });
+  assert.ok(started?.hookSpecificOutput?.additionalContext, 'the session start carried context, as in a real office');
   let inbox = hive.inbox('god');
   assert.equal(inbox.length, 1);
   assert.match(inbox[0].subject, /Pam was restarted/);
@@ -85,10 +88,30 @@ test('a team member stuck on a prompt is restarted by the app, told to carry on,
     assert.doesNotMatch(m.body, /talk 1:1 with|answer it there|in that terminal/i);
     assert.doesNotMatch(m.body, /[\u2013\u2014]/);
   }
-  // Once Pam moved on, a new prompt is a new episode: restarted again.
+  // Once Pam moved on, a new prompt long after the restart is a new episode: restarted again.
   await server.handle({ agent_id: 'pam', session_id: 's2', hook_event_name: 'PostToolUse', tool_name: 'Read' });
   await server.handle(prompt);
   assert.deepEqual(restarted, ['pam', 'pam']);
+});
+
+test('the app\'s own wake note never starts a restart loop: a prompt soon after a restart goes to Michael', async (t) => {
+  // Value: protects=paid restarts stay bounded; fails_when=the wake prompt or an inbox read ends the episode and the same prompt restarts the member again; why_new=ship re-review 2026-10-16; seam=HookServer.restartStuck
+  const { hive, server } = await office(t);
+  let clock = 1_000_000;
+  server.now = () => clock;
+  const restarted = [];
+  server.restartStuck = (id) => { restarted.push(id); return true; };
+  const prompt = { agent_id: 'pam', session_id: 's', hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' };
+  await server.handle(prompt);
+  await server.handle({ agent_id: 'pam', session_id: 's2', hook_event_name: 'SessionStart', source: 'resume' });
+  clock += 90_000;
+  await server.handle({ agent_id: 'pam', session_id: 's2', hook_event_name: 'UserPromptSubmit', prompt: 'check your inbox' });
+  await server.handle({ agent_id: 'pam', session_id: 's2', hook_event_name: 'PostToolUse', tool_name: 'Read' });
+  await server.handle(prompt);
+  assert.deepEqual(restarted, ['pam'], 'one restart');
+  const stuck = hive.inbox('god').find((m) => /Pam is stuck/.test(m.subject));
+  assert.ok(stuck);
+  assert.match(stuck.body, /restarting Pam did not clear it/);
 });
 
 test('a restart whose new session never starts is no restart: Michael hears the member is still stuck', async (t) => {

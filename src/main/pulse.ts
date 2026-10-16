@@ -337,8 +337,9 @@ export class PulseService {
       return { ok: true, kind: 'schedule' };
     }
     // The model too: only while it is still the one the change set.
+    // (Still the old one is fine too: the roster may not have saved the change yet.)
     const current = this.d.models().find((m) => m.agentId === a.agentId)?.model ?? null;
-    if (current !== (a.after as { model: string | null }).model) return { ok: false, error: 'stale' };
+    if (current !== (a.after as { model: string | null }).model && current !== (a.before as { model: string | null }).model) return { ok: false, error: 'stale' };
     mark();
     return { ok: true, kind: 'model', agentId: a.agentId, to: (a.before as { model: string | null }).model };
   }

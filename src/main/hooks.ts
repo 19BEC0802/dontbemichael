@@ -32,6 +32,10 @@ const PROMPT_RELAY_DEDUPE_MS = 10 * 60_000;
 /** Prompts within this long after an automatic restart are the same prompt,
  *  still on screen while the restart runs, not a new one. */
 export const STUCK_SETTLE_MS = 60_000;
+/** A member stopped on a prompt again within this long after the app restarted
+ *  them is stuck for real, even if they moved on in between (the app's own
+ *  wake note counts as moving on): Michael asks the owner, never another restart. */
+export const STUCK_AGAIN_MS = 30 * 60_000;
 /** A restart counts once the member's session starts again within this long;
  *  otherwise Michael hears they are still stuck (ship review, 2026-10-16). */
 export const STUCK_CONFIRM_MS = 60_000;
@@ -437,6 +441,8 @@ export class HookServer {
     const subagent = typeof p.subagent_id === 'string' && p.subagent_id.length > 0;
     if (subagent && event === 'SubagentStop') return {};
     this.onEvent?.(agentId, event, p.message, p.tool_name);
+    // Before any early return below (SessionStart and Stop usually return early).
+    if (agentId && !subagent && event !== 'Notification' && this.stuckEpisodes.has(agentId)) this.stuckProgress(agentId, event);
     if (agentId && !subagent && typeof p.transcript_path === 'string' && p.transcript_path) {
       this.transcriptPaths.set(agentId, p.transcript_path);
       // Michael's notes fallback reads only the transcript his own session
@@ -971,8 +977,6 @@ export class HookServer {
     // real prompt.
     if (event === 'Notification' && agentId && isTerminalPrompt(p) && !this.isGod(agentId) && !this.onHold(agentId)) {
       this.stuckOnPrompt(agentId, (p.message ?? '').trim());
-    } else if (agentId && this.stuckEpisodes.has(agentId) && !subagent) {
-      this.stuckProgress(agentId, event);
     }
 
     // Forward everything else to the renderer so avatars reflect real activity.
@@ -1015,6 +1019,8 @@ export class HookServer {
    *  still stuck. It ends when the member moves on, so there is one automatic
    *  restart per episode and no raise and withdraw loop on Ask me. */
   private stuckEpisodes = new Map<string, { at: number; text: string; restarted: boolean; confirmed: boolean; escalated: boolean }>();
+  /** agentId → when the app last restarted it for a prompt; outlives the episode. */
+  private stuckRestartAt = new Map<string, number>();
 
   /** A member stopped on a prompt: restart them once, or, when it comes back
    *  before they moved on (or no window can restart them), Michael asks the owner. */
@@ -1027,6 +1033,12 @@ export class HookServer {
       if (!ep.escalated) ep.escalated = this.relayStuckToMichael(agentId, text, ep.restarted);
       return;
     }
+    const last = this.stuckRestartAt.get(agentId);
+    if (last !== undefined && now - last < STUCK_AGAIN_MS) {
+      // Restarted not long ago: no second restart, Michael asks the owner.
+      if (this.relayStuckToMichael(agentId, text, true)) this.stuckEpisodes.set(agentId, { at: now, text, restarted: true, confirmed: true, escalated: true });
+      return;
+    }
     let restarted = false;
     try { restarted = this.restartStuck?.(agentId) === true; } catch { /* the plain ask below */ }
     if (!restarted) {
@@ -1036,6 +1048,7 @@ export class HookServer {
       return;
     }
     this.stuckEpisodes.set(agentId, { at: now, text, restarted: true, confirmed: false, escalated: false });
+    this.stuckRestartAt.set(agentId, now);
     // The resumed session gets no prompt of its own: this note wakes the member
     // (the inbox nudge) so its work carries on.
     try {
