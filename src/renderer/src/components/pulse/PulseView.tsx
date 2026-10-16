@@ -353,18 +353,19 @@ export function PulseView() {
           </div>
         </Section>
 
-        <div style={{ display: 'grid', gridTemplateColumns: layout === 'wide' ? '1.6fr 1fr 1fr' : layout === 'mid' ? '1fr 1fr' : '1fr', gap: 12 }}>
-          <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8, gridColumn: layout === 'mid' ? '1 / -1' : undefined }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <h2 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{t('pulse.whereMoneyWent')}</h2>
-              <span style={{ fontSize: 11, color: 'var(--cth-ink-3)', display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                <b style={{ ...mono, color: 'var(--cth-ink)' }}>{money(s.totalUsd)}</b>
-                {view.plan
-                  ? <>{t('pulse.plan.partOf', { plan: view.plan.label ?? t('pulse.plan.yourPlan'), monthly: dollars(view.plan.monthly) })}<InfoTip text={t('pulse.plan.tip', { monthly: dollars(view.plan.monthly), payPerUse: money(view.plan.payPerUse) })} /></>
-                  : t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.plan.noPrice')}
-              </span>
+        <div style={{ display: 'grid', gridTemplateColumns: layout === 'wide' ? '1fr 1fr 1fr' : layout === 'mid' ? '1fr 1fr' : '1fr', gap: 12 }}>
+          {/* One total (owner, 2026-10-15): who spent what is Team at work's job. */}
+          <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
+            <div style={label}>
+              {t('pulse.whereMoneyWent')}
+              <InfoTip text={view.plan ? t('pulse.plan.tip', { monthly: dollars(view.plan.monthly), payPerUse: money(view.plan.payPerUse) }) : t('pulse.valueTip')} />
             </div>
-            <WhoBar by={s.members.filter((m) => m.usd > 0).map((m) => ({ agentId: m.agentId, count: Math.round(m.usd * 100) / 100 }))} colorOf={colorOf} nameOf={nameOf} height={14} aria={s.members.map((m) => `${nameOf(m.agentId)} ${money(m.usd)}`).join(', ')} />
+            <div style={{ ...mono, fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{money(s.totalUsd)}</div>
+            <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>
+              {view.plan
+                ? t('pulse.plan.ofPlan', { plan: view.plan.label ?? t('pulse.plan.yourPlan'), monthly: dollars(view.plan.monthly) })
+                : t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.plan.noPrice')}
+            </div>
           </div>
           {view.headroom && (
             <div style={{ ...card, padding: '14px 16px', display: 'flex', gap: 14, alignItems: 'center' }}>

@@ -190,7 +190,9 @@ test('the plan is read from plan fields only, and a missing or broken record is 
 test('Pulse shows the plan\'s cost with the pay per use figure behind the (i), and Settings takes an override', () => {
   // Value: protects=the owner's ask; fails_when=the money line shows pay per use dollars on a known plan, the (i) loses the pay per use figure, or the Settings price is not saved; why_new=owner 2026-10-15; seam=source pins; no_claim=pixel layout
   const view = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/components/pulse/PulseView.tsx'), 'utf8');
-  assert.match(view, /t\('pulse\.plan\.partOf', \{ plan: view\.plan\.label \?\? t\('pulse\.plan\.yourPlan'\), monthly: dollars\(view\.plan\.monthly\) \}\)\}<InfoTip text=\{t\('pulse\.plan\.tip', \{ monthly: dollars\(view\.plan\.monthly\), payPerUse: money\(view\.plan\.payPerUse\) \}\)\} \/>/);
+  assert.match(view, /<InfoTip text=\{view\.plan \? t\('pulse\.plan\.tip', \{ monthly: dollars\(view\.plan\.monthly\), payPerUse: money\(view\.plan\.payPerUse\) \}\)/);
+  assert.match(view, /t\('pulse\.plan\.ofPlan', \{ plan: view\.plan\.label \?\? t\('pulse\.plan\.yourPlan'\), monthly: dollars\(view\.plan\.monthly\) \}\)/);
+  assert.equal((view.match(/<WhoBar /g) || []).length, 2, 'the money card is one total; who spent what is Team at work (owner, 2026-10-15)');
   const svc = fs.readFileSync(path.join(__dirname, '..', 'src/main/pulse.ts'), 'utf8');
   assert.match(svc, /const price = billing === 'account' \? this\.planPrice\(\) : null;/, 'an API key shows what was spent');
   assert.match(svc, /scaleSnapshot\(raw, periodCost \/ raw\.totalUsd\)/);

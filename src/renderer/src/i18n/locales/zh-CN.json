@@ -2466,7 +2466,7 @@
     "foundWork": "有事可做",
     "nothingToDo": "无事可做",
     "officeManager": "办公室经理",
-    "whereMoneyWent": "钱花在哪里",
+    "whereMoneyWent": "支出",
     "spentApiKey": "计入你的 API 密钥",
     "planAria": "套餐用量百分之 {{pct}}",
     "planUse": "套餐用量",
@@ -2583,11 +2583,11 @@
       "planLegend": "成本：每位成员分摊的套餐费用"
     },
     "plan": {
-      "partOf": "来自你的 {{plan}}（每月 {{monthly}}），按每位成员承担的工作份额分摊",
       "yourPlan": "Claude 套餐",
       "tip": "你的套餐每月 {{monthly}}。这是本期已过天数对应的费用，按每位成员完成的工作量分摊。同样的工作按用量付费需 {{payPerUse}}。",
       "noPrice": "按用量付费价格计算。在设置中填写你的套餐价格，即可看到工作的真实成本。",
-      "memberTip": "该成员在本期按其工作份额分摊的套餐费用。"
+      "memberTip": "该成员在本期按其工作份额分摊的套餐费用。",
+      "ofPlan": "来自你的 {{plan}}（每月 {{monthly}}）"
     }
   }
 }

@@ -2466,7 +2466,7 @@
     "foundWork": "found work",
     "nothingToDo": "nothing to do",
     "officeManager": "Office manager",
-    "whereMoneyWent": "Where the money went",
+    "whereMoneyWent": "Spent",
     "spentApiKey": "billed to your API key",
     "planAria": "Plan use {{pct}} percent",
     "planUse": "Plan use",
@@ -2583,11 +2583,11 @@
       "planLegend": "Cost: each member's part of your plan"
     },
     "plan": {
-      "partOf": "of your {{plan}} ({{monthly}} a month), split by each member's share of the work",
       "yourPlan": "Claude plan",
       "tip": "Your plan costs {{monthly}} a month. This is its share for the days so far in this period, split by how much of the work each member did. The same work would cost {{payPerUse}} at pay per use prices.",
       "noPrice": "at pay per use prices. Set your plan's price in Settings to see what the work really costs.",
-      "memberTip": "This member's part of your plan's cost for the period, by their share of the work."
+      "memberTip": "This member's part of your plan's cost for the period, by their share of the work.",
+      "ofPlan": "of your {{plan}} ({{monthly}} a month)"
     }
   }
 }
