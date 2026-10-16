@@ -2597,6 +2597,6 @@
       "ofPlan": "من خطة {{plan}} ({{monthly}} شهريًا)"
     },
     "questionsAnswered": "سؤالًا، أُجيب عنها في {{time}} في المتوسط",
-    "asksBefore": "{{n}} {{before}}"
+    "asksBefore": "{{n}} سؤالًا {{before}}"
   }
 }
