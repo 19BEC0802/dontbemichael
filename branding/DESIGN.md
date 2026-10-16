@@ -1153,16 +1153,17 @@ half written message survives the switch.
   Michael), messages held because the check could not run (`amber` soft while above zero,
   "Nothing went out unchecked"), and steps stopped by the owner's settings by gate. A held
   message is never counted as protection.
-- **Learning**: a headline (notes and written ways of working the team holds, and how
-  questions per 100 requests moved), then three cards: What the team remembers (four weekly
-  bars of the running total, the week's new notes on top by source: `green` your answers,
-  `ink-4` on the job, `indigo` Michael, `neutral-soft` known before), Questions to you per 100
-  requests (an SVG line; a week under 20 requests is a gap), and Taught by you (this week's
-  share of new notes from the owner's answers).
-- **Office row** next (owner, 2026-10-15): one card with Spent (a mono 28 px total with what
-  it is beneath; no bar, who spent what is Team at work's job) and, beside it past a hairline,
-  plan use (SVG ring, on a Claude plan only, with an `amber` soft "Runs out around …" when the
-  pace says so); then Your time and While you were away. On a Claude plan with a known price
+- **Learning**: no header or headline (owner, 2026-10-15); three cards on a four column grid
+  with the office row below: What the team remembers spans two (four weekly bars of the
+  running total, the week's new notes on top by source: `green` your answers, `ink-4` on the
+  job, `indigo` Michael, `neutral-soft` known before; legend beside the bars), Questions to you
+  per 100 requests (an SVG line; a week under 20 requests is a gap) and Taught by you (this
+  week's share of new notes from the owner's answers). Cards use 12/14 px padding.
+- **Office row** next, on the same four columns (owner, 2026-10-15): one card spanning two with
+  Spent (a mono 24 px total with what it is beneath; no bar, who spent what is Team at work's
+  job) and, beside it past a hairline, plan use (a 60 px ring, on a Claude plan only, with an
+  `amber` soft "Runs out around …" when the pace says so); then Your time and While you were
+  away, a card each. On a Claude plan with a known price
   (Settings > Agents, else the plan found in the owner's Claude account), every dollar on Pulse
   is a member's part of the plan's real cost for the days so far in the period, split by their
   share of the work (their pay per use value); the line beneath reads "of your Claude Max 20x

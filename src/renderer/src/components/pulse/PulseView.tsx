@@ -215,7 +215,10 @@ export function PulseView() {
     const rules = (Object.entries(safe.rules) as Array<[RefusalGate, number]>).filter(([g, n]) => REFUSAL_GATES.includes(g) && n > 0);
     const rulesTotal = rules.reduce((n, [, x]) => n + x, 0);
     const learn = view.learning ?? { weeks: [], notes: 0, procedures: 0, knows: {} };
-    const rated = learn.weeks.filter((w) => w.per100 !== null);
+    // Learning and the office row share one four column grid; a wide card spans two.
+    const row4: CSSProperties = { display: 'grid', gridTemplateColumns: layout === 'wide' ? 'repeat(4, minmax(0, 1fr))' : layout === 'mid' ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: 12 };
+    const span2 = layout === 'narrow' ? undefined : 'span 2';
+    const tight: CSSProperties = { ...card, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 };
     const maxKnown = Math.max(1, ...learn.weeks.map((w) => w.total));
     const last = learn.weeks[learn.weeks.length - 1];
     const lastAdded = last ? last.added.you + last.added.job + last.added.michael : 0;
@@ -311,20 +314,18 @@ export function PulseView() {
           </div>
         </Section>
 
-        <Section title={t('pulse.learning.title')} tip={t('pulse.learning.tip')}>
-          <div style={{ fontSize: 13, color: 'var(--cth-ink-2)', lineHeight: '19px' }}>
-            <b style={{ color: 'var(--cth-ink)' }}>{t('pulse.learning.headline', { notes: learn.notes, procedures: learn.procedures })}</b>
-            {rated.length >= 2 && <> {t('pulse.learning.trend', { from: rated[0].per100, to: rated[rated.length - 1].per100 })}</>}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: layout === 'wide' ? '1.35fr 1fr 1fr' : layout === 'mid' ? '1fr 1fr' : '1fr', gap: 12 }}>
-            <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, gridColumn: layout === 'mid' ? '1 / -1' : undefined }}>
-              <TileTitle icon="book" title={t('pulse.learning.remembers')} sub={t('pulse.learning.remembersSub')} />
-              <div role="img" aria-label={learn.weeks.map((w) => `${fmtShort(w.from)} ${w.total}`).join(', ')} style={{ display: 'flex', gap: 22, alignItems: 'flex-end', height: 130, padding: '0 6px' }}>
+        {/* Learning and the office row (owner, 2026-10-15): no header of their
+            own, each card titled; four columns so no card holds empty room. */}
+        <section aria-label={t('pulse.learning.title')} style={row4}>
+          <div style={{ ...tight, gridColumn: span2 }}>
+            <TileTitle icon="book" title={t('pulse.learning.remembers')} sub={t('pulse.learning.remembersSub')} tip={t('pulse.learning.tip')} />
+            <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div role="img" aria-label={learn.weeks.map((w) => `${fmtShort(w.from)} ${w.total}`).join(', ')} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', height: 92 }}>
                 {learn.weeks.map((w) => {
                   const added = w.added.you + w.added.job + w.added.michael;
                   return (
-                    <div key={w.from} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: 52 }}>
-                      <div style={{ width: 34, height: 20 + (w.total / maxKnown) * 76, display: 'flex', flexDirection: 'column', borderRadius: 6, overflow: 'hidden', gap: 1 }}>
+                    <div key={w.from} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, width: 44 }}>
+                      <div style={{ width: 30, height: 12 + (w.total / maxKnown) * 48, display: 'flex', flexDirection: 'column', borderRadius: 5, overflow: 'hidden', gap: 1 }}>
                         <i style={{ flex: w.added.michael, background: 'var(--cth-indigo)' }} />
                         <i style={{ flex: w.added.job, background: 'var(--cth-ink-4)' }} />
                         <i style={{ flex: w.added.you, background: 'var(--cth-green)' }} />
@@ -336,60 +337,64 @@ export function PulseView() {
                   );
                 })}
               </div>
-              <Legend items={[[t('pulse.learning.fromYou'), 'var(--cth-green)'], [t('pulse.learning.onJob'), 'var(--cth-ink-4)'], [t('pulse.learning.fromMichael'), 'var(--cth-indigo)'], [t('pulse.learning.before'), 'var(--cth-neutral-soft)']]} />
-            </div>
-            <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <TileTitle icon="help" title={t('pulse.learning.questions')} sub={t('pulse.learning.questionsSub')} />
-              <RateLine weeks={learn.weeks.map((w) => ({ label: fmtShort(w.from), v: w.per100 }))} aria={t('pulse.learning.questionsAria', { list: learn.weeks.map((w) => `${fmtShort(w.from)} ${w.per100 ?? t('pulse.learning.tooFewShort')}`).join(', ') })} />
-            </div>
-            <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <TileTitle icon="learn" title={t('pulse.learning.taught')} sub={t('pulse.learning.taughtSub')} />
-              {lastAdded > 0 ? <>
-                <div style={{ ...mono, fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{pct(last.added.you / lastAdded)}</div>
-                <div style={{ fontSize: 12, color: 'var(--cth-ink-2)', lineHeight: '17px' }}>{t('pulse.learning.taughtLine', { you: last.added.you, total: lastAdded })}</div>
-                <Stack parts={[{ n: last.added.you, color: 'var(--cth-green)' }, { n: last.added.job, color: 'var(--cth-ink-4)' }, { n: last.added.michael, color: 'var(--cth-indigo)' }]} aria={t('pulse.learning.taughtLine', { you: last.added.you, total: lastAdded })} />
-              </> : <div style={{ fontSize: 12, color: 'var(--cth-ink-3)' }}>{t('pulse.learning.taughtNone')}</div>}
-            </div>
-          </div>
-        </Section>
-
-        <div style={{ display: 'grid', gridTemplateColumns: layout === 'narrow' ? '1fr' : '2fr 1fr', gap: 12 }}>
-          {/* One total (owner, 2026-10-15): who spent what is Team at work's job.
-              Plan use sits in the same card, beside what was spent. */}
-          <div style={{ ...card, padding: '14px 16px', display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 180px' }}>
-            <div style={label}>
-              {t('pulse.whereMoneyWent')}
-              <InfoTip text={view.plan ? t('pulse.plan.tip', { monthly: dollars(view.plan.monthly), payPerUse: money(view.plan.payPerUse) }) : t('pulse.valueTip')} />
-            </div>
-            <div style={{ ...mono, fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{money(s.totalUsd)}</div>
-            <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>
-              {view.plan
-                ? t('pulse.plan.ofPlan', { plan: view.plan.label ?? t('pulse.plan.yourPlan'), monthly: dollars(view.plan.monthly) })
-                : t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.plan.noPrice')}
-            </div>
-          </div>
-          {view.headroom && (
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', flex: '1 1 220px', paddingInlineStart: 18, boxShadow: 'inset 1px 0 0 var(--cth-line)' }}>
-              <svg width={88} height={88} viewBox="0 0 88 88" role="img" aria-label={t('pulse.planAria', { pct: Math.round(view.headroom.usedPct) })}>
-                <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-neutral-soft)" strokeWidth={10} />
-                <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-ink-2)" strokeWidth={10} strokeLinecap="round" strokeDasharray={`${(Math.min(100, view.headroom.usedPct) / 100) * 226} 226`} transform="rotate(-90 44 44)" />
-                <text x={44} y={50} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={17} fontWeight={600} fill="var(--cth-ink)">{Math.round(view.headroom.usedPct)}%</text>
-              </svg>
-              <div>
-                <div style={label}>{t('pulse.planUse')}<InfoTip text={t('pulse.planTip')} /></div>
-                <div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.resets', { day: fmtDay(view.headroom.resetsAt) })}</div>
-                {view.headroom.runsOutAt && <div style={{ marginTop: 6 }}><span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cth-amber-text)', background: 'var(--cth-amber-soft)', borderRadius: 'var(--cth-r-pill)', padding: '2px 8px' }}>{t('pulse.runsOut', { day: fmtDay(view.headroom.runsOutAt) })}</span></div>}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 4, maxWidth: 240 }}>
+                <Legend items={[[t('pulse.learning.fromYou'), 'var(--cth-green)'], [t('pulse.learning.onJob'), 'var(--cth-ink-4)'], [t('pulse.learning.fromMichael'), 'var(--cth-indigo)'], [t('pulse.learning.before'), 'var(--cth-neutral-soft)']]} />
               </div>
             </div>
-          )}
           </div>
-          <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={tight}>
+            <TileTitle icon="help" title={t('pulse.learning.questions')} sub={t('pulse.learning.questionsSub')} />
+            <RateLine weeks={learn.weeks.map((w) => ({ label: fmtShort(w.from), v: w.per100 }))} aria={t('pulse.learning.questionsAria', { list: learn.weeks.map((w) => `${fmtShort(w.from)} ${w.per100 ?? t('pulse.learning.tooFewShort')}`).join(', ') })} />
+          </div>
+          <div style={tight}>
+            <TileTitle icon="learn" title={t('pulse.learning.taught')} sub={t('pulse.learning.taughtSub')} />
+            {lastAdded > 0 ? <>
+              <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{pct(last.added.you / lastAdded)}</div>
+              <div style={{ fontSize: 11, color: 'var(--cth-ink-2)', lineHeight: '15px' }}>{t('pulse.learning.taughtLine', { you: last.added.you, total: lastAdded })}</div>
+              <Stack parts={[{ n: last.added.you, color: 'var(--cth-green)' }, { n: last.added.job, color: 'var(--cth-ink-4)' }, { n: last.added.michael, color: 'var(--cth-indigo)' }]} aria={t('pulse.learning.taughtLine', { you: last.added.you, total: lastAdded })} />
+            </> : <div style={{ fontSize: 12, color: 'var(--cth-ink-3)' }}>{t('pulse.learning.taughtNone')}</div>}
+          </div>
+        </section>
+
+        <div style={row4}>
+          {/* One total (owner, 2026-10-15): who spent what is Team at work's job.
+              Plan use sits in the same card, beside what was spent. */}
+          <div style={{ ...tight, gridColumn: span2, flexDirection: 'row', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 160px' }}>
+              <div style={label}>
+                {t('pulse.whereMoneyWent')}
+                <InfoTip text={view.plan ? t('pulse.plan.tip', { monthly: dollars(view.plan.monthly), payPerUse: money(view.plan.payPerUse) }) : t('pulse.valueTip')} />
+              </div>
+              <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{money(s.totalUsd)}</div>
+              <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>
+                {view.plan
+                  ? t('pulse.plan.ofPlan', { plan: view.plan.label ?? t('pulse.plan.yourPlan'), monthly: dollars(view.plan.monthly) })
+                  : t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.plan.noPrice')}
+              </div>
+            </div>
+            {view.headroom && (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flex: '1 1 180px', paddingInlineStart: 18, boxShadow: 'inset 1px 0 0 var(--cth-line)' }}>
+                <svg width={60} height={60} viewBox="0 0 88 88" role="img" aria-label={t('pulse.planAria', { pct: Math.round(view.headroom.usedPct) })}>
+                  <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-neutral-soft)" strokeWidth={11} />
+                  <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-ink-2)" strokeWidth={11} strokeLinecap="round" strokeDasharray={`${(Math.min(100, view.headroom.usedPct) / 100) * 226} 226`} transform="rotate(-90 44 44)" />
+                  <text x={44} y={51} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={20} fontWeight={600} fill="var(--cth-ink)">{Math.round(view.headroom.usedPct)}%</text>
+                </svg>
+                <div>
+                  <div style={label}>{t('pulse.planUse')}<InfoTip text={t('pulse.planTip')} /></div>
+                  <div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.resets', { day: fmtDay(view.headroom.resetsAt) })}</div>
+                  {view.headroom.runsOutAt && <div style={{ marginTop: 6 }}><span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cth-amber-text)', background: 'var(--cth-amber-soft)', borderRadius: 'var(--cth-r-pill)', padding: '2px 8px' }}>{t('pulse.runsOut', { day: fmtDay(view.headroom.runsOutAt) })}</span></div>}
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{ ...tight, gap: 3, justifyContent: 'center' }}>
             <div style={label}>{t('pulse.yourTime')}<InfoTip text={t('pulse.yourTimeTip')} /></div>
-            <div style={{ ...mono, fontSize: 22, fontWeight: 600 }}>{s.yourTime.asks} <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-3)', fontWeight: 400 }}>{t('pulse.questions')}</span></div>
+            <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.yourTime.asks} <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-3)', fontWeight: 400 }}>{t('pulse.questions')}</span></div>
             {s.yourTime.medianWaitMs !== null && <div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.answeredIn', { time: duration(s.yourTime.medianWaitMs, t) })}</div>}
-            <div style={{ ...label, marginTop: 6 }}>{t('pulse.whileAway')}<InfoTip text={t('pulse.awayTip')} /></div>
-            <div style={{ ...mono, fontSize: 22, fontWeight: 600 }}>{s.awayShare === null ? '0%' : pct(s.awayShare)}</div>
+          </div>
+          <div style={{ ...tight, gap: 3, justifyContent: 'center' }}>
+            <div style={label}>{t('pulse.whileAway')}<InfoTip text={t('pulse.awayTip')} /></div>
+            <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.awayShare === null ? '0%' : pct(s.awayShare)}</div>
             <div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.awayLine')}</div>
           </div>
         </div>
@@ -507,12 +512,12 @@ function Legend({ items }: { items: Array<[string, string, number?]> }) {
   );
 }
 
-function TileTitle({ icon, title, sub }: { icon: IconName; title: string; sub: string }) {
+function TileTitle({ icon, title, sub, tip }: { icon: IconName; title: string; sub: string; tip?: string }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-      <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: 'var(--cth-ink-2)', flex: 'none' }}><Icon name={icon} size={1.125} /></div>
+      <div aria-hidden style={{ width: 26, height: 26, borderRadius: 'var(--cth-r-md)', background: 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: 'var(--cth-ink-2)', flex: 'none' }}><Icon name={icon} size={1} /></div>
       <div>
-        <div style={label}>{title}</div>
+        <div style={label}>{title}{tip && <InfoTip text={tip} />}</div>
         <div style={{ fontSize: 12, color: 'var(--cth-ink-2)' }}>{sub}</div>
       </div>
     </div>
@@ -521,11 +526,11 @@ function TileTitle({ icon, title, sub }: { icon: IconName; title: string; sub: s
 
 /** Questions to you per 100 requests, week by week; a week with too few requests is a gap. */
 function RateLine({ weeks, aria }: { weeks: Array<{ label: string; v: number | null }>; aria: string }) {
-  const W = 260, H = 96;
+  const W = 260, H = 74;
   const vals = weeks.map((w) => w.v).filter((v): v is number => v !== null);
   const hi = Math.max(1, ...vals) * 1.15, lo = 0;
   const x = (i: number): number => 20 + (i * (W - 40)) / Math.max(1, weeks.length - 1);
-  const y = (v: number): number => H - 18 - ((v - lo) / (hi - lo)) * (H - 36);
+  const y = (v: number): number => H - 16 - ((v - lo) / (hi - lo)) * (H - 32);
   const pts = weeks.map((w, i) => (w.v === null ? null : `${x(i).toFixed(0)},${y(w.v).toFixed(0)}`)).filter(Boolean).join(' ');
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H + 4}`} role="img" aria-label={aria} style={{ maxWidth: 320 }}>

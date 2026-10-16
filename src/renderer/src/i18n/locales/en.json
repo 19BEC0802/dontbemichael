@@ -2541,8 +2541,6 @@
     "learning": {
       "title": "Learning",
       "tip": "Read from each member's memory: every note keeps the day it was written and where it came from. Questions to you are counted against the requests the team took.",
-      "headline": "The team knows {{notes}} things and {{procedures}} written ways of working.",
-      "trend": "Questions to you per 100 requests went from {{from}} to {{to}}.",
       "remembers": "What the team remembers",
       "remembersSub": "all notes so far; the colored part is new that week",
       "fromYou": "From your answers",
