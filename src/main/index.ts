@@ -68,8 +68,19 @@ import { checkDistinct, readJobProfile } from './hireCheck';
 import { checkFocusArea, convertWorkStyle, readConvertRequest, readFocusCheckRequest, readSuggestRequest, suggestWorkStyle } from './workStyleConvert';
 import { SafeClearer, type SafeClearDeps } from './safeClearer';
 import { PersistStore } from './db';
+import { TelemetryStore } from './telemetryStore';
+import { TelemetryProcessor } from './telemetryProcessor';
+import { PulseService } from './pulse';
+import { knownPrice } from './pricing';
+import bakedModelCatalog from '../shared/modelCatalog.json';
+import { parseModelCatalog, type ModelCatalog } from '../shared/modelCatalogPayload';
+import type { Period } from '../shared/teamPerformance';
 import { makeResearchGoal } from './researchGoal';
 import { ownResearchDir, readResearchNotes } from './researchNotes';
+import { backfilled, runBackfill } from './pulseBackfill';
+import { readTeamMemory } from './teamMemory';
+import { readClaudePlan } from './claudeAccount';
+import { planPrice, PLAN_LABELS, PLAN_PRICES } from '../shared/claudePlan';
 import { claudeProjectsRoot, projectDir, projectDirs, readAgentUsage, readContextTokens, seedSessionTranscript, resolveSessionCwd } from './transcript';
 import { listIssues, listCIRuns } from './github';
 import { SlackWebhookServer, SlackReplyServer, postSlackReply, type SlackEventFile } from './slack';
@@ -378,6 +389,9 @@ const breaker = new CircuitBreaker(() => {
 // heartbeat mission is disabled (it ships off).
 let fleetTimer: ReturnType<typeof setInterval> | null = null;
 let breakerBeatTimer: ReturnType<typeof setInterval> | null = null;
+let pulseFlushTimer: ReturnType<typeof setInterval> | null = null;
+let pulseTickTimer: ReturnType<typeof setInterval> | null = null;
+let pulsePresenceTimer: ReturnType<typeof setInterval> | null = null;
 // Feed the breaker's api_error-storm trip from Oscar's OTel api_error spans —
 // Jim's one breaker input with no on-branch source (telemetry.onApiError seam).
 telemetry.onApiError((agentId) => breaker.recordError(agentId));
@@ -444,7 +458,13 @@ const hookServer = new HookServer(
   control,
   breaker,
   standingGoalFor,
-  (agentId, event, message) => {
+  (agentId, event, message, toolName) => {
+    // Pulse: turns and tool uses (authenticated frames only, #61).
+    if (agentId) {
+      if (event === 'UserPromptSubmit') pulseTelemetry.record({ agentId, kind: 'prompt', ts: Date.now() });
+      else if (event === 'PostToolUse') pulseTelemetry.record({ agentId, kind: 'tool', ts: Date.now(), attrs: { tool: toolName ?? '' } });
+      else if (event === 'Stop') pulseTelemetry.record({ agentId, kind: 'stop', ts: Date.now() });
+    }
     workerWake.noteHook(agentId, event, message);
     safeClearer.noteHook(agentId, event, message);
     if (agentId && event === 'UserPromptSubmit') promptSubmits.note(agentId);
@@ -456,6 +476,15 @@ const hookServer = new HookServer(
   memberPresent,
   (signal) => onPlanSignal(signal)
 );
+// Pulse's Kept safe: each step a setting stopped, by gate (proposal 3).
+hookServer.onRefused = (agentId, gate) => pulseTelemetry.record({ agentId: agentId ?? null, kind: 'refused', ts: Date.now(), attrs: { gate } });
+// A member stopped on a prompt is restarted by the window, the same restart as
+// Restart & Continue (owner, 2026-10-15: no terminals or 1:1 for the owner).
+hookServer.restartStuck = (agentId) => {
+  const wc = liveWebContents();
+  if (!wc) return false;
+  try { wc.send('agent:restartStuck', { agentId }); return true; } catch { return false; }
+};
 const memory = new MemoryManager(
   () => readConfig().harnessHome,
   () => { const c = readConfig(); return { enabled: c.semanticMemory !== false, model: c.embeddingModel ?? 'minilm' }; },
@@ -508,6 +537,86 @@ const memoryTidy = new MemoryTidy(
 // Durable harness state (SQLite, main process). Phase A: window bounds (kv) +
 // net-new command history. Opened in whenReady, closed in the teardown blocks.
 const persist = new PersistStore();
+
+// ─── Pulse telemetry (docs/designs/team-performance.md) ─────────────────────
+// The isolated store: written only here, in harness.db, keyed by office.
+const pulseOffice = (): string | null => { const h = readConfig().harnessHome; return h ? expandTilde(h) : null; };
+const pulseTelemetry = new TelemetryStore(() => persist.database(), pulseOffice);
+const pulseProcessor = new TelemetryProcessor(() => persist.database(), pulseTelemetry);
+/** Pulse's backfill (proposal 3): once per office, the weeks before Pulse began,
+ *  read in the background from the office log, members' sessions and the cost
+ *  ledger. The view refreshes when it lands. */
+let pulseBackfilling: string | null = null;
+function pulseBackfillOnce(office: string): void {
+  const db = persist.database();
+  const root = hive.root();
+  if (!db || !root || pulseBackfilling === office || backfilled(db, office)) return;
+  pulseBackfilling = office;
+  pulseTelemetry.flush();
+  void runBackfill({ db, office, hiveRoot: root, projectsRoot: claudeProjectsRoot(), members: new Set(Object.keys(hive.registry().agents ?? {})), now: Date.now() })
+    .then((n) => {
+      console.log(`[pulse] backfill wrote ${n} points for ${office}`);
+      if (n > 0 && pulseProcessor.tick(office) > 0) liveWebContents()?.send('pulse:updated');
+    })
+    .catch((e) => console.error('[pulse] backfill:', e))
+    .finally(() => { if (pulseBackfilling === office) pulseBackfilling = null; });
+}
+/** The model ladder: the remote catalog when cached and valid, else the baked one. */
+function pulseLadder(): Array<{ provider: string; id: string; label: string; tier?: 'top' | 'middle' | 'small' }> {
+  let cat: ModelCatalog = bakedModelCatalog as ModelCatalog;
+  try {
+    const cached = JSON.parse(readFileSync(MODEL_CATALOG_CACHE(), 'utf8')) as { catalog?: unknown };
+    const parsed = parseModelCatalog(cached?.catalog);
+    if (parsed) cat = parsed;
+  } catch { /* the baked catalog */ }
+  return Object.entries(cat.providers).flatMap(([provider, rows]) => rows.filter((r) => r.id).map((r) => ({ provider, id: r.id!, label: r.label, ...(r.tier ? { tier: r.tier } : {}) })));
+}
+/** Each member's provider and model, from the roster the renderer saves. */
+function pulseModels(): Array<{ agentId: string; provider: string; model: string | null }> {
+  const cfg = readConfig();
+  let agents: unknown[] = [];
+  try { agents = roster.read()?.agents ?? []; } catch { agents = []; }
+  const godId = hive.registry().godId;
+  return agents.flatMap((a) => {
+    const o = a as { id?: unknown; provider?: unknown; model?: unknown };
+    if (typeof o.id !== 'string') return [];
+    const provider = typeof o.provider === 'string' ? o.provider : 'claude';
+    const model = typeof o.model === 'string' && o.model ? o.model : (o.id === godId ? cfg.godModel : cfg.defaultModel) ?? null;
+    return [{ agentId: o.id, provider, model }];
+  });
+}
+const pulse = new PulseService({
+  db: () => persist.database(),
+  store: pulseTelemetry,
+  processor: pulseProcessor,
+  office: pulseOffice,
+  members: () => Object.entries(hive.registry().agents).filter(([, a]) => !a.archived && !a.isAssistant).map(([id, a]) => ({ id, isGod: !!a.isGod })),
+  godId: () => hive.registry().godId ?? null,
+  tasks: () => { const t = hive.tasks() as { tasks?: unknown }; return Array.isArray(t?.tasks) ? (t.tasks as never) : []; },
+  missions: () => readConfig().missions ?? [],
+  models: pulseModels,
+  ladder: pulseLadder,
+  priceOf: (m) => knownPrice(m),
+  applyMissions: (change) => applyMissions(change),
+  billing: () => (readConfig().claudeAuth === 'apiKey' ? 'apiKey' : 'account'),
+  plan: () => planPrice(readClaudePlan(), readConfig().planPriceMonthly),
+  memory: () => { const root = hive.root(); return root ? readTeamMemory(root, Object.keys(hive.registry().agents ?? {})) : { notes: [], procedures: {} }; }
+});
+// The office log kinds Pulse counts, and the board each tick reads.
+hive.logObserver = (e) => {
+  const kind = e.kind;
+  if (kind === 'message') {
+    const from = typeof e.from === 'string' ? e.from : '';
+    if (from && hive.registry().agents[from]) pulseTelemetry.record({ agentId: from, kind: 'message', ts: e.ts, attrs: { act: typeof e.act === 'string' ? e.act : null } });
+  } else if (kind === 'mail-organize' && typeof e.agentId === 'string') {
+    pulseTelemetry.record({ agentId: e.agentId, kind: 'email', ts: e.ts, value: Array.isArray(e.ids) ? e.ids.length : 1 });
+  } else if (kind === 'mail-sent' && typeof e.agentId === 'string') {
+    pulseTelemetry.record({ agentId: e.agentId, kind: 'sent', ts: e.ts });
+  } else if (kind === 'card-reopen') {
+    pulseTelemetry.record({ agentId: typeof e.agentId === 'string' ? e.agentId : null, kind: 'card-reopen', ts: e.ts, attrs: { id: e.id } });
+  }
+};
+hive.tasksObserver = (tasks) => pulseTelemetry.tasks(tasks as never);
 /** The PRIMARY window — the one running the hive/god orchestration and the sink
  *  for process-global timer events (missions, breaker, Slack ingestion). It is
  *  the most-recently-focused live window, so global events follow the user.
@@ -609,7 +718,8 @@ const mailApprovals = new MailApprovals({
   changed: () => { try { liveWebContents()?.send('mailProposals:updated'); } catch { /* window gone */ } },
   // The late sweep asks Michael only about emails that can go now (a paused
   // or ended grant can't).
-  canSend: (agentId, mailbox, proposalId) => memberPresent(agentId) && mailAccess(readConfig(), agentId, mailbox, 'send', proposalId, { present: memberPresent }).ok
+  canSend: (agentId, mailbox, proposalId) => memberPresent(agentId) && mailAccess(readConfig(), agentId, mailbox, 'send', proposalId, { present: memberPresent }).ok,
+  onDecision: (agentId, decision) => pulseTelemetry.record({ agentId, kind: 'mail-decision', ts: Date.now(), attrs: { decision } })
 });
 
 /** Does an email fit a standing approval: a separate quick model decides, never the agent. */
@@ -674,10 +784,17 @@ const trustLayer = makeTrustLayer({
       timeoutMs: TRUST_TIMEOUT_MS,
       dropTranscript: true
     });
+    // Why a check got no answer, beside the layer's own deny line, so the next
+    // failure says what happened (2026-10-15: launch checks lost their Enter).
+    if (!r.ok) { try { hive.appendLog({ kind: 'trust-check-failed', error: r.error ?? 'unknown' }); } catch { /* best-effort */ } }
     return r.ok && r.text ? r.text : null;
   },
   settings: () => dataClassSettings(readConfig().dataClasses),
-  log: (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
+  log: (event) => {
+    try { hive.appendLog(event); } catch { /* best-effort */ }
+    // Pulse's Kept safe: the decision only, never the text it judged.
+    if (event.kind === 'trust-layer') pulseTelemetry.record({ agentId: null, kind: 'trust', ts: Date.now(), attrs: { way: event.way, decision: event.decision, by: event.by ?? null, flagged: event.flagged === true } });
+  }
 });
 
 /** Research's notes reach the team's shared memory only as a copy the trust
@@ -1144,6 +1261,8 @@ function sendMission(m: ScheduledMission): void {
   const payload = firePayload(m);
   if (payload && hive.enabled()) {
     hive.send({ to: payload.to, act: 'inform', subject: payload.subject, body: payload.body }, 'scheduler');
+    const to = payload.to === 'god' ? hive.registry().godId ?? payload.to : payload.to;
+    pulseTelemetry.record({ agentId: to, kind: 'run-dispatch', ts: Date.now(), attrs: { mission: m.id, ...(m.relay ? { relay: true } : {}) } });
   }
   // No compaction here: that is Claude Code's own auto compact now, with its
   // window set per agent at spawn (AUTO_COMPACT_WINDOW_TOKENS).
@@ -1968,6 +2087,7 @@ function cutOffNames(ids: string[]): string {
 function onPlanSignal(signal: PlanSignal): void {
   if (!onClaudePlan(signal.agentId)) return;
   if (signal.kind === 'limits') {
+    pulse.noteRateLimits(signal.rateLimits);
     if (officeBreak.noteRateLimits(signal.rateLimits)) { armOfficeBreak(); publishOfficeBreak(); }
     return;
   }
@@ -2090,6 +2210,14 @@ function runBreakerBeat(progressWindowMs: number): void {
     // (aggregateLive picks the most-recent live session id), so this gates on
     // "is there a live session" without changing any live-agent behavior.
     if (sample?.sessionId) hive.appendCostLedger(sample); // ledger covers everyone incl. god
+    // Pulse keeps every engine's cost; a repeat of the last value is not stored.
+    // A transcript fallback (no session id) is the whole session's total, so a
+    // Claude member's is left out: its live numbers and the ledger's past days
+    // already count that spend (ship review, 2026-10-16). An engine with no live
+    // numbers keeps it, under its own session so one session folds as one.
+    if (sample && (sample.sessionId || (a.provider ?? 'claude') !== 'claude')) {
+      pulseTelemetry.cost(id, sample.sessionId || `transcript:${hive.lastSession(id) ?? ''}`, sample.usd, sample.input + sample.output + sample.cacheRead + sample.cacheCreation, sample.model);
+    }
     // Second source for the resume key. recordSession() is otherwise reachable
     // ONLY from the hook shim, so any window where hooks don't land leaves the
     // registry with no sessionId and "Restart & Continue" refuses to continue —
@@ -6103,6 +6231,7 @@ function teardownAndQuit(): void {
   try { stopWebhookServer(); } catch (e) { console.error('[quit] webhook.stop:', e); }
   try { memory.stop(); } catch (e) { console.error('[quit] memory.stop:', e); }
   try { memoryTidy.stop(); } catch (e) { console.error('[quit] memoryTidy.stop:', e); }
+  try { pulseTelemetry.flush(); } catch (e) { console.error('[quit] pulse flush:', e); }
   try { persist.close(); } catch (e) { console.error('[quit] persist.close:', e); }
   try { hive.stopAllProxyBridges(); } catch (e) { console.error('[quit] stopAllProxyBridges:', e); }
   try { ptyManager.killAll(); } catch (e) { console.error('[quit] killAll:', e); }
@@ -6383,6 +6512,22 @@ ipcMain.handle('missions:upsert', (_evt, mission: unknown): MissionOpResult => {
   }
   return applyMissions((list) => upsertMission(list, clean, Date.now()));
 });
+// ─── IPC: Pulse (docs/designs/team-performance.md) ───────────────────────────
+const PULSE_PERIODS: readonly string[] = ['this-week', 'last-week', '4-weeks'];
+// The detected Claude plan and its list price, for Settings > Agents.
+ipcMain.handle('claude:plan', () => {
+  const id = readClaudePlan();
+  return { label: id ? PLAN_LABELS[id] : null, listMonthly: id ? PLAN_PRICES[id] : null };
+});
+ipcMain.handle('pulse:snapshot', (_evt, period: unknown) => {
+  try { pulseTelemetry.flush(); const office = pulseOffice(); if (office) pulseProcessor.tick(office); } catch (e) { console.error('[pulse] snapshot tick', e); }
+  return pulse.snapshot(PULSE_PERIODS.includes(String(period)) ? (period as Period) : 'this-week');
+});
+ipcMain.handle('pulse:apply', (_evt, id: unknown, expected: unknown) => (typeof id === 'string' ? pulse.apply(id, expected) : { ok: false, error: 'stale' }));
+ipcMain.handle('pulse:modelApplied', (_evt, id: unknown, agentId: unknown, from: unknown, to: unknown) =>
+  typeof id === 'string' && typeof agentId === 'string' && typeof to === 'string' ? pulse.modelApplied(id, agentId, typeof from === 'string' ? from : null, to) : 0);
+ipcMain.handle('pulse:undo', (_evt, appliedId: unknown) => (typeof appliedId === 'number' ? pulse.undo(appliedId) : { ok: false, error: 'stale' }));
+ipcMain.handle('pulse:dismiss', (_evt, id: unknown) => (typeof id === 'string' ? pulse.dismiss(id) : false));
 ipcMain.handle('missions:delete', (_evt, id: unknown): MissionOpResult =>
   typeof id === 'string' ? applyMissions((list) => deleteMission(list, id)) : { ok: false, error: 'invalid id' });
 ipcMain.handle('missions:setEnabled', (_evt, id: unknown, on: unknown): MissionOpResult =>
@@ -6423,6 +6568,14 @@ ipcMain.handle('mailStanding:revoke', (_evt, id: unknown) => (typeof id === 'str
 ipcMain.handle('agent:closedByOwner', (_evt, id: unknown): { ok: boolean; paused: number } => {
   if (typeof id !== 'string' || !id) return { ok: false, paused: 0 };
   return closeAgentByOwner(id);
+});
+
+/** The owner deleted this team member for good (Edit agent's Danger zone):
+ *  their open Ask me questions are withdrawn and Michael is told about their
+ *  open cards (hive.memberDeleted). */
+ipcMain.handle('agent:deleted', (_evt, id: unknown): { withdrawn: number; cards: number } => {
+  if (typeof id !== 'string' || !/^[\w-]+$/.test(id) || !hive.enabled()) return { withdrawn: 0, cards: 0 };
+  try { return hive.memberDeleted(id); } catch (e) { console.error('[hive] memberDeleted failed:', e); return { withdrawn: 0, cards: 0 }; }
 });
 
 // ─── IPC: full-text search across hive files (board, tasks, memory) ──────────
@@ -7767,6 +7920,20 @@ function armAlwaysOnBeats(): void {
   workerWakeTimer = setInterval(() => { try { runWorkerWakeBeat(); } catch (e) { console.error('[worker-wake beat]', e); } }, WORKER_WAKE_POLL_MS);
   if (safeClearTimer) clearInterval(safeClearTimer);
   safeClearTimer = setInterval(() => { try { safeClearer.beat(); } catch (e) { console.error('[safe-clear beat]', e); } }, 60_000);
+  // Pulse: write points once a second, fold them every 30 s and refresh an open
+  // view, and note the owner's presence each minute (D11).
+  if (pulseFlushTimer) clearInterval(pulseFlushTimer);
+  pulseFlushTimer = setInterval(() => { try { pulseTelemetry.flush(); } catch (e) { console.error('[pulse] flush', e); } }, 1_000);
+  if (pulseTickTimer) clearInterval(pulseTickTimer);
+  pulseTickTimer = setInterval(() => {
+    try {
+      const office = pulseOffice();
+      if (office) pulseBackfillOnce(office);
+      if (office && pulseProcessor.tick(office) > 0) liveWebContents()?.send('pulse:updated');
+    } catch (e) { console.error('[pulse] tick', e); }
+  }, 30_000);
+  if (pulsePresenceTimer) clearInterval(pulsePresenceTimer);
+  pulsePresenceTimer = setInterval(() => { try { pulseTelemetry.presence(powerMonitor.getSystemIdleTime(), false); } catch { /* presence is best-effort */ } }, 60_000);
   runWorkerWakeBeat(); // catch-up on arm — power-resume re-arms and drains the backlog
   // A break's timer freezes in system sleep like the beats above.
   armOfficeBreak();
@@ -7915,9 +8082,9 @@ app.whenReady().then(() => {
   // re-arm the scheduler (catching up missed missions ONCE) + beats + keep-awake,
   // then health-check terminals. App-lifetime listeners — powerMonitor outlives
   // every window, so there is nothing to tear down on quit.
-  powerMonitor.on('resume', () => onSystemResume('resume'));
+  powerMonitor.on('resume', () => { try { pulseTelemetry.presence(0, false); } catch { /* best-effort */ } onSystemResume('resume'); });
   powerMonitor.on('unlock-screen', () => onSystemResume('unlock-screen'));
-  powerMonitor.on('suspend', () => { lastSuspendAt = Date.now(); console.log('[power] suspend — system sleeping'); });
+  powerMonitor.on('suspend', () => { lastSuspendAt = Date.now(); console.log('[power] suspend — system sleeping'); try { pulseTelemetry.presence(0, true); } catch { /* best-effort */ } });
   powerMonitor.on('lock-screen', () => { lastSuspendAt = Date.now(); console.log('[power] lock-screen'); });
   // The app's own menu, always: Electron's default carries Reload and the
   // developer tools, which are not for an office owner (owner, 2026-10-03).
