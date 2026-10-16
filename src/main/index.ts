@@ -758,6 +758,9 @@ const trustLayer = makeTrustLayer({
       timeoutMs: TRUST_TIMEOUT_MS,
       dropTranscript: true
     });
+    // Why a check got no answer, beside the layer's own deny line, so the next
+    // failure says what happened (2026-10-15: launch checks lost their Enter).
+    if (!r.ok) { try { hive.appendLog({ kind: 'trust-check-failed', error: r.error ?? 'unknown' }); } catch { /* best-effort */ } }
     return r.ok && r.text ? r.text : null;
   },
   settings: () => dataClassSettings(readConfig().dataClasses),
