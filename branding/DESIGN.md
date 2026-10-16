@@ -1147,7 +1147,7 @@ half written message survives the switch.
   scheduled checks), each a line icon (mail, send, check, clock, 18 px `ink-2` on a `card-2`
   square), a mono 28 px number, a label, and a who did it bar: members of one department take
   its `acc`, then `m`, then `d`, with a 2 px gap and a named legend.
-- **Kept safe**: four tiles of the same build (line icons shield, search, pause, lock):
+- **Kept safe**, with no header (owner, 2026-10-15; each tile's text says what it guards, with an (i) on how): four tiles of the same build (line icons shield, search, pause, lock):
   questions that went to the internet (sent as written, private parts taken out first,
   stopped), web answers with instructions to AI agents removed (of all answers; flagged to
   Michael), messages held because the check could not run (`amber` soft while above zero,

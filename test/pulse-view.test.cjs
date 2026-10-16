@@ -69,8 +69,9 @@ test('line icons, never emoji; Team at work lists everyone on the team busiest f
 
 test('Kept safe counts what was stopped apart from what could not be checked, and held work is the only amber tile', () => {
   // Value: protects=Kept safe honesty; fails_when=held messages read as protection, or held turns calm while messages wait; why_new=owner proposal 3; seam=none; no_claim=none beyond protects
-  assert.match(view, /icon="pause" value=\{safe\.held\} text=\{t\(safe\.held > 0 \? 'pulse\.safe\.held' : 'pulse\.safe\.heldNone'\)\} amber=\{safe\.held > 0\}/);
-  assert.equal(en.pulse.safe.held, 'messages held because the check could not run. Nothing went out unchecked.');
+  assert.match(view, /icon="pause" value=\{safe\.held\} tip=\{t\('pulse\.safe\.heldTip'\)\} text=\{t\(safe\.held > 0 \? 'pulse\.safe\.held' : 'pulse\.safe\.heldNone'\)\} amber=\{safe\.held > 0\}/);
+  assert.equal(en.pulse.safe.held, 'messages held back because the safety check could not run. Nothing went out unchecked.');
+  assert.doesNotMatch(view, /<Section title=\{t\('pulse\.safe\.title'\)\}/, 'no Kept safe header; each tile says what it guards (owner, 2026-10-15)');
   assert.match(view, /since: fmtDay\(view\.liveSince \?\? Date\.now\(\)\)/, 'recommendations count from live recording, not the backfill');
 });
 

@@ -301,17 +301,18 @@ export function PulseView() {
           </div>
         </Section>
 
-        <Section title={t('pulse.safe.title')} tip={t('pulse.safe.tip')}>
+        {/* Kept safe (owner, 2026-10-15): no header; each tile says what it guards. */}
+        <section aria-label={t('pulse.safe.title')}>
           <div style={grid(cols)}>
-            <StatTile icon="shield" value={toNet} text={t(toNet > 0 && safe.toInternet.clean + safe.toInternet.stop === 0 ? 'pulse.safe.toInternetNone' : 'pulse.safe.toInternet')}
+            <StatTile icon="shield" value={toNet} tip={t('pulse.safe.trustTip')} text={t(toNet > 0 && safe.toInternet.clean + safe.toInternet.stop === 0 ? 'pulse.safe.toInternetNone' : 'pulse.safe.toInternet')}
               parts={[{ n: safe.toInternet.pass, name: t('pulse.safe.sentAsWritten'), color: 'var(--cth-ink-2)' }, { n: safe.toInternet.clean, name: t('pulse.safe.privateOut'), color: 'var(--cth-green)' }, { n: safe.toInternet.stop, name: t('pulse.safe.stopped'), color: 'var(--cth-amber)' }]} />
-            <StatTile icon="search" value={safe.webAnswers.clean} of={answers} text={t('pulse.safe.answersCleaned')}
+            <StatTile icon="search" value={safe.webAnswers.clean} of={answers} tip={t('pulse.safe.trustTip')} text={t('pulse.safe.answersCleaned')}
               parts={[{ n: safe.webAnswers.clean, name: t('pulse.safe.cleaned'), color: 'var(--cth-green)' }, { n: safe.webAnswers.pass, name: t('pulse.safe.nothingToRemove'), color: 'var(--cth-ink-4)' }, { n: safe.webAnswers.flagged, name: t('pulse.safe.flagged'), color: 'var(--cth-amber)' }]} />
-            <StatTile icon="pause" value={safe.held} text={t(safe.held > 0 ? 'pulse.safe.held' : 'pulse.safe.heldNone')} amber={safe.held > 0} />
-            <StatTile icon="lock" value={rulesTotal} text={t(rulesTotal > 0 ? 'pulse.safe.rules' : 'pulse.safe.rulesNone')}
+            <StatTile icon="pause" value={safe.held} tip={t('pulse.safe.heldTip')} text={t(safe.held > 0 ? 'pulse.safe.held' : 'pulse.safe.heldNone')} amber={safe.held > 0} />
+            <StatTile icon="lock" value={rulesTotal} tip={t('pulse.safe.rulesTip')} text={t(rulesTotal > 0 ? 'pulse.safe.rules' : 'pulse.safe.rulesNone')}
               parts={[...rules].sort((a, b) => b[1] - a[1]).map(([g, n], i) => ({ n, name: t(`pulse.safe.gate.${g}`), color: ['var(--cth-ink-2)', 'var(--cth-ink-3)', 'var(--cth-ink-4)', 'var(--cth-line-2)'][Math.min(i, 3)] }))} />
           </div>
-        </Section>
+        </section>
 
         {/* Learning, money and your time in one row of four (owner, 2026-10-15):
             each tile only as big as what it shows. */}
@@ -466,14 +467,14 @@ export function PulseView() {
 }
 
 /** A Kept safe tile: an icon, a number, what it counts, and its parts (proposal 3). */
-function StatTile({ icon, value, of, text, parts, amber }: { icon: IconName; value: number; of?: number; text: string; parts?: Array<{ n: number; name: string; color: string }>; amber?: boolean }) {
+function StatTile({ icon, value, of, text, parts, amber, tip }: { icon: IconName; value: number; of?: number; text: string; parts?: Array<{ n: number; name: string; color: string }>; amber?: boolean; tip?: string }) {
   const { t, i18n } = useTranslation();
   const shown = (parts ?? []).filter((p) => p.n > 0 || (parts ?? []).length <= 3);
   return (
     <div style={{ ...(amber ? { background: 'var(--cth-amber-soft)', borderRadius: 'var(--cth-r-xl)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--cth-amber) 40%, transparent)' } : card), padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: amber ? 'var(--cth-card)' : 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: amber ? 'var(--cth-amber-text)' : 'var(--cth-ink-2)' }}><Icon name={icon} size={1.125} /></div>
       <div style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{value.toLocaleString(i18n.language)}{of !== undefined && <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 400, color: 'var(--cth-ink-3)', marginInlineStart: 6 }}>{t('pulse.safe.of', { n: of })}</span>}</div>
-      <div style={{ fontSize: 12, color: 'var(--cth-ink-2)', lineHeight: '17px' }}>{text}</div>
+      <div style={{ fontSize: 12, color: 'var(--cth-ink-2)', lineHeight: '17px' }}>{text}{tip && <> <InfoTip text={tip} /></>}</div>
       {shown.length > 0 && shown.some((p) => p.n > 0) && <Stack parts={shown} aria={shown.map((p) => `${p.name} ${p.n}`).join(', ')} />}
       {shown.length > 0 && <Legend items={shown.map((p) => [p.name, p.color, p.n])} />}
     </div>
