@@ -1124,13 +1124,16 @@ Claude.
 ### 7.27 Pulse (PulseView)
 
 The office's performance and cost as pictures (docs/designs/team-performance.md; approved
-mockup `pulse-final.html`). A fixed view tab between Tasks and Who talks to whom. It takes
+mockups `pulse-final.html` and, for the top area and Team at work, `pulse-v3.html`, owner
+2026-10-15). A fixed view tab between Tasks and Who talks to whom. It takes
 the whole window: no right column and no bottom bar (owner, 2026-10-15). Opening Needs you
 or a person goes back to the office, as from Tasks; the bottom bar stays mounted, hidden, so a
 half written message survives the switch.
 
 - Header: "Pulse" `t-view`, a period select (This week, Last week, Last 4 weeks; weeks start
-  Monday; remembered), "Collecting since" in `t-meta` `ink-3`.
+  Monday; remembered), "Collecting since" in `t-meta` `ink-3`. A first start reads the eight
+  weeks before it from the office log, members' sessions and the cost ledger, so Pulse never
+  starts at zero; recommendations still count from live recording.
 - **Recommendations** first (owner, 2026-10-15): up to three recommendation cards in `amber` soft with a 1 px `amber`
   border at 40%, never a left stripe (that stays Ask me's); avatar, title 13/600, evidence 12
   in `amber` text, primary Apply, secondary Not now, and a `green` soft "Saves about $N a
@@ -1144,19 +1147,34 @@ half written message survives the switch.
   scheduled checks), each a line icon (mail, send, check, clock, 18 px `ink-2` on a `card-2`
   square), a mono 28 px number, a label, and a who did it bar: members of one department take
   its `acc`, then `m`, then `d`, with a 2 px gap and a named legend.
-- **Office row** next, above Team (owner, 2026-10-15): Where the money went (one bar,
+- **Kept safe**: four tiles of the same build (line icons shield, search, pause, lock):
+  questions that went to the internet (sent as written, private parts taken out first,
+  stopped), web answers with instructions to AI agents removed (of all answers; flagged to
+  Michael), messages held because the check could not run (`amber` soft while above zero,
+  "Nothing went out unchecked"), and steps stopped by the owner's settings by gate. A held
+  message is never counted as protection.
+- **Learning**: a headline (notes and written ways of working the team holds, and how
+  questions per 100 requests moved), then three cards: What the team remembers (four weekly
+  bars of the running total, the week's new notes on top by source: `green` your answers,
+  `ink-4` on the job, `indigo` Michael, `neutral-soft` known before), Questions to you per 100
+  requests (an SVG line; a week under 20 requests is a gap), and Taught by you (this week's
+  share of new notes from the owner's answers).
+- **Office row** next (owner, 2026-10-15): Where the money went (one bar,
   department colors, named), plan use (SVG ring, on a Claude plan only, with an `amber` soft
   "Runs out around …" when the pace says so), Your time and While you were away.
-- **Team**: Michael's tile first with an `indigo` ring (requests routed, questions to you,
-  cards opened, running the office %); then a tile per member (avatar ringed in department
-  `acc`, name, department micro label, up to three counts, and a cost for the work bar:
-  `green` soft to `neutral-soft` to `amber` soft, a center tick for usual, a 14 px ring marker;
-  "Cheaper" `green` text, "About usual" `ink`, "Pricier" `amber` text, or "Too few to compare
-  yet"; a member with no work yet shows only "Nothing yet"). An `amber` dot marks a member with
-  a recommendation. A tile opens the member detail, an
-  overlay like Task detail (§7.21): six facts in `card-2` boxes and a four week value bar.
-- Layout by the window's width: 1100 px and wider, 4 a row; 760 to 1099, outcomes 2 by 2 and
-  members 3 a row; under 760, one column. Coral is never used on Pulse. Every chart has an
+- **Team at work** last, in place of the member tiles (owner, 2026-10-15): one card with a
+  headline (the two busiest members' share of working time, who was quiet, who cost the most
+  for the least work), then a row per member on the team, Michael included, busiest first:
+  avatar ringed in department `acc`, name and role, a working time bar in that `acc` with the
+  team average as a dashed mark, hours, a day strip (week strip on four weeks), Knows (notes
+  plus procedures), value and value per hour. Callouts sit on the bar's end: Busiest, "Nx the
+  team" (twice the average or more), Quiet (under a quarter of it), and `amber` soft "Costly
+  for its work" (twice the usual value per hour, with ten minutes of work and three peers at
+  least). A row opens the member detail, an overlay like Task detail (§7.21): six facts in
+  `card-2` boxes and a four week value bar.
+- Layout by the window's width: 1100 px and wider, 4 a row and every Team at work column;
+  760 to 1099, tiles 2 by 2 and Team at work without the day strip and Knows; under 760, one
+  column and Team at work with name, bar, hours and value. Coral is never used on Pulse. Every chart has an
   aria-label sentence; Apply and Undo announce in a polite live region.
 
 ## 8. The studio illustration [Both]

@@ -30,15 +30,15 @@ test('Pulse is a fixed view tab between Tasks and Who talks to whom, and takes t
   assert.match(read('src/renderer/src/store/store.ts'), /if \(view === 'office' \|\| view === 'file'\) return \{\};/);
 });
 
-test('sections run recommendations, what got done, the office row, then the team', () => {
-  // Value: protects=D2 and D3 order as the owner moved it on 2026-10-15 (office row above Team, "Recommendations" title), the saved card only once something was applied, and the start date with its reason; fails_when=a section moves, a table returns, the saved card shows with nothing in it, or the start date loses its reason; why_new=owner ask 2026-10-15; seam=none; no_claim=none beyond protects
+test('sections run recommendations, what got done, kept safe, learning, the office row, then team at work', () => {
+  // Value: protects=D2 and D3 order as the owner set it on 2026-10-15 (proposal 3: Kept safe and Learning in the top area, Team at work in place of the Team tiles, "Recommendations" title), the saved card only once something was applied, and the start date with its reason; fails_when=a section moves, a table returns, the saved card shows with nothing in it, or the start date loses its reason; why_new=owner ask 2026-10-15; seam=none; no_claim=none beyond protects
   assert.equal(en.pulse.recommendations, 'Recommendations');
   assert.match(view, /const savedShown = view\.saved\.state !== 'none';/);
   assert.match(view, /\{savedShown && <div/);
   assert.match(en.pulse.adviceStarts, /\{\{day\}\}[\s\S]*two full weeks[\s\S]*\{\{since\}\}/);
   assert.doesNotMatch(en.pulse.adviceStarts, /record/i, 'business words, not records (owner, 2026-10-15)');
   assert.match(view, /t\('pulse\.adviceStarts', \{ day: fmtDay\(view\.adviceFrom\), since: /);
-  const order = ['pulse.recommendations', 'pulse.whatGotDone', 'pulse.whereMoneyWent', 'pulse.team'].map((k) => view.indexOf(`t('${k}')`));
+  const order = ['pulse.recommendations', 'pulse.whatGotDone', 'pulse.safe.title', 'pulse.learning.title', 'pulse.whereMoneyWent', 'pulse.work.title'].map((k) => view.indexOf(`t('${k}')`));
   assert.ok(order.every((i) => i > 0), 'every section is there');
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   assert.doesNotMatch(view, /<table/);
@@ -54,15 +54,23 @@ test('suggestions are amber soft cards, applied ones green with Undo; no coral a
   assert.match(view, /t\('pulse\.notNow'\)/);
 });
 
-test('line icons, never emoji; Michael has his own tile; tiles show cost for the work, too few says so', () => {
-  // Value: protects=D7, D6, D11; fails_when=emoji return, Michael gets a cost bar or a member with few pieces is compared; why_new=design D6, D7, D11; seam=none; no_claim=none beyond protects
+test('line icons, never emoji; Team at work lists everyone on the team busiest first, Michael included, and opens their week', () => {
+  // Value: protects=D11 icons and proposal 3 Team at work; fails_when=emoji return, a removed member shows, Michael is left out, a short worker is judged on cost, or a row stops opening the detail; why_new=owner proposal 3; seam=none; no_claim=pixel layout (visual QA)
   assert.match(view, /KIND_ICON: Record<WorkKind, IconName> = \{ email: 'mail', sent: 'send', task: 'check', check: 'clock' \}/);
   assert.doesNotMatch(view, /\p{Extended_Pictographic}/u);
-  assert.match(view, /t\('pulse\.runningOffice'\)/);
-  assert.match(view, /c\.verdict === 'too-few' \? t\('pulse\.tooFew'\)/);
-  assert.match(view, /t\('pulse\.waited', \{ time: duration\(m\.askWaitMs, t\) \}\)/, 'waits read in hours and minutes, like the Your time card');
-  assert.match(view, /const idle = !counts\.length && c\.verdict === 'too-few';/);
-  assert.match(view, /\{!idle && <div/, 'a member with no work shows one line, no empty bar');
+  assert.match(view, /const rows = s\.members\.filter\(\(m\) => byId\.has\(m\.agentId\)\)\.sort\(\(a, b\) => b\.busyMs - a\.busyMs\);/);
+  assert.match(view, /const work = teamAtWork\(rows\);/);
+  assert.match(view, /m\.agentId === godId \? t\('pulse\.officeManager'\)/);
+  assert.match(view, /m\.busyMs >= MIN_BUSY_FOR_RATE_MS && m\.usd > 0/);
+  assert.match(view, /onClick=\{\(\) => setDetail\(m\.agentId\)\}/);
+  for (const i of ['shield', 'search', 'pause', 'lock', 'book', 'help', 'learn']) assert.match(view, new RegExp(`icon="${i}"`), i);
+});
+
+test('Kept safe counts what was stopped apart from what could not be checked, and held work is the only amber tile', () => {
+  // Value: protects=Kept safe honesty; fails_when=held messages read as protection, or held turns calm while messages wait; why_new=owner proposal 3; seam=none; no_claim=none beyond protects
+  assert.match(view, /icon="pause" value=\{safe\.held\} text=\{t\(safe\.held > 0 \? 'pulse\.safe\.held' : 'pulse\.safe\.heldNone'\)\} amber=\{safe\.held > 0\}/);
+  assert.equal(en.pulse.safe.held, 'messages held because the check could not run. Nothing went out unchecked.');
+  assert.match(view, /since: fmtDay\(view\.liveSince \?\? Date\.now\(\)\)/, 'recommendations count from live recording, not the backfill');
 });
 
 test('the layout follows the stage width, and every picture has words', () => {
@@ -72,7 +80,8 @@ test('the layout follows the stage width, and every picture has words', () => {
   assert.match(view, /role="img" aria-label=\{aria\}/);
   assert.match(view, /aria-live="polite"/);
   assert.match(view, /aria-label=\{t\('pulse\.planAria'/);
-  assert.ok((view.match(/<button type="button"/g) || []).length >= 6, 'tiles and actions are buttons');
+  assert.ok((view.match(/<button[^>]*type="button"/g) || []).length >= 6, 'rows and actions are buttons');
+  assert.match(view, /role="listitem"/, 'Team at work rows are a list');
 });
 
 test('every pulse string is in all three locales, and the plan ring shows only on a plan', () => {

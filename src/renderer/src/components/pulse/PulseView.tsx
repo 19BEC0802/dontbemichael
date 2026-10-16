@@ -1,7 +1,8 @@
 /**
  * Pulse: the office's performance and cost, as pictures (docs/designs/team-performance.md,
- * approved mockup pulse-final.html). Top to bottom: ways to save, what got done,
- * the team as tiles, then the office row. Fields first; each explanation sits
+ * approved mockups pulse-final.html and pulse-v3.html). Top to bottom:
+ * recommendations, what got done, kept safe, learning, the office row, then
+ * team at work (owner, 2026-10-15, proposal 3). Fields first; each explanation sits
  * behind an (i). Advice is amber, savings green, coral never: Ask me stays the
  * only thing that needs the owner.
  *
@@ -13,7 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useTranslation } from 'react-i18next';
 import type { PulseView as PulseData } from '@shared/pulseView';
 import type { Advice } from '@shared/teamAdvice';
-import type { MemberMeasures, Outcome, Period, WorkKind } from '@shared/teamPerformance';
+import { teamAtWork, MIN_BUSY_FOR_RATE_MS, type Outcome, type Period, type WorkChip, type WorkKind } from '@shared/teamPerformance';
+import { keptSafe, type RefusalGate } from '@shared/pulseSafety';
 import { useStore } from '@/store/store';
 import { useAppTheme } from '@/design/theme';
 import { family } from '@/scene/studio/theme';
@@ -29,6 +31,8 @@ const LS_PERIOD = 'cth.pulsePeriod';
 const PERIODS: Period[] = ['this-week', 'last-week', '4-weeks'];
 const KIND_ICON: Record<WorkKind, IconName> = { email: 'mail', sent: 'send', task: 'check', check: 'clock' };
 
+/** The team average mark: a dashed line drawn as a gradient. */
+const AVG_DASH = 'repeating-linear-gradient(to bottom, var(--cth-ink-3) 0 3px, transparent 3px 6px)';
 const money = (v: number): string => `$${(Math.round(v * 100) / 100).toFixed(2)}`;
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 function duration(ms: number, t: (k: string, o?: Record<string, unknown>) => string): string {
@@ -135,6 +139,8 @@ export function PulseView() {
     if (nth < 0) return a ? departmentOf(a) : 'team';
     return [f.acc, f.m, f.d][nth % 3];
   }, [byId, dark]);
+  const fmtShort = (day: string): string => new Date(`${day}T12:00:00`).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' });
+  const listNames = (names: string[]): string => { try { return new Intl.ListFormat(i18n.language, { type: 'conjunction' }).format(names); } catch { return names.join(', '); } };
   const fmtDay = (day: string | number): string => new Date(typeof day === 'number' ? day : `${day}T12:00:00`).toLocaleDateString(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' });
   const jobOf = (id?: string): string => missions.find((m) => m.id === id)?.label ?? '';
 
@@ -182,7 +188,6 @@ export function PulseView() {
 
   const view = data;
   const cols = layout === 'wide' ? 4 : layout === 'mid' ? 2 : 1;
-  const memberCols = layout === 'wide' ? 4 : layout === 'mid' ? 3 : 1;
   const sugCols = layout === 'wide' ? 3 : layout === 'mid' ? 2 : 1;
   const grid = (n: number): CSSProperties => ({ display: 'grid', gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, gap: 12 });
 
@@ -200,8 +205,29 @@ export function PulseView() {
   } else {
     const s = view.snapshot;
     const godId = s.michael?.agentId;
-    const members = s.members.filter((m) => m.agentId !== godId);
     const shownAdvice = view.advice.filter((a) => !applied.some((x) => x.advice.id === a.id));
+    // A snapshot from a main process older than this view (before a restart) has neither.
+    const safe = view.keptSafe ?? keptSafe([]);
+    const toNet = safe.toInternet.pass + safe.toInternet.clean + safe.toInternet.stop;
+    const answers = safe.webAnswers.pass + safe.webAnswers.clean;
+    const rulesTotal = Object.values(safe.rules).reduce((n, x) => n + (x ?? 0), 0);
+    const learn = view.learning ?? { weeks: [], notes: 0, procedures: 0, knows: {} };
+    const rated = learn.weeks.filter((w) => w.per100 !== null);
+    const maxKnown = Math.max(1, ...learn.weeks.map((w) => w.total));
+    const last = learn.weeks[learn.weeks.length - 1];
+    const lastAdded = last ? last.added.you + last.added.job + last.added.michael : 0;
+    // Team at work: everyone on the team now, Michael included, busiest first.
+    const rows = s.members.filter((m) => byId.has(m.agentId)).sort((a, b) => b.busyMs - a.busyMs);
+    const work = teamAtWork(rows);
+    const maxBusy = Math.max(1, ...rows.map((m) => m.busyMs));
+    const maxKnows = Math.max(1, ...rows.map((m) => learn.knows[m.agentId] ?? 0));
+    const weekly = s.period === '4-weeks';
+    const stripOf = (days: number[]): number[] => (weekly ? [0, 1, 2, 3].map((w) => days.slice(w * 7, w * 7 + 7).reduce((x, y) => x + y, 0)) : days.slice(0, 7));
+    const strip = (weekly ? [0, 7, 14, 21] : [0, 1, 2, 3, 4, 5, 6]).map((off) => {
+      const d = new Date(`${s.from}T12:00:00`); d.setDate(d.getDate() + off);
+      return { label: weekly ? d.toLocaleDateString(i18n.language, { day: 'numeric', month: 'numeric' }) : d.toLocaleDateString(i18n.language, { weekday: 'narrow' }) };
+    });
+    const workGrid: CSSProperties = { display: 'grid', alignItems: 'center', gap: 14, gridTemplateColumns: layout === 'wide' ? `190px minmax(0, 1fr) 66px ${weekly ? 64 : 112}px 110px 76px 60px` : layout === 'mid' ? '170px minmax(0, 1fr) 66px 76px 60px' : 'minmax(0, 1fr) minmax(0, 1fr) 60px 70px' };
     const outcomeLabel = (o: Outcome): string => t(`pulse.outcome.${o.kind}`, { sub: o.sub ?? 0 });
     const outcomeAria = (o: Outcome): string => `${outcomeLabel(o)}: ${o.by.map((b) => `${nameOf(b.agentId)} ${b.count}`).join(', ')}`;
     // Saved by your changes shows only once a change was applied (owner, 2026-10-15).
@@ -247,7 +273,7 @@ export function PulseView() {
             })}
             {shownAdvice.length === 0 && applied.length === 0 && (
               <div style={{ ...card, padding: '12px 14px', fontSize: 13, lineHeight: '19px', color: 'var(--cth-ink-2)', display: 'flex', alignItems: 'center', gridColumn: savedShown ? (sugCols > 1 ? `span ${sugCols - 1}` : undefined) : '1 / -1' }}>
-                {view.adviceFrom ? t('pulse.adviceStarts', { day: fmtDay(view.adviceFrom), since: fmtDay(view.collectingSince ?? Date.now()) }) : t('pulse.nothingToChange')}
+                {view.adviceFrom ? t('pulse.adviceStarts', { day: fmtDay(view.adviceFrom), since: fmtDay(view.liveSince ?? Date.now()) }) : t('pulse.nothingToChange')}
               </div>
             )}
             {savedShown && <div style={{ ...card, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
@@ -270,6 +296,60 @@ export function PulseView() {
                   : <WhoBar by={o.by} colorOf={colorOf} nameOf={nameOf} aria={outcomeAria(o)} />}
               </div>
             ))}
+          </div>
+        </Section>
+
+        <Section title={t('pulse.safe.title')} tip={t('pulse.safe.tip')}>
+          <div style={grid(cols)}>
+            <StatTile icon="shield" value={toNet} text={t(toNet > 0 && safe.toInternet.clean + safe.toInternet.stop === 0 ? 'pulse.safe.toInternetNone' : 'pulse.safe.toInternet')}
+              parts={[{ n: safe.toInternet.pass, name: t('pulse.safe.sentAsWritten'), color: 'var(--cth-ink-2)' }, { n: safe.toInternet.clean, name: t('pulse.safe.privateOut'), color: 'var(--cth-green)' }, { n: safe.toInternet.stop, name: t('pulse.safe.stopped'), color: 'var(--cth-amber)' }]} />
+            <StatTile icon="search" value={safe.webAnswers.clean} of={answers} text={t('pulse.safe.answersCleaned')}
+              parts={[{ n: safe.webAnswers.clean, name: t('pulse.safe.cleaned'), color: 'var(--cth-green)' }, { n: safe.webAnswers.pass, name: t('pulse.safe.nothingToRemove'), color: 'var(--cth-ink-4)' }, { n: safe.webAnswers.flagged, name: t('pulse.safe.flagged'), color: 'var(--cth-amber)' }]} />
+            <StatTile icon="pause" value={safe.held} text={t(safe.held > 0 ? 'pulse.safe.held' : 'pulse.safe.heldNone')} amber={safe.held > 0} />
+            <StatTile icon="lock" value={rulesTotal} text={t(rulesTotal > 0 ? 'pulse.safe.rules' : 'pulse.safe.rulesNone')}
+              parts={(Object.entries(safe.rules) as Array<[RefusalGate, number]>).sort((a, b) => b[1] - a[1]).map(([g, n], i) => ({ n, name: t(`pulse.safe.gate.${g}`), color: ['var(--cth-ink-2)', 'var(--cth-ink-3)', 'var(--cth-ink-4)', 'var(--cth-line-2)'][Math.min(i, 3)] }))} />
+          </div>
+        </Section>
+
+        <Section title={t('pulse.learning.title')} tip={t('pulse.learning.tip')}>
+          <div style={{ fontSize: 13, color: 'var(--cth-ink-2)', lineHeight: '19px' }}>
+            <b style={{ color: 'var(--cth-ink)' }}>{t('pulse.learning.headline', { notes: learn.notes, procedures: learn.procedures })}</b>
+            {rated.length >= 2 && <> {t('pulse.learning.trend', { from: rated[0].per100, to: rated[rated.length - 1].per100 })}</>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: layout === 'wide' ? '1.35fr 1fr 1fr' : layout === 'mid' ? '1fr 1fr' : '1fr', gap: 12 }}>
+            <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, gridColumn: layout === 'mid' ? '1 / -1' : undefined }}>
+              <TileTitle icon="book" title={t('pulse.learning.remembers')} sub={t('pulse.learning.remembersSub')} />
+              <div role="img" aria-label={learn.weeks.map((w) => `${fmtShort(w.from)} ${w.total}`).join(', ')} style={{ display: 'flex', gap: 22, alignItems: 'flex-end', height: 130, padding: '0 6px' }}>
+                {learn.weeks.map((w) => {
+                  const added = w.added.you + w.added.job + w.added.michael;
+                  return (
+                    <div key={w.from} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: 52 }}>
+                      <div style={{ width: 34, height: 20 + (w.total / maxKnown) * 76, display: 'flex', flexDirection: 'column', borderRadius: 6, overflow: 'hidden', gap: 1 }}>
+                        <i style={{ flex: w.added.michael, background: 'var(--cth-indigo)' }} />
+                        <i style={{ flex: w.added.job, background: 'var(--cth-ink-4)' }} />
+                        <i style={{ flex: w.added.you, background: 'var(--cth-green)' }} />
+                        <i style={{ flex: Math.max(0, w.total - added), background: 'var(--cth-neutral-soft)' }} />
+                      </div>
+                      <div style={{ ...mono, fontSize: 11, fontWeight: 600 }}>{w.total}</div>
+                      <div style={{ fontSize: 9.5, color: 'var(--cth-ink-3)' }}>{fmtShort(w.from)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <Legend items={[[t('pulse.learning.fromYou'), 'var(--cth-green)'], [t('pulse.learning.onJob'), 'var(--cth-ink-4)'], [t('pulse.learning.fromMichael'), 'var(--cth-indigo)'], [t('pulse.learning.before'), 'var(--cth-neutral-soft)']]} />
+            </div>
+            <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <TileTitle icon="help" title={t('pulse.learning.questions')} sub={t('pulse.learning.questionsSub')} />
+              <RateLine weeks={learn.weeks.map((w) => ({ label: fmtShort(w.from), v: w.per100 }))} aria={t('pulse.learning.questionsAria', { list: learn.weeks.map((w) => `${fmtShort(w.from)} ${w.per100 ?? t('pulse.learning.tooFewShort')}`).join(', ') })} />
+            </div>
+            <div style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <TileTitle icon="learn" title={t('pulse.learning.taught')} sub={t('pulse.learning.taughtSub')} />
+              {lastAdded > 0 ? <>
+                <div style={{ ...mono, fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{pct(last.added.you / lastAdded)}</div>
+                <div style={{ fontSize: 12, color: 'var(--cth-ink-2)', lineHeight: '17px' }}>{t('pulse.learning.taughtLine', { you: last.added.you, total: lastAdded })}</div>
+                <Stack parts={[{ n: last.added.you, color: 'var(--cth-green)' }, { n: last.added.job, color: 'var(--cth-ink-4)' }, { n: last.added.michael, color: 'var(--cth-indigo)' }]} aria={t('pulse.learning.taughtLine', { you: last.added.you, total: lastAdded })} />
+              </> : <div style={{ fontSize: 12, color: 'var(--cth-ink-3)' }}>{t('pulse.learning.taughtNone')}</div>}
+            </div>
           </div>
         </Section>
 
@@ -305,25 +385,65 @@ export function PulseView() {
           </div>
         </div>
 
-        <Section title={t('pulse.team')} tip={t('pulse.teamTip')}>
-          {members.length === 0 && !s.michael ? (
-            <div style={{ ...card, padding: 20, fontSize: 13, color: 'var(--cth-ink-2)' }}>{t('pulse.emptyOffice')}</div>
-          ) : (
-            <div style={grid(memberCols)}>
-              {s.michael && (
-                <button type="button" onClick={() => setDetail(s.michael!.agentId)} style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'start', cursor: 'pointer', border: 'none', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink)' }}>
-                  <TileHead id={s.michael.agentId} name={nameOf(s.michael.agentId)} role={t('pulse.officeManager')} color="var(--cth-indigo)" />
-                  <Counts items={[[s.michael.routed, t('pulse.routed')], [s.michael.questions, t('pulse.questionsToYou')], [s.michael.cardsOpened, t('pulse.cardsOpened')]]} />
-                  <div style={{ fontSize: 11, color: 'var(--cth-ink-2)' }}>{t('pulse.runningOffice')} <b style={mono}>{pct(s.michael.share)}</b></div>
-                </button>
-              )}
-              {members.map((m) => (
-                <MemberTile key={m.agentId} m={m} name={nameOf(m.agentId)} role={byId.get(m.agentId) ? roleOf(byId.get(m.agentId)!) : ''} color={colorOf(m.agentId, 0)} advice={view.advice.some((a) => a.agentId === m.agentId)} onOpen={() => setDetail(m.agentId)} />
-              ))}
-            </div>
-          )}
+        <Section title={t('pulse.work.title')} tip={t('pulse.work.tip')}>
+          <div style={{ ...card, padding: '12px 16px 10px' }}>
+            {work.totalMs <= 0 ? <div style={{ fontSize: 13, color: 'var(--cth-ink-2)', padding: '6px 0' }}>{t('pulse.work.none')}</div> : <>
+              <div style={{ fontSize: 13, color: 'var(--cth-ink-2)', lineHeight: '19px' }}>
+                {work.topTwo && <b style={{ color: 'var(--cth-ink)' }}>{t('pulse.work.headTop', { a: nameOf(work.topTwo.ids[0]), b: nameOf(work.topTwo.ids[1]), pct: pct(work.topTwo.share) })}</b>}
+                {work.quiet.length > 0 && <> {t('pulse.work.headQuiet', { names: listNames(work.quiet.map(nameOf)) })}</>}
+                {work.costliest && <> {t('pulse.work.headCostly', { name: nameOf(work.costliest.agentId), usd: money(work.costliest.usd), time: duration(work.costliest.busyMs, t) })}</>}
+              </div>
+              <div role="list" aria-label={t('pulse.work.title')} style={{ marginTop: 6 }}>
+                <div aria-hidden style={{ ...workGrid, height: 26 }}>
+                  <span style={label}>{t('pulse.work.member')}</span>
+                  <span style={label}>{t('pulse.work.time')}</span>
+                  <span style={label}>{t('pulse.work.hours')}</span>
+                  {layout === 'wide' && <span style={{ display: 'grid', gridTemplateColumns: `repeat(${strip.length}, 12px)`, gap: 4, fontSize: 9, color: 'var(--cth-ink-3)', textAlign: 'center' }}>{strip.map((d, i) => <span key={i}>{d.label}</span>)}</span>}
+                  {layout === 'wide' && <span style={label}>{t('pulse.work.knows')}</span>}
+                  <span style={{ ...label, justifyContent: 'flex-end' }}>{t('pulse.work.value')}</span>
+                  {layout !== 'narrow' && <span style={{ ...label, justifyContent: 'flex-end' }}>{t('pulse.work.perHour')}</span>}
+                </div>
+                {rows.map((m) => {
+                  const chip = work.chips[m.agentId];
+                  const quiet = chip?.kind === 'quiet';
+                  const perHour = m.busyMs >= MIN_BUSY_FOR_RATE_MS && m.usd > 0 ? m.usd / (m.busyMs / 3_600_000) : null;
+                  const color = m.agentId === godId ? 'var(--cth-indigo)' : colorOf(m.agentId, 0);
+                  const role = m.agentId === godId ? t('pulse.officeManager') : byId.get(m.agentId) ? roleOf(byId.get(m.agentId)!) : '';
+                  const cells = stripOf(m.dayBusy);
+                  return (
+                    <button key={m.agentId} type="button" role="listitem" onClick={() => setDetail(m.agentId)}
+                      aria-label={t('pulse.work.rowAria', { name: nameOf(m.agentId), time: duration(m.busyMs, t), value: money(m.usd) })}
+                      style={{ ...workGrid, width: '100%', minHeight: 44, border: 'none', borderTop: '1px solid var(--cth-line)', background: 'none', cursor: 'pointer', textAlign: 'start', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink)', padding: 0 }}>
+                      <span style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, opacity: quiet ? 0.7 : 1 }}>
+                        <span style={{ borderRadius: '50%', boxShadow: `0 0 0 1.5px ${color}`, display: 'inline-flex', flex: 'none' }}><AgentAvatar id={m.agentId} name={nameOf(m.agentId)} size={24} /></span>
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(m.agentId)}</span>
+                          <span style={{ display: 'block', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role}</span>
+                        </span>
+                      </span>
+                      <span style={{ position: 'relative', height: 14, borderRadius: 'var(--cth-r-pill)', background: 'var(--cth-neutral-soft)' }}>
+                        <i style={{ position: 'absolute', insetInlineStart: 0, top: 0, bottom: 0, width: `${(m.busyMs / maxBusy) * 100}%`, background: color, borderRadius: 'var(--cth-r-pill)' }} />
+                        <b style={{ position: 'absolute', top: -6, bottom: -6, width: 1.5, insetInlineStart: `${(work.avgMs / maxBusy) * 100}%`, background: AVG_DASH }} />
+                        {chip && <span style={{ position: 'absolute', insetInlineEnd: 0, top: -3 }}><WorkChipView chip={chip} /></span>}
+                      </span>
+                      <span style={{ ...mono, fontSize: 13, fontWeight: 600, opacity: quiet ? 0.7 : 1 }}>{duration(m.busyMs, t)}</span>
+                      {layout === 'wide' && <span aria-hidden style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, 12px)`, gap: 4 }}>{cells.map((ms, i) => <i key={i} style={{ width: 12, height: 12, borderRadius: 3, background: color, opacity: ms <= 0 ? 0.08 : Math.min(1, 0.25 + ms / 5_760_000) }} />)}</span>}
+                      {layout === 'wide' && <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ ...mono, fontSize: 11 }}>{learn.knows[m.agentId] ?? 0}</span><span style={{ flex: 1, height: 6, borderRadius: 'var(--cth-r-pill)', background: 'var(--cth-neutral-soft)', overflow: 'hidden' }}><i style={{ display: 'block', height: '100%', width: `${((learn.knows[m.agentId] ?? 0) / maxKnows) * 100}%`, background: 'var(--cth-ink-3)' }} /></span></span>}
+                      <span style={{ ...mono, fontSize: 13, fontWeight: 600, textAlign: 'end' }}>{money(m.usd)}</span>
+                      {layout !== 'narrow' && <span style={{ ...mono, fontSize: 13, fontWeight: 600, textAlign: 'end', color: chip?.kind === 'costly' ? 'var(--cth-amber-text)' : 'var(--cth-ink)' }}>{perHour !== null ? `$${Math.round(perHour)}` : ''}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, color: 'var(--cth-ink-3)', alignItems: 'center', paddingTop: 8, borderTop: '1px solid var(--cth-line)' }}>
+                <span><span style={{ display: 'inline-block', width: 1.5, height: 12, background: AVG_DASH, marginInlineEnd: 5, verticalAlign: 'middle' }} />{t('pulse.work.average', { time: duration(work.avgMs, t) })}</span>
+                {layout === 'wide' && <span>{t('pulse.work.knowsLegend')}</span>}
+                <span>{t(view.billing === 'apiKey' ? 'pulse.work.valueSpent' : 'pulse.work.valueLegend')}</span>
+                <span style={{ marginInlineStart: 'auto' }}>{t('pulse.work.open')}</span>
+              </div>
+            </>}
+          </div>
         </Section>
-
       </>
     );
   }
@@ -351,57 +471,84 @@ export function PulseView() {
   );
 }
 
-function TileHead({ id, name, role, color }: { id: string; name: string; role: string; color: string }) {
+/** A Kept safe tile: an icon, a number, what it counts, and its parts (proposal 3). */
+function StatTile({ icon, value, of, text, parts, amber }: { icon: IconName; value: number; of?: number; text: string; parts?: Array<{ n: number; name: string; color: string }>; amber?: boolean }) {
+  const { t } = useTranslation();
+  const shown = (parts ?? []).filter((p) => p.n > 0 || (parts ?? []).length <= 3);
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-      <span style={{ borderRadius: '50%', boxShadow: `0 0 0 2px ${color}`, display: 'inline-flex' }}><AgentAvatar id={id} name={name} size={40} /></span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role}</div>
-      </div>
+    <div style={{ ...(amber ? { background: 'var(--cth-amber-soft)', borderRadius: 'var(--cth-r-xl)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--cth-amber) 40%, transparent)' } : card), padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: amber ? 'var(--cth-card)' : 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: amber ? 'var(--cth-amber-text)' : 'var(--cth-ink-2)' }}><Icon name={icon} size={1.125} /></div>
+      <div style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 28, fontWeight: 600, lineHeight: '30px' }}>{value}{of !== undefined && <span style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 400, color: 'var(--cth-ink-3)', marginInlineStart: 6 }}>{t('pulse.safe.of', { n: of })}</span>}</div>
+      <div style={{ fontSize: 12, color: 'var(--cth-ink-2)', lineHeight: '17px' }}>{text}</div>
+      {shown.length > 0 && shown.some((p) => p.n > 0) && <Stack parts={shown} aria={shown.map((p) => `${p.name} ${p.n}`).join(', ')} />}
+      {shown.length > 0 && <Legend items={shown.map((p) => [p.name, p.color, p.n])} />}
     </div>
   );
 }
 
-function Counts({ items }: { items: Array<[number, string]> }) {
+function Stack({ parts, aria }: { parts: Array<{ n: number; color: string }>; aria: string }) {
   return (
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-      {items.map(([n, l]) => (
-        <span key={l} style={{ display: 'flex', flexDirection: 'column', fontSize: 10.5, color: 'var(--cth-ink-3)' }}>
-          <b style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 17, color: 'var(--cth-ink)', fontWeight: 600 }}>{n}</b>{l}
+    <div role="img" aria-label={aria} style={{ display: 'flex', height: 8, borderRadius: 'var(--cth-r-pill)', overflow: 'hidden', gap: 2, background: 'var(--cth-neutral-soft)' }}>
+      {parts.filter((p) => p.n > 0).map((p, i) => <i key={i} style={{ display: 'block', flex: p.n, background: p.color }} />)}
+    </div>
+  );
+}
+
+function Legend({ items }: { items: Array<[string, string, number?]> }) {
+  return (
+    <div aria-hidden style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', fontSize: 11, color: 'var(--cth-ink-3)' }}>
+      {items.map(([name, color, n]) => (
+        <span key={name} style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+          <b style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'inline-block' }} />
+          {name}{n !== undefined && <span style={{ fontFamily: 'var(--cth-font-mono)', color: 'var(--cth-ink-2)' }}>{n}</span>}
         </span>
       ))}
     </div>
   );
 }
 
-function MemberTile({ m, name, role, color, advice, onOpen }: { m: MemberMeasures; name: string; role: string; color: string; advice: boolean; onOpen: () => void }) {
-  const { t } = useTranslation();
-  const c = m.costForWork;
-  const counts: Array<[number, string]> = (['email', 'check', 'sent', 'task'] as WorkKind[]).filter((k) => m.counts[k] > 0).slice(0, 3).map((k) => [m.counts[k], t(`pulse.kind.${k}`)]);
-  const verdictColor = c.verdict === 'cheaper' ? 'var(--cth-green-text)' : c.verdict === 'pricier' ? 'var(--cth-amber-text)' : 'var(--cth-ink)';
-  const aria = c.verdict === 'too-few' ? t('pulse.tooFew') : t(`pulse.verdict.${c.verdict}`);
-  // No work yet: one quiet line, not an empty bar and a verdict about nothing.
-  const idle = !counts.length && c.verdict === 'too-few';
+function TileTitle({ icon, title, sub }: { icon: IconName; title: string; sub: string }) {
   return (
-    <button type="button" onClick={onOpen} style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'start', cursor: 'pointer', border: 'none', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink)' }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <TileHead id={m.agentId} name={name} role={role} color={color} />
-        {advice && <span aria-label={t('pulse.hasSuggestion')} style={{ marginInlineStart: 'auto', width: 8, height: 8, borderRadius: '50%', background: 'var(--cth-amber)' }} />}
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div aria-hidden style={{ width: 30, height: 30, borderRadius: 'var(--cth-r-md)', background: 'var(--cth-card-2)', boxShadow: 'inset 0 0 0 1px var(--cth-line)', display: 'grid', placeItems: 'center', color: 'var(--cth-ink-2)', flex: 'none' }}><Icon name={icon} size={1.125} /></div>
+      <div>
+        <div style={label}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--cth-ink-2)' }}>{sub}</div>
       </div>
-      {counts.length ? <Counts items={counts} /> : <div style={{ fontSize: 11, color: 'var(--cth-ink-3)' }}>{t('pulse.nothingYet')}</div>}
-      {!idle && <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <div style={label}>{t('pulse.costForWork')}</div>
-        <div role="img" aria-label={aria} style={{ position: 'relative', height: 8, borderRadius: 'var(--cth-r-pill)', background: 'linear-gradient(90deg, var(--cth-green-soft), var(--cth-neutral-soft) 40% 60%, var(--cth-amber-soft))', opacity: c.verdict === 'too-few' ? 0.4 : 1 }}>
-          <span style={{ position: 'absolute', left: '50%', top: -3, width: 1, height: 14, background: 'var(--cth-ink-4)' }} />
-          {c.verdict !== 'too-few' && <span style={{ position: 'absolute', insetInlineStart: `${c.position * 100}%`, top: -3, width: 14, height: 14, borderRadius: '50%', background: 'var(--cth-card)', boxShadow: 'inset 0 0 0 3px var(--cth-ink)', transform: 'translateX(-50%)' }} />}
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--cth-ink-2)' }}>
-          {c.verdict === 'too-few' ? t('pulse.tooFew') : <><b style={{ color: verdictColor }}>{t(`pulse.verdict.${c.verdict}`)}</b>{c.perPiece !== null && c.kind && <> · <span style={{ fontFamily: 'var(--cth-font-mono)' }}>${c.perPiece.toFixed(2)}</span> {t(`pulse.per.${c.kind}`)}</>}</>}
-        </div>
-      </div>}
-    </button>
+    </div>
   );
+}
+
+/** Questions to you per 100 requests, week by week; a week with too few requests is a gap. */
+function RateLine({ weeks, aria }: { weeks: Array<{ label: string; v: number | null }>; aria: string }) {
+  const W = 260, H = 96;
+  const vals = weeks.map((w) => w.v).filter((v): v is number => v !== null);
+  const hi = Math.max(1, ...vals) * 1.15, lo = 0;
+  const x = (i: number): number => 20 + (i * (W - 40)) / Math.max(1, weeks.length - 1);
+  const y = (v: number): number => H - 18 - ((v - lo) / (hi - lo)) * (H - 36);
+  const pts = weeks.map((w, i) => (w.v === null ? null : `${x(i).toFixed(0)},${y(w.v).toFixed(0)}`)).filter(Boolean).join(' ');
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H + 4}`} role="img" aria-label={aria} style={{ maxWidth: 320 }}>
+      {vals.length > 1 && <polyline points={pts} fill="none" stroke="var(--cth-ink-2)" strokeWidth={2} />}
+      {weeks.map((w, i) => (
+        <g key={i}>
+          {w.v !== null && <>
+            <circle cx={x(i)} cy={y(w.v)} r={3.5} fill="var(--cth-card)" stroke="var(--cth-ink)" strokeWidth={2} />
+            <text x={x(i)} y={y(w.v) - 9} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={11} fontWeight={600} fill="var(--cth-ink)">{w.v}</text>
+          </>}
+          <text x={x(i)} y={H} textAnchor="middle" fontSize={9.5} fill="var(--cth-ink-3)">{w.label}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function WorkChipView({ chip }: { chip: WorkChip }) {
+  const { t } = useTranslation();
+  const base: CSSProperties = { fontSize: 10.5, fontWeight: 600, borderRadius: 'var(--cth-r-pill)', padding: '2px 8px', whiteSpace: 'nowrap' };
+  if (chip.kind === 'costly') return <span style={{ ...base, background: 'var(--cth-amber-soft)', color: 'var(--cth-amber-text)' }}>{t('pulse.work.costly')}</span>;
+  if (chip.kind === 'quiet') return <span style={{ ...base, background: 'var(--cth-neutral-soft)', color: 'var(--cth-ink-3)' }}>{t('pulse.work.quiet')}</span>;
+  return <span style={{ ...base, background: 'var(--cth-card)', color: 'var(--cth-ink)', boxShadow: 'inset 0 0 0 1px var(--cth-line-2)' }}>{chip.kind === 'busiest' ? t('pulse.work.busiest') : t('pulse.work.times', { times: chip.times })}</span>;
 }
 
 function MemberDetail({ id, data, name, onClose, money }: { id: string; data: PulseData; name: string; onClose: () => void; money: (v: number) => string }) {
