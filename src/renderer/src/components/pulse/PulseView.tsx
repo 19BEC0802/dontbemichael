@@ -225,8 +225,7 @@ export function PulseView() {
       .sort((a, b) => b.busyMs - a.busyMs);
     const work = teamAtWork(rows);
     const maxBusy = Math.max(1, ...rows.map((m) => m.busyMs));
-    const maxKnows = Math.max(1, ...rows.map((m) => learn.knows[m.agentId] ?? 0));
-    const workGrid: CSSProperties = { display: 'grid', alignItems: 'center', gap: 14, gridTemplateColumns: layout === 'wide' ? '190px minmax(0, 1fr) 66px 110px 76px' : layout === 'mid' ? '170px minmax(0, 1fr) 66px 76px' : 'minmax(0, 1fr) minmax(0, 1fr) 60px 70px' };
+    const workGrid: CSSProperties = { display: 'grid', alignItems: 'center', gap: 14, gridTemplateColumns: layout === 'wide' ? '190px minmax(0, 1fr) 66px 86px' : layout === 'mid' ? '170px minmax(0, 1fr) 66px 76px' : 'minmax(0, 1fr) minmax(0, 1fr) 60px 70px' };
     // On a plan or an API key the dollars are a real cost; otherwise a pay per use value.
     const costWord = view.plan || view.billing === 'apiKey' ? 'pulse.work.cost' : 'pulse.work.value';
     const outcomeLabel = (o: Outcome): string => t(`pulse.outcome.${o.kind}`, { sub: o.sub ?? 0 });
@@ -404,7 +403,6 @@ export function PulseView() {
                   <span style={label}>{t('pulse.work.member')}</span>
                   <span style={label}>{t('pulse.work.time')}</span>
                   <span style={label}>{t('pulse.work.hours')}</span>
-                  {layout === 'wide' && <span style={label}>{t('pulse.work.knows')}</span>}
                   <span style={{ ...label, justifyContent: 'flex-end' }}>{t(costWord)}</span>
                 </div>
                 {rows.map((m) => {
@@ -429,7 +427,6 @@ export function PulseView() {
                         {chip && <span style={{ position: 'absolute', insetInlineEnd: 0, top: -3 }}><WorkChipView chip={chip} /></span>}
                       </span>
                       <span style={{ ...mono, fontSize: 13, fontWeight: 600, opacity: quiet ? 0.7 : 1 }}>{duration(m.busyMs, t)}</span>
-                      {layout === 'wide' && <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ ...mono, fontSize: 11 }}>{learn.knows[m.agentId] ?? 0}</span><span style={{ flex: 1, height: 6, borderRadius: 'var(--cth-r-pill)', background: 'var(--cth-neutral-soft)', overflow: 'hidden' }}><i style={{ display: 'block', height: '100%', width: `${((learn.knows[m.agentId] ?? 0) / maxKnows) * 100}%`, background: 'var(--cth-ink-3)' }} /></span></span>}
                       <span style={{ ...mono, fontSize: 13, fontWeight: 600, textAlign: 'end' }}>{money(m.usd)}</span>
                     </button>
                   );
@@ -437,7 +434,6 @@ export function PulseView() {
               </div>
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, color: 'var(--cth-ink-3)', alignItems: 'center', paddingTop: 8, borderTop: '1px solid var(--cth-line)' }}>
                 <span><span style={{ display: 'inline-block', width: 1.5, height: 12, background: AVG_DASH, marginInlineEnd: 5, verticalAlign: 'middle' }} />{t('pulse.work.average', { time: duration(work.avgMs, t) })}</span>
-                {layout === 'wide' && <span>{t('pulse.work.knowsLegend')}</span>}
                 <span>{t(view.plan ? 'pulse.work.planLegend' : view.billing === 'apiKey' ? 'pulse.work.valueSpent' : 'pulse.work.valueLegend')}</span>
                 <span style={{ marginInlineStart: 'auto' }}>{t('pulse.work.open')}</span>
               </div>

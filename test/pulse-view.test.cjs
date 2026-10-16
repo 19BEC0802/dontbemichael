@@ -61,7 +61,7 @@ test('line icons, never emoji; Team at work lists everyone on the team busiest f
   assert.match(view, /const rows = s\.members\.filter\(\(m\) => byId\.has\(m\.agentId\)\)\n\s+\.map\(\(m\) => \(\{ \.\.\.m, busyMs: m\.busyMs \?\? 0, turns: m\.turns \?\? 0, dayBusy: m\.dayBusy \?\? \[\] \}\)\)\n\s+\.sort\(\(a, b\) => b\.busyMs - a\.busyMs\);/);
   assert.match(view, /const work = teamAtWork\(rows\);/);
   assert.match(view, /m\.agentId === godId \? t\('pulse\.officeManager'\)/);
-  assert.doesNotMatch(view, /pulse\.work\.perHour|stripOf\(/, 'no day strip or per hour column (owner, 2026-10-15)');
+  assert.doesNotMatch(view, /pulse\.work\.perHour|stripOf\(|pulse\.work\.knows/, 'no day strip, per hour or Knows column (owner, 2026-10-15)');
   assert.match(view, /onClick=\{\(\) => setDetail\(m\.agentId\)\}/);
   for (const i of ['shield', 'search', 'pause', 'lock', 'book', 'help', 'learn']) assert.match(view, new RegExp(`icon="${i}"`), i);
 });

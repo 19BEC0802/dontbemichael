@@ -1172,14 +1172,14 @@ half written message survives the switch.
   headline (the two busiest members' share of working time, who was quiet, who cost the most
   for the least work), then a row per member on the team, Michael included, busiest first:
   avatar ringed in department `acc`, name and role, a working time bar in that `acc` with the
-  team average as a dashed mark, hours, Knows (notes plus procedures) and cost (no day strip
-  or per hour column, owner 2026-10-15). Callouts sit on the bar's end: Busiest, "Nx the
+  team average as a dashed mark, hours and cost (no day strip, per hour or Knows column,
+  owner 2026-10-15). Callouts sit on the bar's end: Busiest, "Nx the
   team" (twice the average or more), Quiet (under a quarter of it), and `amber` soft "Costly
   for its work" (twice the usual value per hour, with ten minutes of work and three peers at
   least). A row opens the member detail, an overlay like Task detail (§7.21): six facts in
   `card-2` boxes and a four week value bar.
 - Layout by the window's width: 1100 px and wider, 4 a row and every Team at work column;
-  760 to 1099, tiles 2 by 2 and Team at work without Knows; under 760, one
+  760 to 1099, tiles 2 by 2; under 760, one
   column and Team at work with name, bar, hours and value. Coral is never used on Pulse. Every chart has an
   aria-label sentence; Apply and Undo announce in a polite live region.
 

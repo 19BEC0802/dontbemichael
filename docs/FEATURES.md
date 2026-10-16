@@ -112,7 +112,7 @@ moving, and brings you only the decisions that need you.
   cleaned of instructions to AI agents, anything held because it could not be checked, and the
   steps your settings stopped; Learning, what the team remembers week by week and whether it asks
   you less; your plan use and your time; and Team at work, how busy each member is next to the
-  others, what they know and what their work costs. On a Claude plan, costs are the plan's real price
+  others, and what their work costs. On a Claude plan, costs are the plan's real price
   (found in your Claude account, or the price you set in Settings) split by each member's share
   of the work, with the pay per use figure one click away. It fills in the weeks before
   it started from what the office already keeps, so it never starts at zero.
