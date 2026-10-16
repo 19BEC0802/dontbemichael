@@ -112,7 +112,10 @@ test('on Last 4 weeks every top tile shows its week by week trend', () => {
   assert.match(view, /const wks = view\.weeks \?\? null;/);
 });
 
-test('the Spent tile starts at the top like every other tile', () => {
-  // Value: protects=the owner\'s 2026-10-15 alignment note; fails_when=the Spent tile centers its title again; why_new=owner note; seam=source pin; no_claim=pixel layout
-  assert.match(view, /flexDirection: 'row', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between'/);
+test('Spent and Your time fill their tiles: title at the top, plan use or what it means at the foot', () => {
+  // Value: protects=the owner\'s 2026-10-15 notes (title at the top, no empty foot); fails_when=the Spent tile centers its title, plan use leaves the foot, or Your time loses its comparison; why_new=owner notes; seam=source pins; no_claim=pixel layout
+  const spent = view.slice(view.indexOf("{t('pulse.whereMoneyWent')}") - 400, view.indexOf("{/* Your time and while you were away"));
+  assert.match(spent, /\.\.\.tight, justifyContent: 'space-between'/);
+  assert.match(spent, /width: `\$\{Math\.min\(100, view\.headroom\.usedPct\)\}%`/, 'plan use is a bar at the foot');
+  assert.match(view, /t\('pulse\.asksBefore', \{ n: prev\.asks, before: t\(`pulse\.learning\.before\.\$\{s\.period\}`\) \}\)/);
 });

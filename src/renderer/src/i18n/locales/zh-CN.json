@@ -2596,6 +2596,7 @@
       "memberTip": "该成员在本期按其工作份额分摊的套餐费用。",
       "ofPlan": "来自你的 {{plan}}（每月 {{monthly}}）"
     },
-    "questionsAnswered": "个问题，平均 {{time}} 内回答"
+    "questionsAnswered": "个问题，平均 {{time}} 内回答",
+    "asksBefore": "{{before}}：{{n}} 个"
   }
 }

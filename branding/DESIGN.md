@@ -1158,10 +1158,12 @@ half written message survives the switch.
   source: `green` your answers, `ink-4` on the job, `indigo` Michael; under it the notes and
   written ways of working held in all), Questions to you per 100 requests in the period (one
   number, then up, down or same against the same span just before; under 20 requests, too few
-  to tell), both following the period select (owner, 2026-10-15), Spent with plan use (a mono 24 px total with what it is beneath, a
-  58 px ring and the reset day beside it, the ring on a Claude plan only, an `amber` soft
-  "Runs out around …" when the pace says so; no bar, who spent what is Team at work's job), and
-  Your time with While you were away past a hairline. On a Claude plan with a known price
+  to tell), both following the period select (owner, 2026-10-15), Spent with plan use (a mono 24 px total with what it is beneath at the top;
+  plan use at the foot as a full width 8 px bar with its percent and reset day, on a Claude
+  plan only, turning `amber` with a soft "Runs out around …" when the pace says so; who spent
+  what is Team at work's job), and Your time with While you were away past a hairline (the
+  number at the top, what it means or how it compares with the period before at the foot).
+  Each tile spreads its content top to bottom so none holds an empty foot. On a Claude plan with a known price
   (Settings > Agents, else the plan found in the owner's Claude account), every dollar on
   Pulse is a member's part of the plan's real cost for the days so far in the period, split by
   their share of the work (their pay per use value); the line under Spent reads "of your

@@ -2596,6 +2596,7 @@
       "memberTip": "This member's part of your plan's cost for the period, by their share of the work.",
       "ofPlan": "of your {{plan}} ({{monthly}} a month)"
     },
-    "questionsAnswered": "questions, answered in {{time}} on average"
+    "questionsAnswered": "questions, answered in {{time}} on average",
+    "asksBefore": "{{n}} {{before}}"
   }
 }

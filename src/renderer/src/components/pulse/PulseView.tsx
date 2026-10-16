@@ -353,9 +353,10 @@ export function PulseView() {
             {wks && <WeekLine labels={wkLabels} values={lastFour.map((w) => w.per100)} format={(v) => v.toFixed(1)} aria={t('pulse.learning.questionsSub')} />}
           </div>
           {/* One total (owner, 2026-10-15): who spent what is Team at work's job.
-              Plan use sits in the same tile, beside what was spent. */}
-          <div style={{ ...tight, flexDirection: 'row', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+              Plan use sits at the foot of the same tile, as a bar, so the tile
+              is filled top to bottom like its neighbours. */}
+          <div style={{ ...tight, justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <div style={label}>
                 {t('pulse.whereMoneyWent')}
                 <InfoTip text={view.plan ? t('pulse.plan.tip', { monthly: dollars(view.plan.monthly), payPerUse: money(view.plan.payPerUse) }) : t('pulse.valueTip')} />
@@ -366,34 +367,43 @@ export function PulseView() {
                   ? t('pulse.plan.ofPlan', { plan: view.plan.label ?? t('pulse.plan.yourPlan'), monthly: dollars(view.plan.monthly) })
                   : t(view.billing === 'apiKey' ? 'pulse.spentApiKey' : 'pulse.plan.noPrice')}
               </div>
-              {wks && <WeekBars labels={wkLabels} series={[{ values: wks.usd, color: 'var(--cth-ink-2)' }]} format={(v) => `$${Math.round(v)}`} aria={t('pulse.whereMoneyWent')} />}
             </div>
+            {wks && <WeekBars labels={wkLabels} series={[{ values: wks.usd, color: 'var(--cth-ink-2)' }]} format={(v) => `$${Math.round(v)}`} aria={t('pulse.whereMoneyWent')} />}
             {view.headroom && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flex: 'none' }}>
-                <svg width={58} height={58} viewBox="0 0 88 88" role="img" aria-label={t('pulse.planAria', { pct: Math.round(view.headroom.usedPct) })}>
-                  <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-neutral-soft)" strokeWidth={11} />
-                  <circle cx={44} cy={44} r={36} fill="none" stroke="var(--cth-ink-2)" strokeWidth={11} strokeLinecap="round" strokeDasharray={`${(Math.min(100, view.headroom.usedPct) / 100) * 226} 226`} transform="rotate(-90 44 44)" />
-                  <text x={44} y={51} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={20} fontWeight={600} fill="var(--cth-ink)">{Math.round(view.headroom.usedPct)}%</text>
-                </svg>
-                <div style={{ ...label, fontSize: 9 }}>{t('pulse.planUse')}<InfoTip text={t('pulse.planTip')} /></div>
-                <div style={{ fontSize: 10, color: 'var(--cth-ink-3)', whiteSpace: 'nowrap' }}>{t('pulse.resets', { day: fmtDay(view.headroom.resetsAt) })}</div>
-                {view.headroom.runsOutAt && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--cth-amber-text)', background: 'var(--cth-amber-soft)', borderRadius: 'var(--cth-r-pill)', padding: '1px 6px' }}>{t('pulse.runsOut', { day: fmtDay(view.headroom.runsOutAt) })}</span>}
+              <div role="img" aria-label={t('pulse.planAria', { pct: Math.round(view.headroom.usedPct) })} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={label}>{t('pulse.planUse')}<InfoTip text={t('pulse.planTip')} /></span>
+                  <span style={{ ...mono, fontSize: 12, fontWeight: 600, marginInlineStart: 'auto' }}>{Math.round(view.headroom.usedPct)}%</span>
+                </div>
+                <div style={{ height: 8, borderRadius: 'var(--cth-r-pill)', background: 'var(--cth-neutral-soft)', overflow: 'hidden' }}>
+                  <i style={{ display: 'block', height: '100%', width: `${Math.min(100, view.headroom.usedPct)}%`, background: view.headroom.runsOutAt ? 'var(--cth-amber)' : 'var(--cth-ink-2)', borderRadius: 'var(--cth-r-pill)' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 10.5, color: 'var(--cth-ink-3)' }}>
+                  {t('pulse.resets', { day: fmtDay(view.headroom.resetsAt) })}
+                  {view.headroom.runsOutAt && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--cth-amber-text)', background: 'var(--cth-amber-soft)', borderRadius: 'var(--cth-r-pill)', padding: '1px 6px' }}>{t('pulse.runsOut', { day: fmtDay(view.headroom.runsOutAt) })}</span>}
+                </div>
               </div>
             )}
           </div>
-          {/* Your time and while you were away: both about you, one tile. */}
+          {/* Your time and while you were away: both about you, one tile; the
+              number at the top, what it means at the foot. */}
           <div style={{ ...tight, flexDirection: 'row', gap: 14 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0 }}>
-              <div style={label}>{t('pulse.yourTime')}<InfoTip text={t('pulse.yourTimeTip')} /></div>
-              <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.yourTime.asks}</div>
-              <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{s.yourTime.medianWaitMs !== null ? t('pulse.questionsAnswered', { time: duration(s.yourTime.medianWaitMs, t) }) : t('pulse.questions')}</div>
-              {wks && <WeekBars labels={wkLabels} series={[{ values: wks.asks, color: 'var(--cth-ink-2)' }]} aria={t('pulse.yourTime')} />}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0, justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={label}>{t('pulse.yourTime')}<InfoTip text={t('pulse.yourTimeTip')} /></div>
+                <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.yourTime.asks}</div>
+                <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{s.yourTime.medianWaitMs !== null ? t('pulse.questionsAnswered', { time: duration(s.yourTime.medianWaitMs, t) }) : t('pulse.questions')}</div>
+              </div>
+              {wks ? <WeekBars labels={wkLabels} series={[{ values: wks.asks, color: 'var(--cth-ink-2)' }]} aria={t('pulse.yourTime')} />
+                : prevWeeks.length === span && <div style={{ fontSize: 11, color: 'var(--cth-ink-2)', lineHeight: '15px' }}>{t('pulse.asksBefore', { n: prev.asks, before: t(`pulse.learning.before.${s.period}`) })}</div>}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0, paddingInlineStart: 14, boxShadow: 'inset 1px 0 0 var(--cth-line)' }}>
-              <div style={label}>{t('pulse.whileAway')}<InfoTip text={t('pulse.awayTip')} /></div>
-              <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.awayShare === null ? '0%' : pct(s.awayShare)}</div>
-              <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.awayLine')}</div>
-              {wks && <WeekLine labels={wkLabels} values={wks.away} format={(v) => pct(v)} aria={t('pulse.whileAway')} />}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0, paddingInlineStart: 14, boxShadow: 'inset 1px 0 0 var(--cth-line)', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={label}>{t('pulse.whileAway')}<InfoTip text={t('pulse.awayTip')} /></div>
+                <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.awayShare === null ? '0%' : pct(s.awayShare)}</div>
+              </div>
+              {wks ? <WeekLine labels={wkLabels} values={wks.away} format={(v) => pct(v)} aria={t('pulse.whileAway')} />
+                : <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.awayLine')}</div>}
             </div>
           </div>
         </section>
