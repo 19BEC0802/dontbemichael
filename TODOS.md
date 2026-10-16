@@ -163,6 +163,42 @@
 **Priority:** P2
 **Depends on:** None
 
+### An owner's answer is never lost between the card and Michael
+
+**What:** Record the answer on the card and queue Michael's routing request in one main side step, or keep unsent routing requests and retry them in the same launch.
+
+**Why:** If the card patch lands but the message to Michael fails, the ask leaves Ask me and Michael never hears until a restart (the catch up runs once per launch).
+
+**Context:** From the second Codex adversarial review, 2026-10-16. The pattern predates this branch: `AskMeTab.tsx` sendAnswer patches then sends; `index.ts` catchUpOwnerAnswers is gated by ownerCatchUpDone.
+
+**Effort:** M (human) / S (CC)
+**Priority:** P2
+**Depends on:** None
+
+### Pulse reads a card's whole history, not the period's slice
+
+**What:** Keep card lifecycle state (reopened, held time) per card as events arrive, instead of rebuilding it from the period's events only.
+
+**Why:** A card reopened or held before the period and finished in it counts as kept as is and as faster than it was.
+
+**Context:** From the second Codex adversarial review, 2026-10-16. `telemetryProcessor.ts` cards().
+
+**Effort:** S (human) / S (CC)
+**Priority:** P3
+**Depends on:** None
+
+### Backfill when Pulse first opens
+
+**What:** Start `pulseBackfillOnce` from the `pulse:snapshot` handler as well as the 30 s beat.
+
+**Why:** On the first launch after an update, opening Pulse within 30 s shows the office without its past weeks.
+
+**Context:** From the second Codex adversarial review, 2026-10-16. `index.ts` pulse:snapshot and the beat.
+
+**Effort:** S (human) / S (CC)
+**Priority:** P3
+**Depends on:** None
+
 ### Pulse keeps a card finished just before a quit
 
 **What:** Record card status changes where Michael's board write lands (or persist the last seen board) instead of only diffing the 8 s poll in memory.
