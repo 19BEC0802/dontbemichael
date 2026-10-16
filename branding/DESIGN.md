@@ -235,8 +235,8 @@ one directly: they go to Michael first (§8.6).
 ### 3.4 Departments [Both]
 
 Pods, avatars and illustration faces use a pastel family per department. Each family has
-`l` (lit screen, lightest face), `m` (main face), `d` (shaded face) and `acc` (glow,
-department icon, tag rule).
+`l` (lightest face), `m` (main face), `d` (shaded face) and `acc` (glow, the tint of a
+working glass monitor, department icon and plate, tag rule).
 
 **Avatars.** A person is drawn as their character's signature prop on a circle of their
 department's `l` (the light `l` in dark theme too, with an `m` edge), so a prop reads the
@@ -269,7 +269,8 @@ monitor with code, operations box, team sparkle. They sit in the department tab 
 
 **Dark derivation.** In dark mode each family is derived from its `m` value in HLS:
 `l` = L .36 S .34, `m` = L .28 S .30, `d` = L .22 S .28, `acc` = L .70 S .80 of `acc`.
-Lit screens keep the light `l` value in both themes, so a working screen glows in the dark.
+Monitors are glass in both themes (§8.3): a working screen takes `acc`, with a softer halo
+in the dark.
 
 The role to department mapping is data, not art: it lives next to `OFFICE_ROLES`
 (`src/shared/officeRoles.ts`) when the app migrates (§17).
@@ -281,7 +282,7 @@ treatment (§8.5).
 
 | Status (store) | Pill label | Pill colors | Pod treatment |
 |---|---|---|---|
-| `working` | Working | `blue` text on `blue` soft | Screen lit (`l`), floor glow in `acc` |
+| `working` | Working | `blue` text on `blue` soft | Glass screen tinted in `acc` with scrolling lines (§8.3), floor glow in `acc` |
 | `thinking` | Thinking | `violet` text on soft | Three dot bubble over the monitor |
 | `waiting` (at a prompt, not busy) | Waiting | `ink-3` on `neutral-soft` | Screen on, no glow |
 | `blocked` on the owner | Needs you | white on `coral-strong` | Coral beacon above the pod, pulsing |
@@ -401,7 +402,7 @@ One window, four regions. Nothing else is permanent.
 | Region | Size | Holds |
 |---|---|---|
 | Top bar | 56 px, ground `chrome` under `card` at 70% | §7.1 |
-| Stage | Fills | The current view (§7.2): Office (studio, §8), Tasks (§7.20), Who talks to whom (§7.22) |
+| Stage | Fills | The current view (§7.2): Office (studio, §8), Tasks (§7.20), Pulse (§7.27), Who talks to whom (§7.22) |
 | Right column | 380 px default, 340 min, 520 max, drag to resize (SidebarSplitter, double click resets; its grip shows only on hover) | Closed by default: while nothing waits and nobody is open the column is not there and the office takes the window (`bleed` 0, no splitter). Otherwise the Needs you board, the selected person's panel or Michael's panel (§7.6). Work tab widens it to 480. It has no ground of its own (owner, 2026-09-30: a panel behind cards is a layer too many): the Needs you heading and cards, and the person and Michael panels (cards themselves), sit straight on the stage, which runs on underneath (`StudioStage` `bleed`); the scene still fits the space left of it |
 | Bottom bar | 50 px tall, floats 24 px left, 22 px right and 26 px above the stage's bottom edge | Talk to Michael composer, next job chip and Hire (§7.19) |
 
@@ -538,7 +539,8 @@ opens the board.
 ### 7.6 Right column
 
 Four states, one region (docs/designs/needs-you-empty-state.md). The column shows on the
-Office view only: Tasks and Who talks to whom take the whole window (owner, 2026-10-03). It
+Office view only: Tasks, Pulse (§7.27) and Who talks to whom take the whole window (owner,
+2026-10-03). It
 stays mounted there, hidden, so a person's terminal and a half written reply survive the
 switch; anything that opens it (the Needs you pill, a "?" or "for you" badge, a person, the
 next job chip) goes back to the Office first.
@@ -786,7 +788,8 @@ The card floating by each pod on the stage.
 - `r-xl`, padding 12 × 10 × 0 × 9, `card` at 96%, `line` border, `shadow-md`.
 - Department tab on the top edge, offset −9 px: the department icon (§3.4, 10 px, `acc`)
   and uppercase `t-micro` in a `card` chip with an `m` border and `r-sm`. Beside it: the sticky count (§7.16) and the for you badge
-  (§7.15).
+  (§7.15). The pod itself also names the department, on its plate in front of the chairs
+  (§8.3), so a pod showing only its quiet chip (§7.14a) still says what it does.
 - Row: 24 px avatar, name (12.5 → `t-ui` 600), role (`t-micro` 400 `ink-3`, not
   uppercase), status pill top right.
 - Caption: `t-meta`, `ink-2`, one line, ellipsis. The live action, else the first words of
@@ -1277,7 +1280,7 @@ As §3.5. In addition:
 - **Needs you beacon**: a coral sphere on a thin pole above the pod with a ring that scales
   from .6 to 1.5 and fades, every 1.8 s. Only for status `blocked` on the owner.
 - **Thinking**: a white bubble with three `violet` dots over the monitor.
-- **Idle**: the pod desaturated; screen off.
+- **Idle**: the pod desaturated; the screen clear glass (§8.3).
 
 ### 8.6 Paths and tokens
 
@@ -1854,6 +1857,10 @@ Needs you rework on `design/studio-v2`, through 2026-10-01). Each row is **Fix**
 | 2026-09-24 | (v1) One spec for app and web, moved into `branding/` with the brand kit. |
 | 2026-10-14 | Web: the privacy section after the Sending block, a Privacy first badge, a three position trust layer switch with the app's Privacy check notes and Pete's labelled answer, and Settings, Research & privacy as a read only picture; Pete's globe avatar; the /security page to read (§9.15, §9.16). |
 | 2026-10-15 | Web: the Files notes swap the five tab limit for what the office reads (Excel exports from accounting and payroll software, long PDFs, PowerPoint decks), PDF and Office opening joins the first note (§9.14); `/security` gains a Links in the app section (§9.16) (owner, 2026-10-15). |
+| 2026-10-14 | Edit agent: a Danger zone under the engine with Delete, for anyone but Michael, his assistant and Pete; the one card besides Settings' Danger zone with the coral ring (§6.3, §7.26). |
+| 2026-10-15 | Ask me: options as rows to pick, with a Recommended tag, and several questions with a line each; picking never sends, Reply on its own row says what it sends, and any question may be left blank (§7.8). |
+| 2026-10-15 | Pulse, a view tab between Tasks and Who talks to whom that takes the whole window: recommendations, what got done, Kept safe, the row of four tiles, Team at work, and trends on Last 4 weeks (§5.2, §7.2, §7.6, §7.27). |
+| 2026-10-15 | Studio: a department plate on each pod's pad ("HR" for people), so the pod says what it does (§7.14, §8.3); every monitor, Michael's too, is frameless glass, clear when idle and tinted in `acc` with scrolling lines at work (§3.4, §3.5, §8.3, §8.5); `home-light` and `home-dark` re-shot (§20). |
 
 ---
 
@@ -1875,7 +1882,8 @@ In `reference/studio/` (PNG, 1440 × 900); the README uses them too. First appro
 the build as it is. `npm run shoot` re-shoots them all (or `npm run shoot -- home-dark` for
 one) from `tools/studio-lab/reference.tsx`, with the clock fixed at 10:42 and a seeded
 random, so a re-shoot changes only what the app changed. `home-light`, `home-dark`,
-`tasks-detail` and `who-talks-to-whom` were re-shot 2026-10-03. Then
+`tasks-detail` and `who-talks-to-whom` were re-shot 2026-10-03, and `home-light` and
+`home-dark` again 2026-10-15 (department plates, glass monitors). Then
 `python3 branding/source/build.py social guide` rebuilds the social card and the brand
 guide PDF, which use them. Re-shoot after any visible change to these screens.
 
