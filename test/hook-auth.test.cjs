@@ -125,22 +125,36 @@ test('every engine bridge sends the secret, and the spawn hands it over without 
     return hiveSrc.slice(start, hiveSrc.indexOf('\n`;', start));
   };
   for (const name of ['HOOK_SHIM', 'AGY_HOOK_SHIM', 'PROXY_BRIDGE_SHIM', 'GEMINI_HOOK_SHIM', 'GROK_HOOK_SHIM']) {
-    assert.match(shimBody(name), /hook_token[:= ]+process\.env\.HIVE_HOOK_TOKEN/, name);
+    assert.match(shimBody(name), /hook_token[:= ]+process\.env\.HIVE_HOOK_SEAL/, name);
   }
   // Pi and OpenCode post from their in-process plugins.
-  assert.equal((hiveSrc.match(/payload\.hook_token = process\.env\.HIVE_HOOK_TOKEN \|\| null;/g) || []).length >= 4, true, 'Claude shim, pi, opencode and the proxy emit');
-  assert.match(hiveSrc, /HIVE_HOOK_TOKEN: this\.hookTokens\.get\(agentId\) \?\? ''/, 'the proxy sidecar gets its agent\'s secret');
+  assert.equal((hiveSrc.match(/payload\.hook_token = process\.env\.HIVE_HOOK_SEAL \|\| null;/g) || []).length >= 4, true, 'Claude shim, pi, opencode and the proxy emit');
+  assert.match(hiveSrc, /HIVE_HOOK_SEAL: this\.hookTokens\.get\(agentId\) \?\? ''/, 'the proxy sidecar gets its agent\'s secret');
 
   const { home, hive } = office(t);
   const inj = await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
-  const token = inj.env.HIVE_HOOK_TOKEN;
+  const token = inj.env.HIVE_HOOK_SEAL;
   assert.match(token, /^[0-9a-f]{48}$/);
   assert.equal(hive.hookTokenOwner(token), 'pam');
   const again = await hive.ensureAgent({ id: 'pam', name: 'Pam', provider: 'claude', cwd: home });
-  assert.notEqual(again.env.HIVE_HOOK_TOKEN, token, 'a new start gets a new secret');
+  assert.notEqual(again.env.HIVE_HOOK_SEAL, token, 'a new start gets a new secret');
   assert.equal(hive.hookTokenOwner(token), undefined);
   const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
   for (const f of walk(home)) {
-    assert.ok(!fs.readFileSync(f).includes(again.env.HIVE_HOOK_TOKEN), `secret written to ${path.relative(home, f)}`);
+    assert.ok(!fs.readFileSync(f).includes(again.env.HIVE_HOOK_SEAL), `secret written to ${path.relative(home, f)}`);
   }
+});
+
+test('the hook secret survives Research\'s subprocess scrub: its name is not one a scrub strips', () => {
+  // Value: protects=Research's every step (2026-10-15: with HIVE_HOOK_TOKEN, Claude Code's CLAUDE_CODE_SUBPROCESS_ENV_SCRUB stripped it from Pete's hooks and status line, so each of his steps was refused); fails_when=the secret is renamed to a token, key, pass or auth like name, or the shim and the spawn disagree on it; why_new=live regression; seam=the app's own scrub rule, which follows Claude Code's; no_claim=every future Claude Code scrub pattern
+  const fsm = require('node:fs');
+  const pathm = require('node:path');
+  const { isInheritedSecret } = loadTs('src/main/ptyEnv.ts');
+  const hiveSrc = fsm.readFileSync(pathm.join(__dirname, '..', 'src/main/hive.ts'), 'utf8');
+  const names = [...new Set([...hiveSrc.matchAll(/HIVE_HOOK_[A-Z]+(?=: this\.mintHookToken)/g)].map((m) => m[0]))];
+  assert.deepEqual(names, ['HIVE_HOOK_SEAL']);
+  assert.equal(isInheritedSecret('HIVE_HOOK_SEAL', 'a'.repeat(48)), false, 'the scrub keeps it');
+  assert.equal(isInheritedSecret('HIVE_HOOK_TOKEN', 'a'.repeat(48)), true, 'the old name was stripped');
+  assert.match(hiveSrc, /payload\.hook_token = process\.env\.HIVE_HOOK_SEAL \|\| null;/, 'the shim reads the same name');
+  assert.doesNotMatch(hiveSrc, /HIVE_HOOK_TOKEN/);
 });

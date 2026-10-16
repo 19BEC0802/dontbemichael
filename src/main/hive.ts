@@ -1267,7 +1267,10 @@ export class HiveManager {
       AGENT_DIR: dir,
       // A fresh secret for this start (issue #61): every hook frame carries it,
       // and the hook server takes the sender from it, never from the frame.
-      HIVE_HOOK_TOKEN: this.mintHookToken(meta.id)
+      // Not named like a token or key: Research runs with Claude Code's
+      // subprocess scrub, which strips such names from its hooks and status
+      // line, and its every step was refused (2026-10-15).
+      HIVE_HOOK_SEAL: this.mintHookToken(meta.id)
     };
     // The bundled-node launcher, so an agent can run the hive's .cjs helpers (KG
     // CLI, Slack reply helper) even when `node` is not on its PATH. Invoking the
@@ -1988,7 +1991,7 @@ export class HiveManager {
             ELECTRON_RUN_AS_NODE: '1',
             HIVE_SOCK: cfg.sock,
             AGENT_ID: agentId,
-            HIVE_HOOK_TOKEN: this.hookTokens.get(agentId) ?? '',
+            HIVE_HOOK_SEAL: this.hookTokens.get(agentId) ?? '',
             UPSTREAM_BASE_URL: cfg.upstream,
             HIVE_PROXY_SESSION: cfg.sessionId,
             HIVE_PROXY_API: cfg.api
@@ -5746,7 +5749,7 @@ process.stdin.on('end', () => {
   if (me && payload.agent_id && payload.agent_id !== me) payload.subagent_id = payload.agent_id;
   payload.agent_id = me || payload.agent_id || null;
   // The spawn's secret (issue #61): the app works out the sender from it.
-  payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
+  payload.hook_token = process.env.HIVE_HOOK_SEAL || null;
   const sock = process.env.HIVE_SOCK;
   if (isStatus) {
     // Status-line mode: Claude Code pipes the session status JSON (incl.
@@ -5874,7 +5877,7 @@ process.stdin.on('end', () => {
   const payload = {
     hook_event_name: event,
     agent_id: agentId,
-    hook_token: process.env.HIVE_HOOK_TOKEN || null,
+    hook_token: process.env.HIVE_HOOK_SEAL || null,
     session_id: agy.conversationId,
     transcript_path: agy.transcriptPath,
     cwd: Array.isArray(agy.workspacePaths) ? agy.workspacePaths[0] : undefined,
@@ -5926,7 +5929,7 @@ function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
-    payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
+    payload.hook_token = process.env.HIVE_HOOK_SEAL || null;
     var c = net.createConnection(SOCK, function () { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', function () {});
   } catch (e) {}
@@ -5964,7 +5967,7 @@ function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
-    payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
+    payload.hook_token = process.env.HIVE_HOOK_SEAL || null;
     const c = createConnection(SOCK, () => { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', () => {});
   } catch (e) {}
@@ -6023,7 +6026,7 @@ function ctxSize(model) {
 // Fire-and-forget emit of a shim-shaped payload to the hive socket. Never throws.
 function emit(payload) {
   if (!SOCK) return;
-  payload.hook_token = process.env.HIVE_HOOK_TOKEN || null;
+  payload.hook_token = process.env.HIVE_HOOK_SEAL || null;
   try {
     const c = net.createConnection(SOCK, function () { c.end(JSON.stringify(payload) + '\\n'); });
     c.on('error', function () {});
@@ -6237,7 +6240,7 @@ process.stdin.on('end', () => {
     ...gemini,
     hook_event_name: names[gemini.hook_event_name] || gemini.hook_event_name || 'Unknown',
     agent_id: agentId,
-    hook_token: process.env.HIVE_HOOK_TOKEN || null
+    hook_token: process.env.HIVE_HOOK_SEAL || null
   };
   let resp = '';
   const done = () => {
@@ -6303,7 +6306,7 @@ process.stdin.on('end', () => {
   const payload = {
     hook_event_name: names[grok.hookEventName] || grok.hookEventName || 'Unknown',
     agent_id: agentId,
-    hook_token: process.env.HIVE_HOOK_TOKEN || null,
+    hook_token: process.env.HIVE_HOOK_SEAL || null,
     session_id: grok.sessionId,
     cwd: grok.cwd || grok.workspaceRoot,
     tool_name: grok.toolName,

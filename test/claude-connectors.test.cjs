@@ -445,7 +445,7 @@ async function throughShim(t, cfg, payload) {
   t.after(() => server.stop());
   await new Promise((r) => setTimeout(r, 50));
   return new Promise((resolve) => {
-    const p = spawn(process.execPath, [hive.shimPath()], { env: { PATH: process.env.PATH, AGENT_ID: 'pam', HIVE_SOCK: hive.sockPath(), HIVE_HOOK_TOKEN: hive.mintHookToken('pam') } });
+    const p = spawn(process.execPath, [hive.shimPath()], { env: { PATH: process.env.PATH, AGENT_ID: 'pam', HIVE_SOCK: hive.sockPath(), HIVE_HOOK_SEAL: hive.mintHookToken('pam') } });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     p.on('close', () => resolve(out));
