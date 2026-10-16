@@ -139,6 +139,126 @@
 **Priority:** P2
 **Depends on:** The team performance build
 
+### A health readout for the Pulse telemetry (T9)
+
+**What:** Add `telemetry:health` (last batch time, events per batch, failed writes, refused hook frames per member from `HookServer.rejectedFrames()`), one log line per processor batch, and a single warning when the processor stalls.
+
+**Why:** When a Pulse number looks wrong there is no way to see whether points stopped flowing, writes failed or frames were refused; today nothing reads `rejectedFrames()`.
+
+**Context:** Deferred from plan: docs/designs/team-performance.md (T9, E3), owner choice at /ship of mit/delete-team-member, 2026-10-16. The store already counts failed writes per day (D15); the processor runs every 30 s from `index.ts`.
+
+**Effort:** S (human) / S (CC)
+**Priority:** P1
+**Depends on:** None
+
+### Keep Pulse's heavy reads off the main thread
+
+**What:** Read transcripts for the backfill line by line with a yield every few hundred lines, skip lines before the window before parsing tool results, and let the 30 s tick drain backfilled points instead of folding up to 100,000 at once; prune `telemetry_runs` with the events.
+
+**Why:** On the first launch after an update the backfill and its fold can hold the main thread for seconds while every agent starts and sends hook frames; a very large office log or transcript is read whole into memory (Codex review).
+
+**Context:** From the /ship performance review, 2026-10-16. Migration 4 added the indexes the hot reads needed; this is the remaining part. `pulseBackfill.ts` readTranscript and `pulseBackfillOnce` in `index.ts`.
+
+**Effort:** M (human) / S (CC)
+**Priority:** P2
+**Depends on:** None
+
+### Pulse keeps a card finished just before a quit
+
+**What:** Record card status changes where Michael's board write lands (or persist the last seen board) instead of only diffing the 8 s poll in memory.
+
+**Why:** A card that reaches Done in the seconds before the app quits or crashes is taken as the new baseline on the next launch and never counted in Tasks done.
+
+**Context:** From the Codex adversarial review, 2026-10-16. `telemetryStore.ts` tasks(): the first read of an office only remembers.
+
+**Effort:** S (human) / S (CC)
+**Priority:** P3
+**Depends on:** None
+
+### Prune the processor's saved cost totals
+
+**What:** Drop session keys from the processor's saved state (`state.costs`) that have not changed for a long horizon, or keep them in a keyed table.
+
+**Why:** Two keys per agent and session are kept forever and parsed and written every 30 s, so an office with many restarts grows a large kv row.
+
+**Context:** From the Codex adversarial review, 2026-10-16. `telemetryProcessor.ts` saveState.
+
+**Effort:** S (human) / S (CC)
+**Priority:** P3
+**Depends on:** None
+
+### Key Pulse by a stable office id, not its folder path
+
+**What:** Store an office id in the office and key telemetry rows by it, or re-key rows when Settings moves the office; resolve the path with realpath meanwhile.
+
+**Why:** Moving the office, or reaching it by another spelling (a symlink, a different case), splits Pulse history and runs the backfill again under the new key.
+
+**Context:** From the /ship red team review, 2026-10-16. `pulseOffice()` in `index.ts` returns `expandTilde(harnessHome)`.
+
+**Effort:** M (human) / S (CC)
+**Priority:** P2
+**Depends on:** None
+
+### Let only the main session release a prompt hold
+
+**What:** Pass whether a hook frame is a subagent's to the worker wake watchdog, and let only the main session's events (or the denial of the prompted tool) end the hold; give the hold a long ceiling.
+
+**Why:** A Task subagent's PostToolUse can end the hold while a permission prompt is still on screen, and a prompt escaped with no follow up event keeps the member from ever being nudged.
+
+**Context:** From the /ship testing and red team reviews, 2026-10-16. The stuck restart now restarts a member on a permission prompt within seconds, which makes both cases rare. `workerWake.ts` MOVED_ON_EVENTS.
+
+**Effort:** S (human) / S (CC)
+**Priority:** P2
+**Depends on:** None
+
+### Bound the refused hook frame counters
+
+**What:** Count a refused frame under its claimed id only when that id is in the registry (else "unknown"), cap the maps, and rate limit the impostor count Pulse records.
+
+**Why:** Any local process that reaches the hook socket without a secret can grow the maps, the office log and the Kept safe impostor tile with made up names.
+
+**Context:** From the /ship red team review, 2026-10-16. `hooks.ts` authenticate (`rejected`, `rejectLogged`, `onRefused('impostor')`).
+
+**Effort:** S (human) / S (CC)
+**Priority:** P3
+**Depends on:** None
+
+### Hand the hook secret over where another process cannot read it
+
+**What:** On engines and platforms where a sibling process can read another's environment (Linux /proc, Windows), pass the hook secret through a 0600 file or descriptor only that agent's sandbox can read, or check the peer on the socket.
+
+**Why:** All agents run as the same OS user, and a sibling's environment is readable: on a Mac, `ps eww` showed a test HIVE_HOOK_SEAL of a node process (checked 2026-10-16). A member that reads a teammate's secret can send hook frames as them (Pulse numbers, a stuck restart), the forgery #61 closes.
+
+**Context:** From the /ship security and Codex adversarial reviews, 2026-10-16; the owner chose to ship 0.2.2 with this named limit. Today the secret is in each agent's env (`hive.ts` HIVE_HOOK_SEAL), read by every bridge shim. A per member file outside the hive, with a sandbox read deny for every other member, or a socket peer check (LOCAL_PEERPID on macOS), would close it; Windows has no sandbox, so it stays weaker there.
+
+**Effort:** M (human) / M (CC)
+**Priority:** P1
+**Depends on:** None
+
+### Tell Michael when a timed out restart worked after all
+
+**What:** When a restarted member's session starts after the 61 s confirm window already told Michael they were stuck, send him a short follow up that the restart went through.
+
+**Why:** Otherwise Michael may move work the member is already doing and keep an Ask me question about a member who is fine.
+
+**Context:** From the /ship fix review, 2026-10-16 (confidence 4). `hooks.ts` checkStuckRestarts and stuckProgress.
+
+**Effort:** S (human) / S (CC)
+**Priority:** P3
+**Depends on:** None
+
+### Pulse buttons use PixelButton
+
+**What:** Draw Apply, Not now, Undo and Try again with PixelButton (sm) so they get the hover and the 45% disabled state of DESIGN.md 7.7.
+
+**Why:** Apply looks unchanged while it is busy.
+
+**Context:** From the /ship design review, 2026-10-16. `PulseView.tsx` btn().
+
+**Effort:** S (human) / S (CC)
+**Priority:** P3
+**Depends on:** None
+
 ## Named links (from the eng review of docs/designs/named-links.md, 2026-10-11)
 
 ### Copy a link's address from a card

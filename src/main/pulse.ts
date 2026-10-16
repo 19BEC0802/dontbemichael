@@ -263,7 +263,9 @@ export class PulseService {
     let usd = 0, measuring: number | null = null;
     for (const a of live) {
       const days = this.d.processor.days(office, dayKey(a.at - ADVICE_WINDOW_MS)).filter((x) => x.agentId === a.agentId);
-      const r = measuredSaving(days, a.at, now);
+      // Up to this member's next change still in place, so changes never overlap.
+      const next = live.filter((b) => b.agentId === a.agentId && b.at > a.at).reduce<number | undefined>((m, b) => (m === undefined || b.at < m ? b.at : m), undefined);
+      const r = measuredSaving(days, a.at, now, next);
       if (r.state === 'measuring') measuring = Math.min(measuring ?? r.firstAt, r.firstAt);
       else usd += r.usd;
     }

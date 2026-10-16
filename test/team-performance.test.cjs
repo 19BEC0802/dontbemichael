@@ -116,6 +116,11 @@ test('saved by your changes is measured after a week, and can be negative', () =
   assert.deepEqual(P.measuredSaving(days, applied, NOW), { state: 'measured', usd: 10 });
   const worse = [day('toby', '2026-09-25', { usd: 10, checks: 10 }), day('toby', '2026-10-05', { usd: 20, checks: 10 })];
   assert.equal(P.measuredSaving(worse, applied, NOW).usd, -10);
+  // A second change on the same member later: the first is measured only up to it, so no work counts twice.
+  const second = new Date(2026, 9, 6, 12).getTime();
+  const both = [...days, day('toby', '2026-10-08', { usd: 5, checks: 10 })];
+  assert.deepEqual(P.measuredSaving(both, applied, NOW, second), { state: 'measured', usd: 10 }, 'Oct 8 belongs to the second change');
+  assert.deepEqual(P.measuredSaving(both, applied, NOW), { state: 'measured', usd: 25 }, 'without the bound it would count Oct 8 too');
 });
 
 test('the cost fold counts a restart whole, the same rule as the lifetime ledger', () => {

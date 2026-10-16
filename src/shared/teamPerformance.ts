@@ -321,14 +321,18 @@ export function planHeadroom(r: PlanReading | null): { usedPct: number; resetsAt
 
 /** D16: measured saving of one applied change for its member: (cost per piece
  *  in the 14 days before minus cost per piece since) times pieces since, at API
- *  prices. Measuring for the first 7 days; zero or negative is reported as is. */
-export function measuredSaving(days: MemberDay[], appliedAt: number, now: number): { state: 'measuring'; firstAt: number } | { state: 'measured'; usd: number } {
+ *  prices. Measuring for the first 7 days; zero or negative is reported as is.
+ *  `until`: when the member's next change was applied; this one is measured only
+ *  up to that day, so two changes never count the same work (Codex review,
+ *  2026-10-16). */
+export function measuredSaving(days: MemberDay[], appliedAt: number, now: number, until?: number): { state: 'measuring'; firstAt: number } | { state: 'measured'; usd: number } {
   const firstAt = appliedAt + 7 * 86_400_000;
   if (now < firstAt) return { state: 'measuring', firstAt };
   const appliedDay = dayKey(appliedAt);
   const beforeFrom = dayKey(appliedAt - 14 * 86_400_000);
   const before = days.filter((d) => d.day >= beforeFrom && d.day < appliedDay);
-  const after = days.filter((d) => d.day > appliedDay);
+  const lastDay = until === undefined ? null : dayKey(until);
+  const after = days.filter((d) => d.day > appliedDay && (lastDay === null || d.day <= lastDay));
   const per = (ds: MemberDay[]): number | null => {
     const p = ds.reduce((s, d) => s + piecesOf(d), 0);
     return p > 0 ? ds.reduce((s, d) => s + d.usd, 0) / p : null;
