@@ -93,3 +93,13 @@ test('every pulse string is in all three locales, and the plan ring shows only o
   for (const loc of ['ar', 'zh-CN']) assert.deepEqual(keys(JSON.parse(read(`src/renderer/src/i18n/locales/${loc}.json`)).pulse).sort(), want, loc);
   assert.match(read('src/main/pulse.ts'), /headroom: billing === 'account' \? planHeadroom\(this\.reading\) : null/);
 });
+
+test('Learning follows the period: the period\'s new notes and question rate, against the same span before', () => {
+  // Value: protects=the owner\'s 2026-10-15 ask (a tile under This week shows this week); fails_when=a Learning tile shows all time or a fixed four weeks under a period, or Last 4 weeks compares with one week; why_new=owner ask; seam=source pins; no_claim=pixel layout
+  assert.match(view, /const span = s\.period === '4-weeks' \? 4 : 1;/);
+  assert.match(view, /const off = s\.period === 'last-week' \? 1 : 0;/);
+  assert.match(view, /t\(`pulse\.learning\.sub\.\$\{s\.period\}`\)/);
+  assert.doesNotMatch(view, /function RateLine|remembersSub/, 'no all time chart');
+  assert.equal(en.pulse.learning.sub['this-week'], 'new notes this week');
+  assert.match(read('src/main/pulse.ts'), /count: 8 \}\);/, 'eight weeks, so four can be compared with four');
+});

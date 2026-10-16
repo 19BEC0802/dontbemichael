@@ -186,15 +186,16 @@ export class PulseService {
     try { return this.d.plan(); } catch { return null; }
   }
 
-  /** The Learning row: four weeks of notes and of questions per request. */
+  /** Learning: eight weeks of notes and of questions per request; the view picks the period's. */
   private learning(office: string): Learning {
     const now = this.now();
-    const from = periodRange('4-weeks', now).from;
+    // Eight weeks, so the Last 4 weeks period has four before it to compare with.
+    const from = dayKey(periodRange('4-weeks', now).fromMs - 28 * 86_400_000);
     const turns = new Map<string, number>();
     for (const d of this.d.processor.days(office, from)) turns.set(d.day, (turns.get(d.day) ?? 0) + (d.turns ?? 0));
     let mem: { notes: NoteFact[]; procedures: Record<string, number> } = { notes: [], procedures: {} };
     try { mem = this.d.memory(); } catch { /* memory unreadable: the row shows what it has */ }
-    return learning({ now, notes: mem.notes, procedures: mem.procedures, asks: this.asks(), turns: [...turns].map(([day, t]) => ({ day, turns: t })) });
+    return learning({ now, notes: mem.notes, procedures: mem.procedures, asks: this.asks(), turns: [...turns].map(([day, t]) => ({ day, turns: t })), count: 8 });
   }
 
   /** Value per week, last four weeks (this week last), per member; on a plan,

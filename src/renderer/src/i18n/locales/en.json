@@ -2542,18 +2542,28 @@
     "learning": {
       "title": "Learning",
       "tip": "Read from each member's memory: every note keeps the day it was written and where it came from. Questions to you are counted against the requests the team took.",
-      "remembers": "What the team remembers",
-      "remembersSub": "all notes so far; the colored part is new that week",
       "fromYou": "From your answers",
       "onJob": "Learned on the job",
       "fromMichael": "From {{godName}}",
-      "before": "Known before",
       "questions": "Questions to you",
       "questionsSub": "per 100 requests the team took",
-      "questionsAria": "Questions to you per 100 requests: {{list}}",
-      "tooFewShort": "too few requests",
-      "taughtNone": "No new notes this week yet.",
-      "taughtShort": "{{pct}} of this week's new notes came from your answers"
+      "learned": "What the team learned",
+      "sub": {
+        "this-week": "new notes this week",
+        "last-week": "new notes last week",
+        "4-weeks": "new notes in the last 4 weeks"
+      },
+      "inAll": "{{notes}} notes and {{procedures}} written ways of working in all",
+      "tooFewRate": "Too few requests to tell yet.",
+      "counts": "{{asks}} questions in {{turns}} requests",
+      "down": "down from {{from}} {{before}}",
+      "up": "up from {{from}} {{before}}",
+      "same": "same as {{before}}",
+      "before": {
+        "this-week": "the week before",
+        "last-week": "the week before",
+        "4-weeks": "the 4 weeks before"
+      }
     },
     "work": {
       "title": "Team at work",

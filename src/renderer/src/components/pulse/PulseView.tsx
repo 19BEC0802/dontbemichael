@@ -16,6 +16,7 @@ import type { PulseView as PulseData } from '@shared/pulseView';
 import type { Advice } from '@shared/teamAdvice';
 import { teamAtWork, type Outcome, type Period, type WorkChip, type WorkKind } from '@shared/teamPerformance';
 import { keptSafe, REFUSAL_GATES, type RefusalGate } from '@shared/pulseSafety';
+import { MIN_TURNS_FOR_RATE } from '@shared/teamLearning';
 import { useStore } from '@/store/store';
 import { useAppTheme } from '@/design/theme';
 import { family } from '@/scene/studio/theme';
@@ -218,9 +219,19 @@ export function PulseView() {
     // Learning, money and your time: one row of four tiles.
     const row4: CSSProperties = { display: 'grid', gridTemplateColumns: layout === 'wide' ? 'repeat(4, minmax(0, 1fr))' : layout === 'mid' ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: 12 };
     const tight: CSSProperties = { ...card, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 };
-    const maxKnown = Math.max(1, ...learn.weeks.map((w) => w.total));
-    const last = learn.weeks[learn.weeks.length - 1];
-    const lastAdded = last ? last.added.you + last.added.job + last.added.michael : 0;
+    // Learning follows the period (owner, 2026-10-15): this week, last week or
+    // the last four, against the same span just before it.
+    const span = s.period === '4-weeks' ? 4 : 1;
+    const off = s.period === 'last-week' ? 1 : 0;
+    const wk = learn.weeks;
+    const sumWeeks = (ws: typeof wk) => ws.reduce((a, w) => ({ you: a.you + w.added.you, job: a.job + w.added.job, michael: a.michael + w.added.michael, asks: a.asks + w.asks, turns: a.turns + w.turns }), { you: 0, job: 0, michael: 0, asks: 0, turns: 0 });
+    const cur = sumWeeks(wk.slice(Math.max(0, wk.length - off - span), wk.length - off));
+    const prevWeeks = wk.slice(Math.max(0, wk.length - off - 2 * span), Math.max(0, wk.length - off - span));
+    const prev = sumWeeks(prevWeeks);
+    const rateOf = (x: { asks: number; turns: number }): number | null => (x.turns >= MIN_TURNS_FOR_RATE ? Math.round((x.asks / x.turns) * 1000) / 10 : null);
+    const rate = rateOf(cur);
+    const prevRate = prevWeeks.length === span ? rateOf(prev) : null;
+    const curAdded = cur.you + cur.job + cur.michael;
     // Team at work: everyone on the team now, Michael included, busiest first.
     const rows = s.members.filter((m) => byId.has(m.agentId))
       .map((m) => ({ ...m, busyMs: m.busyMs ?? 0, turns: m.turns ?? 0, dayBusy: m.dayBusy ?? [] }))
@@ -318,33 +329,21 @@ export function PulseView() {
             each tile only as big as what it shows. */}
         <section aria-label={t('pulse.learning.title')} style={row4}>
           <div style={tight}>
-            <TileTitle icon="book" title={t('pulse.learning.remembers')} sub={t('pulse.learning.remembersSub')} tip={t('pulse.learning.tip')} />
-            <div role="img" aria-label={learn.weeks.map((w) => `${fmtShort(w.from)} ${w.total}`).join(', ')} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', height: 78 }}>
-              {learn.weeks.map((w) => {
-                const added = w.added.you + w.added.job + w.added.michael;
-                return (
-                  <div key={w.from} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, width: 40 }}>
-                    <div style={{ width: 26, height: 10 + (w.total / maxKnown) * 38, display: 'flex', flexDirection: 'column', borderRadius: 5, overflow: 'hidden', gap: 1 }}>
-                      <i style={{ flex: w.added.michael, background: 'var(--cth-indigo)' }} />
-                      <i style={{ flex: w.added.job, background: 'var(--cth-ink-4)' }} />
-                      <i style={{ flex: w.added.you, background: 'var(--cth-green)' }} />
-                      <i style={{ flex: Math.max(0, w.total - added), background: 'var(--cth-neutral-soft)' }} />
-                    </div>
-                    <div style={{ ...mono, fontSize: 11, fontWeight: 600 }}>{w.total}</div>
-                    <div style={{ fontSize: 9.5, color: 'var(--cth-ink-3)' }}>{fmtShort(w.from)}</div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Taught by you folds in here: the green part of the bars. */}
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--cth-ink-2)' }}>
-              <b style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--cth-green)', flex: 'none' }} />
-              {lastAdded > 0 ? t('pulse.learning.taughtShort', { pct: pct(last.added.you / lastAdded) }) : t('pulse.learning.taughtNone')}
-            </div>
+            <TileTitle icon="book" title={t('pulse.learning.learned')} sub={t(`pulse.learning.sub.${s.period}`)} tip={t('pulse.learning.tip')} />
+            <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{curAdded.toLocaleString(i18n.language)}</div>
+            {curAdded > 0 && <Stack parts={[{ n: cur.you, color: 'var(--cth-green)' }, { n: cur.job, color: 'var(--cth-ink-4)' }, { n: cur.michael, color: 'var(--cth-indigo)' }]} aria={`${t('pulse.learning.fromYou')} ${cur.you}, ${t('pulse.learning.onJob')} ${cur.job}, ${t('pulse.learning.fromMichael')} ${cur.michael}`} />}
+            {curAdded > 0 && <Legend items={[[t('pulse.learning.fromYou'), 'var(--cth-green)', cur.you], [t('pulse.learning.onJob'), 'var(--cth-ink-4)', cur.job], [t('pulse.learning.fromMichael'), 'var(--cth-indigo)', cur.michael]]} />}
+            <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.learning.inAll', { notes: learn.notes.toLocaleString(i18n.language), procedures: learn.procedures })}</div>
           </div>
           <div style={tight}>
             <TileTitle icon="help" title={t('pulse.learning.questions')} sub={t('pulse.learning.questionsSub')} />
-            <RateLine weeks={learn.weeks.map((w) => ({ label: fmtShort(w.from), v: w.per100 }))} aria={t('pulse.learning.questionsAria', { list: learn.weeks.map((w) => `${fmtShort(w.from)} ${w.per100 ?? t('pulse.learning.tooFewShort')}`).join(', ') })} />
+            <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{rate ?? '…'}</div>
+            <div style={{ fontSize: 11, color: 'var(--cth-ink-2)', lineHeight: '15px' }}>
+              {rate === null ? t('pulse.learning.tooFewRate')
+                : prevRate === null ? t('pulse.learning.counts', { asks: cur.asks, turns: cur.turns.toLocaleString(i18n.language) })
+                : t(rate < prevRate ? 'pulse.learning.down' : rate > prevRate ? 'pulse.learning.up' : 'pulse.learning.same', { from: prevRate, before: t(`pulse.learning.before.${s.period}`) })}
+            </div>
+            {rate !== null && prevRate !== null && <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.learning.counts', { asks: cur.asks, turns: cur.turns.toLocaleString(i18n.language) })}</div>}
           </div>
           {/* One total (owner, 2026-10-15): who spent what is Team at work's job.
               Plan use sits in the same tile, beside what was spent. */}
@@ -511,30 +510,6 @@ function TileTitle({ icon, title, sub, tip }: { icon: IconName; title: string; s
         <div style={{ fontSize: 12, color: 'var(--cth-ink-2)' }}>{sub}</div>
       </div>
     </div>
-  );
-}
-
-/** Questions to you per 100 requests, week by week; a week with too few requests is a gap. */
-function RateLine({ weeks, aria }: { weeks: Array<{ label: string; v: number | null }>; aria: string }) {
-  const W = 260, H = 74;
-  const vals = weeks.map((w) => w.v).filter((v): v is number => v !== null);
-  const hi = Math.max(1, ...vals) * 1.15, lo = 0;
-  const x = (i: number): number => 20 + (i * (W - 40)) / Math.max(1, weeks.length - 1);
-  const y = (v: number): number => H - 16 - ((v - lo) / (hi - lo)) * (H - 32);
-  const pts = weeks.map((w, i) => (w.v === null ? null : `${x(i).toFixed(0)},${y(w.v).toFixed(0)}`)).filter(Boolean).join(' ');
-  return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H + 4}`} role="img" aria-label={aria} style={{ maxWidth: 320 }}>
-      {vals.length > 1 && <polyline points={pts} fill="none" stroke="var(--cth-ink-2)" strokeWidth={2} />}
-      {weeks.map((w, i) => (
-        <g key={i}>
-          {w.v !== null && <>
-            <circle cx={x(i)} cy={y(w.v)} r={3.5} fill="var(--cth-card)" stroke="var(--cth-ink)" strokeWidth={2} />
-            <text x={x(i)} y={y(w.v) - 9} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={11} fontWeight={600} fill="var(--cth-ink)">{w.v}</text>
-          </>}
-          <text x={x(i)} y={H} textAnchor="middle" fontSize={9.5} fill="var(--cth-ink-3)">{w.label}</text>
-        </g>
-      ))}
-    </svg>
   );
 }
 

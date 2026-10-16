@@ -1154,11 +1154,11 @@ half written message survives the switch.
   "Nothing went out unchecked"), and steps stopped by the owner's settings by gate. A held
   message is never counted as protection.
 - **One row of four tiles** under Kept safe (owner, 2026-10-15), each only as big as what it
-  shows, 12/14 px padding: What the team remembers (four weekly bars of the running total, the
-  week's new notes on top by source: `green` your answers, `ink-4` on the job, `indigo`
-  Michael, `neutral-soft` known before; under them one line, the share of this week's new
-  notes from the owner's answers), Questions to you per 100 requests (an SVG line; a week under
-  20 requests is a gap), Spent with plan use (a mono 24 px total with what it is beneath, a
+  shows, 12/14 px padding: What the team learned (the period's new notes as one mono 24 px number, a bar and legend by
+  source: `green` your answers, `ink-4` on the job, `indigo` Michael; under it the notes and
+  written ways of working held in all), Questions to you per 100 requests in the period (one
+  number, then up, down or same against the same span just before; under 20 requests, too few
+  to tell), both following the period select (owner, 2026-10-15), Spent with plan use (a mono 24 px total with what it is beneath, a
   58 px ring and the reset day beside it, the ring on a Claude plan only, an `amber` soft
   "Runs out around …" when the pace says so; no bar, who spent what is Team at work's job), and
   Your time with While you were away past a hairline. On a Claude plan with a known price
