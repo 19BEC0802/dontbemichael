@@ -20,7 +20,7 @@ export type TelemetryKind =
   | 'cost'
   | 'run-dispatch'
   | 'card-status' | 'card-reopen'
-  | 'mail-decision' | 'email' | 'sent' | 'message' | 'filing'
+  | 'mail-decision' | 'email' | 'sent' | 'message'
   | 'presence'
   | 'advice-applied'
   // Team at work and Kept safe (proposal 3): working time a backfill read from

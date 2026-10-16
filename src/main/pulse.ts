@@ -13,7 +13,7 @@ import type Database from 'better-sqlite3';
 import type { ScheduledMission } from '../shared/missions';
 import {
   dayKey, keptAsIs, measuredSaving, periodRange, planHeadroom, pulseSnapshot,
-  type AskFact, type Period, type PlanReading, type PulseSnapshot
+  type AskFact, type Period, type PlanReading
 } from '../shared/teamPerformance';
 import { adviceFor, visibleAdvice, ADVICE_WINDOW_MS, type Advice, type Dismissal, type LadderModel, type MissionFact } from '../shared/teamAdvice';
 import { keptSafe, REFUSAL_GATES } from '../shared/pulseSafety';
@@ -336,6 +336,9 @@ export class PulseService {
       mark();
       return { ok: true, kind: 'schedule' };
     }
+    // The model too: only while it is still the one the change set.
+    const current = this.d.models().find((m) => m.agentId === a.agentId)?.model ?? null;
+    if (current !== (a.after as { model: string | null }).model) return { ok: false, error: 'stale' };
     mark();
     return { ok: true, kind: 'model', agentId: a.agentId, to: (a.before as { model: string | null }).model };
   }

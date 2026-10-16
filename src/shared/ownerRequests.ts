@@ -1,6 +1,6 @@
 import { isNextAt } from './cardGuards';
 import { ownValue } from './ownValue';
-import { answerMessages, cardOfConversation, cardText, isAnswered, isWithdrawn, MICHAEL_ID, openAskIndexes, raiserOf, readAskShape, type AnswerMessage } from './askMeRouting';
+import { answerMessages, cardOfConversation, cardText, isAnswered, isWithdrawn, MICHAEL_ID, openAskIndexes, raiserOf, type AnswerMessage } from './askMeRouting';
 
 /**
  * Michael's open requests from the owner (docs/designs/card-lifecycle.md): an
@@ -253,7 +253,8 @@ export function ownerChangeNote(task: { id: string; title?: string }, change: Ow
 export function memberDeletedNote(
   member: { id: string; name?: string },
   cards: ReadonlyArray<{ id: string; title?: string; status?: string }>,
-  withdrawn: number
+  withdrawn: number,
+  setAside = 0
 ): { subject: string; body: string } {
   const who = cardText(member.name?.trim() || member.id, 60);
   const shown = cards.slice(0, 20);
@@ -266,7 +267,8 @@ export function memberDeletedNote(
         ...shown.map((c) => `- card ${cardText(c.id, 60)}${c.title ? `: ${cardText(c.title)}` : ''}${c.status ? ` (${ownValue(STATUS_WORDS, c.status) ?? cardText(c.status, 20)})` : ''}`),
         ...(cards.length > shown.length ? [`- and ${cards.length - shown.length} more`] : [])
       ] : []),
-      ...(withdrawn > 0 ? [`The app withdrew their ${withdrawn === 1 ? 'open question' : `${withdrawn} open questions`} on Ask me. When the work still needs an answer, ask it again on the card.`] : [])
+      ...(withdrawn > 0 ? [`The app withdrew their ${withdrawn === 1 ? 'open question' : `${withdrawn} open questions`} on Ask me. When the work still needs an answer, ask it again on the card.`] : []),
+      ...(setAside > 0 ? [`The app also set aside ${setAside === 1 ? 'a filing' : `${setAside} filings`} they made that you had not worked yet, so nothing new is asked for them.`] : [])
     ].join('\n')
   };
 }
@@ -353,13 +355,6 @@ export function blockedWithNothingAsked(tasks: CardLike[], open: Pick<OwnerReque
     .map((t) => stuckOf(t));
 }
 
-/**
- * Open questions held the wrong way (owner, 2026-10-04). A question stays on
- * Ask me until the owner answers it or Michael withdraws it, so a card that
- * left Blocked, or that gained a second question, still shows the old one.
- * Michael is told each turn until he moves the card back to Blocked, folds the
- * questions into one, or withdraws what no longer matters.
- */
 /** Two or more lines that start like a numbered or bulleted list. */
 const LIST_LINES = /^[ \t]*(?:\d+[.)]|[-*\u2022])[ \t]+\S/gm;
 
@@ -371,12 +366,19 @@ const LIST_LINES = /^[ \t]*(?:\d+[.)]|[-*\u2022])[ \t]+\S/gm;
  */
 export function askAsList(entry: { q?: unknown; askedAt?: unknown; options?: unknown; parts?: unknown } | null | undefined, since: number): boolean {
   if (!entry || typeof entry.q !== 'string' || entry.options !== undefined || entry.parts !== undefined) return false;
-  if (readAskShape(entry).kind !== 'plain') return false;
   const at = typeof entry.askedAt === 'string' ? Date.parse(entry.askedAt) : NaN;
   if (!Number.isFinite(at) || at < since) return false;
   return (entry.q.match(LIST_LINES) ?? []).length >= 2;
 }
 
+/**
+ * Open questions held the wrong way (owner, 2026-10-04). A question stays on
+ * Ask me until the owner answers it or Michael withdraws it, so a card that
+ * left Blocked, or that gained a second question, still shows the old one.
+ * Michael is told each turn until he moves the card back to Blocked, folds the
+ * questions into one, or withdraws what no longer matters. An ask written as
+ * a list since `since` (ms) is listed too (askAsList).
+ */
 export function asksToTidy(tasks: CardLike[], since = Infinity): StuckCard[] {
   const out: StuckCard[] = [];
   for (const t of tasks) {

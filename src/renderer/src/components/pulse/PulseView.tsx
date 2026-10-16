@@ -402,7 +402,7 @@ export function PulseView() {
                 <div style={label}>{t('pulse.whileAway')}<InfoTip text={t('pulse.awayTip')} /></div>
                 <div style={{ ...mono, fontSize: 24, fontWeight: 600, lineHeight: '26px' }}>{s.awayShare === null ? '0%' : pct(s.awayShare)}</div>
               </div>
-              {wks ? <WeekLine labels={wkLabels} values={wks.away} format={(v) => pct(v)} aria={t('pulse.whileAway')} />
+              {wks ? <WeekLine compact labels={wkLabels} values={wks.away} format={(v) => pct(v)} aria={t('pulse.whileAway')} />
                 : <div style={{ fontSize: 11, color: 'var(--cth-ink-3)', lineHeight: '15px' }}>{t('pulse.awayLine')}</div>}
             </div>
           </div>
@@ -429,7 +429,7 @@ export function PulseView() {
                   const color = m.agentId === godId ? 'var(--cth-indigo)' : colorOf(m.agentId, 0);
                   const role = m.agentId === godId ? t('pulse.officeManager') : byId.get(m.agentId) ? roleOf(byId.get(m.agentId)!) : '';
                   return (
-                    <button key={m.agentId} type="button" role="listitem" onClick={() => setDetail(m.agentId)}
+                    <div key={m.agentId} role="listitem"><button type="button" onClick={() => setDetail(m.agentId)}
                       aria-label={t('pulse.work.rowAria', { name: nameOf(m.agentId), time: duration(m.busyMs, t), value: money(m.usd) })}
                       style={{ ...workGrid, width: '100%', minHeight: 44, border: 'none', borderTop: '1px solid var(--cth-line)', background: 'none', cursor: 'pointer', textAlign: 'start', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink)', padding: 0 }}>
                       <span style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, opacity: quiet ? 0.7 : 1 }}>
@@ -446,7 +446,7 @@ export function PulseView() {
                       </span>
                       <span style={{ ...mono, fontSize: 13, fontWeight: 600, opacity: quiet ? 0.7 : 1 }}>{duration(m.busyMs, t)}</span>
                       <span style={{ ...mono, fontSize: 13, fontWeight: 600, textAlign: 'end' }}>{money(m.usd)}</span>
-                    </button>
+                    </button></div>
                   );
                 })}
               </div>
@@ -548,7 +548,7 @@ function WeekBars({ labels, series, aria, format = (v) => String(v) }: { labels:
           <div style={{ width: '70%', maxWidth: 28, height: Math.max(2, (totals[i] / max) * 34), display: 'flex', flexDirection: 'column-reverse', borderRadius: 3, overflow: 'hidden', background: 'var(--cth-neutral-soft)' }}>
             {series.map((x, k) => <i key={k} style={{ display: 'block', flex: x.values[i] ?? 0, background: x.color }} />)}
           </div>
-          <span style={{ fontSize: 9, color: 'var(--cth-ink-3)', whiteSpace: 'nowrap' }}>{l}</span>
+          <span style={{ fontSize: 10, color: 'var(--cth-ink-3)', whiteSpace: 'nowrap' }}>{l}</span>
         </div>
       ))}
     </div>
@@ -556,7 +556,10 @@ function WeekBars({ labels, series, aria, format = (v) => String(v) }: { labels:
 }
 
 /** Four weeks of a rate as a small line; a week with no rate is a gap. */
-function WeekLine({ labels, values, aria, format }: { labels: string[]; values: Array<number | null>; aria: string; format: (v: number) => string }) {
+/** compact: a narrow tile, where text in the scaled chart would fall under the
+ *  10 px floor (DESIGN.md 4.2), so the line shows alone and its spoken label
+ *  carries the weeks and values (ship review, 2026-10-16). */
+function WeekLine({ labels, values, aria, format, compact = false }: { labels: string[]; values: Array<number | null>; aria: string; format: (v: number) => string; compact?: boolean }) {
   const W = 200, H = 52;
   const vals = values.filter((v): v is number => v !== null);
   const hi = Math.max(0.0001, ...vals) * 1.2;
@@ -570,9 +573,9 @@ function WeekLine({ labels, values, aria, format }: { labels: string[]; values: 
         <g key={i}>
           {v !== null && <>
             <circle cx={x(i)} cy={y(v)} r={3} fill="var(--cth-card)" stroke="var(--cth-ink)" strokeWidth={1.75} />
-            <text x={x(i)} y={y(v) - 7} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={9.5} fill="var(--cth-ink-2)">{format(v)}</text>
+            {!compact && <text x={x(i)} y={y(v) - 7} textAnchor="middle" fontFamily="var(--cth-font-mono)" fontSize={9.5} fill="var(--cth-ink-2)">{format(v)}</text>}
           </>}
-          <text x={x(i)} y={H - 1} textAnchor="middle" fontSize={8.5} fill="var(--cth-ink-3)">{labels[i]}</text>
+          {!compact && <text x={x(i)} y={H - 1} textAnchor="middle" fontSize={8.5} fill="var(--cth-ink-3)">{labels[i]}</text>}
         </g>
       ))}
     </svg>
@@ -616,7 +619,7 @@ function MemberDetail({ id, data, name, onClose, money }: { id: string; data: Pu
             {fact(t('pulse.perPiece'), m.costForWork.perPiece !== null ? `$${m.costForWork.perPiece.toFixed(2)}` : '…', m.costForWork.kind ? t(`pulse.per.${m.costForWork.kind}`) : t('pulse.tooFew'), t('pulse.perPieceTip'))}
             {fact(t('pulse.yourTime'), t('pulse.asksCount', { count: m.asks }), m.askWaitMs !== null ? t('pulse.waited', { time: duration(m.askWaitMs, t) }) : '', t('pulse.yourTimeTip'))}
             {fact(t('pulse.keptAsIs'), m.kept.share !== null ? `${Math.round(m.kept.share * 100)}%` : `${m.kept.kept}/${m.kept.decisions}`, t('pulse.keptLine', { kept: m.kept.kept, decisions: m.kept.decisions }), t('pulse.keptTip'))}
-            {fact(t('pulse.speed'), m.speedMs !== null ? `${Math.round(m.speedMs / 3_600_000)}h` : '…', t('pulse.speedLine'), t('pulse.speedTip'))}
+            {fact(t('pulse.speed'), m.speedMs !== null ? duration(m.speedMs, t) : '…', t('pulse.speedLine'), t('pulse.speedTip'))}
             {fact(t('pulse.whileAway'), m.awayShare !== null ? `${Math.round(m.awayShare * 100)}%` : '…', t('pulse.awayMine'), t('pulse.awayTip'))}
           </div>
         )}

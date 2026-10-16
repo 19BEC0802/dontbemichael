@@ -31,11 +31,11 @@ export type ToolKind =
 export type StationKind =
   | 'shelf' | 'terminal' | 'web' | 'board' | 'mailbox' | 'mcp' | 'desk';
 
-/** Why an agent waits for a restart (store.pendingRestart). */
 /** An unsent Ask me pick: the option picked on a choice, or each question's
  *  chip and typed line on an ask with several (docs/designs/ask-me-options.md). */
 export interface AnswerPick { pick?: number; parts?: ({ chip?: number; text?: string } | undefined)[] }
 
+/** Why an agent waits for a restart (store.pendingRestart). */
 export interface PendingRestart {
   at: number;
   /** engine: Claude Code was just set up (docs/designs/get-michael-ready.md).

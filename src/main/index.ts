@@ -2210,9 +2210,14 @@ function runBreakerBeat(progressWindowMs: number): void {
     // (aggregateLive picks the most-recent live session id), so this gates on
     // "is there a live session" without changing any live-agent behavior.
     if (sample?.sessionId) hive.appendCostLedger(sample); // ledger covers everyone incl. god
-    // Pulse keeps every engine's cost, a transcript fallback sample included
-    // (eng review, Section 1); a repeat of the last value is not stored.
-    if (sample) pulseTelemetry.cost(id, sample.sessionId || 'transcript', sample.usd, sample.input + sample.output + sample.cacheRead + sample.cacheCreation, sample.model);
+    // Pulse keeps every engine's cost; a repeat of the last value is not stored.
+    // A transcript fallback (no session id) is the whole session's total, so a
+    // Claude member's is left out: its live numbers and the ledger's past days
+    // already count that spend (ship review, 2026-10-16). An engine with no live
+    // numbers keeps it, under its own session so one session folds as one.
+    if (sample && (sample.sessionId || (a.provider ?? 'claude') !== 'claude')) {
+      pulseTelemetry.cost(id, sample.sessionId || `transcript:${hive.lastSession(id) ?? ''}`, sample.usd, sample.input + sample.output + sample.cacheRead + sample.cacheCreation, sample.model);
+    }
     // Second source for the resume key. recordSession() is otherwise reachable
     // ONLY from the hook shim, so any window where hooks don't land leaves the
     // registry with no sessionId and "Restart & Continue" refuses to continue —

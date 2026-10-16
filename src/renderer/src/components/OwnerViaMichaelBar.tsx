@@ -10,8 +10,9 @@ import { useResolvedGodName } from '@/hooks/useResolvedGodName';
  * Michael, so the owner reaches them through him, or takes them 1:1.
  *
  * "Message Michael about Pam" jumps to Michael with "About Pam: " started in his
- * message box (design 4A); nothing is sent until the owner sends it. When the
- * agent is stuck on something in its own terminal ("needs you"), Talk 1:1 leads.
+ * message box (design 4A); nothing is sent until the owner sends it. A member
+ * stuck on a prompt is restarted by the app (hooks.ts stuckOnPrompt), so the
+ * bar keeps its order then too.
  */
 /** The registry is the record of 1:1 and survives restarts, so the store's copy
  *  can be stale on a fresh launch. Read it back once per agent. (Moved here

@@ -457,7 +457,9 @@ The v1 "no radius" rule is retired.
 Hairlines only: 1 px. The exceptions are the 2.5 px top rule on mailbox tags (§7.18), the
 3 px coral left rule on Ask me cards (§7.8), and the 1.5 px coral ring and 700 title and
 button of the Danger zone card in Settings, General, which is loud on purpose because
-Reset deletes the office (owner, 2026-10-02).
+Reset deletes the office (owner, 2026-10-02). Edit agent's Danger zone (§7.26) is the one
+other card with that coral tint and ring, because Delete removes a team member for good
+(owner, 2026-10-14; blessed at ship review, 2026-10-16).
 
 ---
 
@@ -1074,7 +1076,10 @@ someone already hired, in one column, laid exactly over the person's panel it ed
 box and radius, kept in step on resize; with no panel, 640 wide, full height, on the right,
 left in RTL): Name, Role,
 What they handle, Work style (it takes the height left over), then a folded "Engine" line
-that names the provider and model and opens to change them. No section headings; field
+that names the provider and model and opens to change them. Under the engine, for anyone
+who can be deleted (never Michael, his assistant or Pete), the Danger zone: one coral
+tinted row, r-xl corners and the 1.5 px coral ring of §6.3, its name with an info icon and
+the destructive Delete button. No section headings; field
 labels only, with explanations behind info icons. The character is chosen once, in the hire wizard, and a
 person's color is their department's, set by the job; Edit agent offers neither.
 

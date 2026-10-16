@@ -75,7 +75,9 @@ test('Edit agent shows the Danger zone under the engine, behind canDeleteTeamMem
   assert.ok(engine > 0 && danger > engine, 'Danger zone comes after the engine');
   const zone = src.slice(danger, src.indexOf('</div>', danger));
   assert.match(zone, /data-fields="danger"/);
-  assert.match(zone, /var\(--cth-coral\)/, 'drawn in the danger red');
+  // The Settings Danger zone's card: coral tint, r-xl corners, its 55% coral ring (DESIGN.md 6.3).
+  assert.match(zone, /borderRadius: 'var\(--cth-r-xl\)'/);
+  assert.match(zone, /inset 0 0 0 1\.5px color-mix\(in srgb, var\(--cth-coral-base\) 55%, transparent\)', background: 'var\(--cth-coral-soft\)'/, 'drawn in the danger red');
   assert.match(zone, /<PixelButton variant="destructive"/);
   assert.match(src, /if \(!confirm\(deleteConfirmText\(agent\.id, agent\.name, t\)\)\) return;/);
   // Off the floor, the archived list and the restore list: nothing brings them back.
@@ -113,6 +115,12 @@ test('deleting a member withdraws their open asks and tells Michael their open c
     { id: 'doing', title: 'Stock count', status: 'doing', assignee: 'meredith-x1' },
     { id: 'old', title: 'Done work', status: 'done', assignee: 'meredith-x1' }
   ] }));
+  // A filing she made that Michael has not worked yet, and one of Pam's.
+  const triage = path.join(home, 'hive', 'triage');
+  fs.mkdirSync(triage, { recursive: true });
+  fs.writeFileSync(path.join(triage, '20261015T010000-meredith-x1.json'), JSON.stringify({ title: 'Vendor terms', filedBy: 'meredith-x1', ask: 'Net 30 or net 60?' }));
+  fs.writeFileSync(path.join(triage, '20261015T010100-pam.json'), JSON.stringify({ title: 'Invoice run', filedBy: 'pam', ask: 'Send today?' }));
+  const token = hive.mintHookToken('meredith-x1');
   const godInbox = path.join(home, 'hive', 'agents', 'god', 'inbox');
   const inboxFiles = () => (fs.existsSync(godInbox) ? fs.readdirSync(godInbox).filter((f) => f.endsWith('.json')) : []);
   const before = inboxFiles().length;
@@ -128,6 +136,9 @@ test('deleting a member withdraws their open asks and tells Michael their open c
   assert.equal(cards.unrecorded.humanQA[1].dismissedAt, undefined);
   assert.deepEqual(openAskIndexes(cards.pams.humanQA), [0], "Pam's ask stays open; Meredith's on Pam's card goes");
   assert.equal(hive.openQuestionsRaisedBy('meredith-x1'), 0);
+  assert.deepEqual(fs.readdirSync(triage).filter((f) => f.endsWith('.json')), ['20261015T010100-pam.json'], 'her filing is set aside, Pam\'s stays for Michael');
+  assert.ok(fs.existsSync(path.join(triage, '.done', '20261015T010000-meredith-x1.json')));
+  assert.equal(hive.hookTokenOwner(token), undefined, 'her hook secret no longer opens anything');
 
   const after = inboxFiles().map((f) => JSON.parse(fs.readFileSync(path.join(godInbox, f), 'utf8')));
   assert.equal(after.length, before + 1, 'Michael hears once');
@@ -137,6 +148,7 @@ test('deleting a member withdraws their open asks and tells Michael their open c
   for (const id of ['first-meredith', 'unrecorded', 'pams', 'doing']) assert.match(note.body, new RegExp(`- card ${id}:`));
   assert.doesNotMatch(note.body, /card old:/, 'a Done card is not listed');
   assert.match(note.body, /withdrew their 3 open questions on Ask me/);
+  assert.match(note.body, /set aside a filing they made that you had not worked yet/);
   assert.doesNotMatch(`${note.subject}\n${note.body}`, /[–—]| - [a-z]/, 'no dashes');
 
   assert.deepEqual(hive.memberDeleted('god'), { withdrawn: 0, cards: 0 }, 'Michael is never deleted');

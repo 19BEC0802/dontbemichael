@@ -51,7 +51,9 @@ test('the migration makes the tables once, and nothing but kind, time, value and
   // Value: protects=the store shape and no text in telemetry; fails_when=a migration is edited or prompt text lands in a row; why_new=D16; seam=none; no_claim=a database made by an older build (user_version 1 upgrades here)
   const { persist, store } = setup(t);
   const db = persist.database();
-  assert.equal(db.pragma('user_version', { simple: true }), 3);
+  assert.equal(db.pragma('user_version', { simple: true }), 4);
+  const idx = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_tr_open', 'idx_te_office_id', 'idx_te_office_kind_ts')").all().map((r) => r.name).sort();
+  assert.deepEqual(idx, ['idx_te_office_id', 'idx_te_office_kind_ts', 'idx_tr_open'], 'the hot reads have their indexes');
   store.record({ agentId: 'pam', kind: 'tool', ts: 1, attrs: { tool: 'Write' } });
   store.flush();
   const row = db.prepare('SELECT * FROM telemetry_events').get();
@@ -210,12 +212,20 @@ test('Apply changes a schedule only if it still is what the advice saw; Undo res
 
 test('a model suggestion is checked here and made by the roster; the owner\'s store is never written from main', (t) => {
   // Value: protects=model changes only through the owner's click and the renderer roster; fails_when=main writes a model or applies a stale one; why_new=eng correction 3; seam=none; no_claim=the renderer side (component test)
-  const { svc } = service(t);
+  const models = [{ agentId: 'toby', provider: 'claude', model: 'claude-opus-5-5' }];
+  const { svc } = service(t, { models });
   const fake = { id: 'cheaper-model:toby', kind: 'cheaper-model', agentId: 'toby', change: { kind: 'model', from: 'claude-opus-5-5', to: 'claude-sonnet-5', toLabel: 'Sonnet 5' }, evidence: {}, savesPerWeek: null, band: 1 };
   svc.allAdvice = () => [fake];
+  models[0].model = 'claude-haiku-4-5';
+  assert.deepEqual(svc.apply(fake.id, fake.change), { ok: false, error: 'stale' }, 'changed in Edit agent meanwhile: refused');
+  models[0].model = 'claude-opus-5-5';
   assert.deepEqual(svc.apply(fake.id, fake.change), { ok: true, kind: 'model', agentId: 'toby', to: 'claude-sonnet-5', from: 'claude-opus-5-5' });
   const id = svc.modelApplied(fake.id, 'toby', 'claude-opus-5-5', 'claude-sonnet-5');
   assert.ok(id > 0);
+  models[0].model = 'claude-sonnet-5'; // the roster made the change
+  models[0].model = 'claude-haiku-4-5'; // then the owner picked another model in Edit agent
+  assert.deepEqual(svc.undo(id), { ok: false, error: 'stale' }, 'Undo never overwrites a model changed since');
+  models[0].model = 'claude-sonnet-5';
   assert.deepEqual(svc.undo(id), { ok: true, kind: 'model', agentId: 'toby', to: 'claude-opus-5-5' });
   const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
   assert.equal((src.match(/pulse\.apply\(/g) || []).length, 1, 'only the pulse:apply handler applies advice');
@@ -369,4 +379,104 @@ test('Last 4 weeks comes with week by week figures that add up to the period; a 
   assert.equal(v.weeks.emails.reduce((a, b) => a + b, 0), total('email'));
   assert.equal(v.weeks.sent.reduce((a, b) => a + b, 0), total('sent'));
   assert.equal(v.weeks.toInternet.length, 4);
+});
+
+// ─── coverage audit, 2026-10-16: the board, presence, headroom, the advice gate ──
+
+test('the board and the owner\'s presence feed Tasks done and work while away: owner closes and reports left out, away from when input stopped', (t) => {
+  // Value: protects=Tasks done and the away share; fails_when=the first board read counts cards already done, an owner close or a report card counts as done work, away starts at the check instead of when input stopped, a repeat reading adds a point, or work after the owner is back counts as away; why_new=TelemetryStore.tasks exclusions and presence transitions only ran inside one happy path; seam=none; no_claim=powerMonitor's own idle reading
+  const { store, proc, clock, persist } = setup(t);
+  const db = persist.database();
+  const t0 = clock.now();
+  store.tasks([{ id: 'old', status: 'done', assignee: 'pam' }, { id: 'a', status: 'doing', assignee: 'pam' }, { id: 'b', status: 'doing', assignee: 'pam' }], t0);
+  store.flush();
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM telemetry_events WHERE kind = 'card-status'").get().n, 0, 'the first read only remembers');
+  store.tasks([
+    { id: 'old', status: 'done', assignee: 'pam' },
+    { id: 'a', status: 'done', assignee: 'pam' },
+    { id: 'b', status: 'done', assignee: 'pam', closedBy: 'owner' },
+    { id: 'r', status: 'done', assignee: 'pam', humanQA: [{ kind: 'report' }] }
+  ], t0 + 1000);
+  store.presence(1900, false, t0 + 2000);   // idle 31 minutes: away since input stopped
+  store.presence(2000, false, t0 + 60_000); // still away: no new point
+  store.record({ agentId: 'pam', kind: 'email', ts: t0 + 70_000, value: 2 });
+  proc.tick('/office');                     // away carries across ticks
+  store.presence(5, false, t0 + 80_000);    // back at the desk
+  store.record({ agentId: 'pam', kind: 'email', ts: t0 + 90_000, value: 3 });
+  store.presence(0, true, t0 + 100_000);    // the computer sleeps: away from now
+  store.record({ agentId: 'pam', kind: 'sent', ts: t0 + 110_000 });
+  proc.tick('/office');
+  const presence = db.prepare("SELECT ts, value FROM telemetry_events WHERE kind = 'presence' ORDER BY id").all().map((r) => [r.ts, r.value]);
+  assert.deepEqual(presence, [[t0 + 2000 - 1900 * 1000, 1], [t0 + 80_000, 0], [t0 + 100_000, 1]]);
+  const excluded = Object.fromEntries(proc.cards('/office', 0).map((c) => [c.id, c.excluded]));
+  assert.deepEqual(excluded, { a: false, b: true, r: true }, 'a card unchanged since the first read is not a change');
+  const day = proc.days('/office', '2026-01-01').find((d) => d.agentId === 'pam');
+  assert.deepEqual([day.tasks, day.emails, day.sent, day.awayPieces], [1, 5, 1, 3]);
+});
+
+test('plan headroom keeps the most constrained live window at its own length, and an API key shows none', (t) => {
+  // Value: protects=the plan pace warning; fails_when=an expired or unreadable window is taken, a five hour window is measured as a week (or the reverse), a reading with no window clears the last one, or an API key shows plan headroom; why_new=PulseService.noteRateLimits had no test (OfficeBreak's reader has its own); seam=none; no_claim=Claude Code's status line shape beyond rate_limits
+  const H = 3_600_000, D = 86_400_000;
+  const { svc, clock } = service(t);
+  const now = clock.now();
+  svc.noteRateLimits({
+    five_hour: { used_percentage: 40, resets_at: (now + H) / 1000 },
+    seven_day: { used_percentage: 90, resets_at: (now + 2 * D) / 1000 },
+    seven_day_opus: { used_percentage: 99, resets_at: (now - 1000) / 1000 }, // already reset
+    broken: { used_percentage: '95', resets_at: (now + H) / 1000 }
+  }, now);
+  let h = svc.snapshot('this-week').headroom;
+  assert.deepEqual([h.usedPct, h.resetsAt], [90, now + 2 * D]);
+  // A week long window that began 5 days ago, 90% used: it runs out at 100/90 of the time so far.
+  assert.ok(Math.abs(h.runsOutAt - (now - 5 * D + (100 / 90) * 5 * D)) < 1, `runsOutAt ${h.runsOutAt}`);
+  svc.noteRateLimits({}, now);
+  svc.noteRateLimits(null, now);
+  assert.equal(svc.snapshot('this-week').headroom.usedPct, 90, 'a reading with no live window keeps the last one');
+  svc.noteRateLimits({ five_hour: { used_percentage: 95, resets_at: (now + H) / 1000 } }, now);
+  h = svc.snapshot('this-week').headroom;
+  assert.ok(h.runsOutAt !== null && Math.abs(h.runsOutAt - (now - 4 * H + (100 / 95) * 4 * H)) < 1, 'a five hour window is five hours long');
+  const onKey = service(t, { billing: 'apiKey' });
+  onKey.svc.noteRateLimits({ seven_day: { used_percentage: 90, resets_at: (now + 2 * D) / 1000 } }, onKey.clock.now());
+  assert.equal(onKey.svc.snapshot('this-week').headroom, null);
+});
+
+test('suggestions wait for 14 days of live records; a backfill never starts them early, and an office with no data shows nothing', (t) => {
+  // Value: protects=recommendations only from enough live evidence; fails_when=the wait counts from the backfill's first day, advice shows before 14 live days, adviceFrom names the wrong day, the gate never opens, or a missing office shows data; why_new=the gate was only pinned in the view's source; seam=none; no_claim=none beyond protects
+  const env = setup(t);
+  const T = new Date(2026, 8, 1, 9).getTime();
+  env.clock.at(T);
+  env.store.record({ agentId: 'toby', kind: 'email', ts: T - 20 * 86_400_000, value: 1, attrs: { bf: 1 } });
+  for (let i = 0; i < 12; i++) { // twelve runs over three days, none found work
+    const at = T + i * 6 * 3600_000;
+    env.store.record({ agentId: 'toby', kind: 'run-dispatch', ts: at, attrs: { mission: 'm1' } });
+    env.store.record({ agentId: 'toby', kind: 'prompt', ts: at + 1000 });
+    env.store.record({ agentId: 'toby', kind: 'stop', ts: at + 2000 });
+    env.clock.at(at + 2000 + 3 * 60_000);
+    env.proc.tick('/office');
+  }
+  const deps = (office) => ({
+    db: () => env.persist.database(), store: env.store, processor: env.proc, office: () => office,
+    members: () => [{ id: 'toby', isGod: false }], godId: () => 'god', tasks: () => [],
+    missions: () => [{ id: 'm1', label: 'Inbox check', to: 'toby', intervalMs: 6 * 3600_000, body: '', enabled: true, kind: 'dispatch' }],
+    models: () => [], ladder: () => [], priceOf: () => undefined, applyMissions: () => ({ ok: false, error: 'not found' }),
+    billing: () => 'account', plan: () => null, memory: () => ({ notes: [], procedures: {} }), now: env.clock.now
+  });
+  const svc = new PulseService(deps('/office'));
+  const early = svc.snapshot('this-week');
+  assert.deepEqual([early.collectingSince, early.liveSince], ['2026-08-12', '2026-09-01']);
+  assert.deepEqual(early.advice, [], 'enough runs, but only three days of live records');
+  assert.equal(early.adviceFrom, '2026-09-15');
+  env.clock.at(new Date(2026, 8, 15, 0, 0, 1).getTime());
+  const ready = svc.snapshot('this-week');
+  assert.equal(ready.adviceFrom, null);
+  assert.deepEqual(ready.advice.map((a) => [a.kind, a.missionId]), [['run-less', 'm1']]);
+  const none = new PulseService(deps(null)).snapshot('this-week');
+  assert.deepEqual([none.available, none.advice, none.plan, none.collectingSince], [false, [], null, null]);
+});
+
+test('a Claude member\'s transcript total never reaches Pulse cost; an engine with no live numbers keeps its own per session', () => {
+  // Value: protects=Spent and each member's cost read the real spend; fails_when=a transcript fallback sample (the whole session's total, no session id) is stored for a Claude member beside its live numbers, or other engines lose their only cost source; why_new=ship review 2026-10-16, the fallback was counted again after each launch; seam=none; no_claim=the sampling loop itself runs in main (source pin)
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/index.ts'), 'utf8');
+  assert.match(src, /if \(sample && \(sample\.sessionId \|\| \(a\.provider \?\? 'claude'\) !== 'claude'\)\) \{\s*pulseTelemetry\.cost\(id, sample\.sessionId \|\| `transcript:\$\{hive\.lastSession\(id\) \?\? ''\}`/);
+  assert.doesNotMatch(src, /pulseTelemetry\.cost\(id, sample\.sessionId \|\| 'transcript'/);
 });

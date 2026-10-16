@@ -400,8 +400,9 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
             id="edit-agent-danger"
             data-fields="danger"
             style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8,
-              boxShadow: 'inset 0 0 0 1.5px var(--cth-coral)', background: 'var(--cth-coral-soft)'
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--cth-r-xl)',
+              // The Settings Danger zone's ring (DESIGN.md 6.3).
+              boxShadow: 'inset 0 0 0 1.5px color-mix(in srgb, var(--cth-coral-base) 55%, transparent)', background: 'var(--cth-coral-soft)'
             }}
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>

@@ -2499,6 +2499,7 @@
     "valueTip": "这些工作按用量付费价格计算的费用。",
     "perPiece": "每项",
     "perPieceTip": "估算：定时运行按其自身成本，其他工作分摊其余部分。",
+    "asksCount_one": "{{count}} 个问题",
     "asksCount": "{{count}} 个问题",
     "waited": "等你 {{time}}",
     "keptAsIs": "原样保留",

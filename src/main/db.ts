@@ -151,6 +151,16 @@ const MIGRATIONS: Array<(db: Database.Database) => void> = [
         PRIMARY KEY (office, day, key)
       );
     `);
+  },
+  // → user_version 4: indexes for Pulse's hot reads, so they stay quick as an
+  // office ages (ship review, 2026-10-16): a member's open run, the events
+  // after the processor's cursor, and the kinds a snapshot reads by day.
+  (db) => {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_tr_open ON telemetry_runs(office, agent_id, id) WHERE end IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_te_office_id ON telemetry_events(office, id);
+      CREATE INDEX IF NOT EXISTS idx_te_office_kind_ts ON telemetry_events(office, kind, ts);
+    `);
   }
 ];
 

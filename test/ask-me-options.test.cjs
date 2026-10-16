@@ -102,6 +102,14 @@ test('the pick and part answers are kept only with the owner\'s own answer', () 
   assert.deepEqual(odd.added, [0, 1]);
   assert.equal(odd.humanQA[0].picked, undefined);
   assert.equal(odd.humanQA[1].partAnswers, undefined);
+  // A pick or part answers an agent left on the open ask never ride along when the owner types a note.
+  const planted = [{ ...pete, askedAt: 't0', picked: 1 }, { ...dwight, askedAt: 't0', partAnswers: ['remove', null, null] }];
+  const typed = mergeHumanQA(planted, [{ ...pete, askedAt: 't0', a: 'use your judgment' }, { ...dwight, askedAt: 't0', a: 'later' }]);
+  // and the card sends only its own: it drops what was on the ask before adding the Reply's pick.
+  assert.match(read('src/renderer/src/components/AskMeTab.tsx'), /\? \{ \.\.\.withoutDetail\(e\), a: text, answeredAt: new Date\(\)\.toISOString\(\), \.\.\.detail \}/);
+  assert.deepEqual(typed.added, [0, 1]);
+  assert.equal(typed.humanQA[0].picked, undefined);
+  assert.equal(typed.humanQA[1].partAnswers, undefined);
   // An entry an agent filled with part answers but no answer is still open.
   assert.deepEqual(openAskIndexes([{ ...dwight, partAnswers: ['remove', null, null] }]), [0]);
 });

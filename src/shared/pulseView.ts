@@ -49,7 +49,8 @@ export interface PulseView {
   trend: Record<string, number[]>;
   /** What the trust layer and the owner's settings stopped in the period. */
   keptSafe: KeptSafe;
-  /** The last four weeks of what the team learned, and its questions to the owner. */
+  /** Eight weeks of what the team learned and its questions to the owner, oldest
+   *  first, so a period can be compared with the one before; the view takes its slice. */
   learning: Learning;
   /** On a Claude plan with a known price: every dollar above is the member's
    *  part of the plan's real cost for the period, split by share of the work;

@@ -97,7 +97,7 @@ export function PartLines({ parts, answers, onChange, onSend, who }: {
               <FileText source={p.q} who={who} />
             </div>
             {p.options && (
-              <div role="group" aria-label={`${i + 1}`} style={{ gridColumn: 2, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              <div role="group" aria-label={`${i + 1}. ${p.q}`} style={{ gridColumn: 2, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {p.options.map((o, k) => {
                   const on = a.chip === k;
                   return (

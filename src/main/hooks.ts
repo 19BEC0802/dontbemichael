@@ -29,12 +29,14 @@ import { APP_NAME } from '../shared/appName';
 
 /** The same terminal prompt is relayed to Michael at most once in this window. */
 const PROMPT_RELAY_DEDUPE_MS = 10 * 60_000;
-/** A member stopped on a prompt again within this long after the app restarted
- *  them is stuck for real: Michael asks the owner, in plain words. */
-export const STUCK_AGAIN_MS = 30 * 60_000;
 /** Prompts within this long after an automatic restart are the same prompt,
  *  still on screen while the restart runs, not a new one. */
 export const STUCK_SETTLE_MS = 60_000;
+/** A restart counts once the member's session starts again within this long;
+ *  otherwise Michael hears they are still stuck (ship review, 2026-10-16). */
+export const STUCK_CONFIRM_MS = 60_000;
+/** Events that show a stuck member moved on: the stuck episode ends. */
+const STUCK_MOVED_ON = new Set(['UserPromptSubmit', 'PostToolUse', 'Stop']);
 
 /** A Claude Code session transcript: a .jsonl file in Claude's own projects
  *  folder (CLAUDE_CONFIG_DIR when set, as Claude Code uses it), where agents
@@ -348,7 +350,7 @@ export class HookServer {
   }
 
   /** Frames refused for a missing or wrong secret, by the agent they named
-   *  (or "unknown"). Read by the telemetry health record. */
+   *  (or "unknown"). Kept for the telemetry health readout (TODOS.md); tests read it today. */
   rejectedFrames(): ReadonlyMap<string, number> {
     return this.rejected;
   }
@@ -969,6 +971,8 @@ export class HookServer {
     // real prompt.
     if (event === 'Notification' && agentId && isTerminalPrompt(p) && !this.isGod(agentId) && !this.onHold(agentId)) {
       this.stuckOnPrompt(agentId, (p.message ?? '').trim());
+    } else if (agentId && this.stuckEpisodes.has(agentId) && !subagent) {
+      this.stuckProgress(agentId, event);
     }
 
     // Forward everything else to the renderer so avatars reflect real activity.
@@ -1006,37 +1010,77 @@ export class HookServer {
 
   /** agentId → last prompt relayed, so one prompt isn't relayed twice. */
   private relayedPrompts = new Map<string, { text: string; at: number }>();
-  /** agentId → when the app last restarted it for a prompt. */
-  private stuckRestartAt = new Map<string, number>();
+  /** agentId → its stuck episode: when the app restarted it for a prompt,
+   *  whether the new session started, and whether Michael was told it is
+   *  still stuck. It ends when the member moves on, so there is one automatic
+   *  restart per episode and no raise and withdraw loop on Ask me. */
+  private stuckEpisodes = new Map<string, { at: number; text: string; restarted: boolean; confirmed: boolean; escalated: boolean }>();
 
-  /** A member stopped on a prompt: restart them, or, when it came back soon
-   *  after a restart (or no window can restart them), Michael asks the owner. */
+  /** A member stopped on a prompt: restart them once, or, when it comes back
+   *  before they moved on (or no window can restart them), Michael asks the owner. */
   private stuckOnPrompt(agentId: string, text: string): void {
     const now = this.now();
-    const last = this.stuckRestartAt.get(agentId);
-    // The same prompt, still on screen while the restart runs.
-    if (last !== undefined && now - last < STUCK_SETTLE_MS) return;
-    if (last === undefined || now - last > STUCK_AGAIN_MS) {
-      let restarted = false;
-      try { restarted = this.restartStuck?.(agentId) === true; } catch { /* the plain ask below */ }
-      if (restarted) {
-        this.stuckRestartAt.set(agentId, now);
-        this.tellMichael(agentId, `${this.displayName(agentId)} was restarted`, `${this.displayName(agentId)}'s session stopped on a prompt only a person could answer${text ? ` ("${text}")` : ''}, so the app restarted ${this.displayName(agentId)}. They continue where they left off, so this is not for the owner's Ask me board. If you already asked the owner about it, withdraw that question.`);
-        return;
-      }
+    const ep = this.stuckEpisodes.get(agentId);
+    if (ep) {
+      // The same prompt, still on screen while the restart runs.
+      if (now - ep.at < STUCK_SETTLE_MS) return;
+      if (!ep.escalated) ep.escalated = this.relayStuckToMichael(agentId, text, ep.restarted);
+      return;
     }
-    this.relayStuckToMichael(agentId, text);
+    let restarted = false;
+    try { restarted = this.restartStuck?.(agentId) === true; } catch { /* the plain ask below */ }
+    if (!restarted) {
+      // Stamped only once it went out, so a failed send is tried again on the
+      // next prompt event (adversarial review, 2026-09-25).
+      if (this.relayStuckToMichael(agentId, text, false)) this.stuckEpisodes.set(agentId, { at: now, text, restarted: false, confirmed: false, escalated: true });
+      return;
+    }
+    this.stuckEpisodes.set(agentId, { at: now, text, restarted: true, confirmed: false, escalated: false });
+    // The resumed session gets no prompt of its own: this note wakes the member
+    // (the inbox nudge) so its work carries on.
+    try {
+      this.hive.send({ to: agentId, act: 'inform', subject: 'You were restarted', body: 'Your session stopped on a prompt only a person could answer, so the app restarted it. Carry on with your current work.' }, 'system');
+    } catch { /* Michael checks on them below */ }
+    const t = setTimeout(() => this.checkStuckRestarts(), STUCK_CONFIRM_MS + 1_000);
+    (t as { unref?: () => void }).unref?.();
   }
 
-  private relayStuckToMichael(agentId: string, text: string): void {
+  /** A restart whose new session never started is no restart: Michael hears
+   *  the member is still stuck. Run by a timer after each restart. */
+  checkStuckRestarts(): void {
+    const now = this.now();
+    for (const [agentId, ep] of this.stuckEpisodes) {
+      if (ep.restarted && !ep.confirmed && !ep.escalated && now - ep.at >= STUCK_CONFIRM_MS) {
+        ep.escalated = this.relayStuckToMichael(agentId, ep.text, false);
+      }
+    }
+  }
+
+  /** The member's session started again (the restart worked) or it moved on
+   *  (the episode is over). */
+  private stuckProgress(agentId: string, event: string): void {
+    const ep = this.stuckEpisodes.get(agentId);
+    if (!ep) return;
+    if (event === 'SessionStart' && ep.restarted && !ep.confirmed && !ep.escalated) {
+      ep.confirmed = true;
+      const name = this.displayName(agentId);
+      this.tellMichael(agentId, `${name} was restarted`, `${name}'s session stopped on a prompt only a person could answer${ep.text ? ` ("${ep.text}")` : ''}, so the app restarted ${name} and told them to carry on with their current work. Check that ${name} picks their work back up. This is not for the owner's Ask me board: if you asked the owner whether ${name} is stuck, withdraw that question.`);
+    } else if (STUCK_MOVED_ON.has(event)) {
+      this.stuckEpisodes.delete(agentId);
+    }
+  }
+
+  /** True once Michael has the note (sent now, or already within the window). */
+  private relayStuckToMichael(agentId: string, text: string, restarted: boolean): boolean {
     const last = this.relayedPrompts.get(agentId);
-    if (last && last.text === text && this.now() - last.at < PROMPT_RELAY_DEDUPE_MS) return;
+    if (last && last.text === text && this.now() - last.at < PROMPT_RELAY_DEDUPE_MS) return true;
     const name = this.displayName(agentId);
     const sent = this.tellMichael(agentId, `${name} is stuck`,
-      `${name}'s session stopped on a prompt only a person could answer${text ? ` ("${text}")` : ''}, and restarting ${name} did not clear it. The owner can't answer it either: never ask them to, and never mention terminals, prompts, sessions or a 1:1 chat. Move ${name}'s open work to a teammate who fits. Then put one plain question on the owner's Ask me board (a card for ${agentId}, status "blocked", one humanQA ask with "raisedBy": "${agentId}") saying ${name} is stuck and can't work until it is looked into, with options that fit, such as "Leave ${name} for now".`);
+      `${name}'s session stopped on a prompt only a person could answer${text ? ` ("${text}")` : ''}, and ${restarted ? `restarting ${name} did not clear it` : `the app could not restart ${name}`}. The owner can't answer it either: never ask them to, and never mention terminals, prompts, sessions or a 1:1 chat. Move ${name}'s open work to a teammate who fits. Then put one plain question on the owner's Ask me board (a card for ${agentId}, status "blocked", one humanQA ask with "raisedBy": "${agentId}") saying ${name} is stuck and can't work until it is looked into, with options that fit, such as "Leave ${name} for now".`);
     // Stamped only once it went out, so a failed send is retried on the next
     // prompt event (adversarial review, 2026-09-25).
     if (sent) this.relayedPrompts.set(agentId, { text, at: this.now() });
+    return sent;
   }
 
   /** One note to Michael from the app; false when it could not be sent. */
@@ -1161,12 +1205,12 @@ export class HookServer {
     }
   }
 
-  // A refused call sends no step and is marked blocked, so the sidebar and
-  // the office floor show nothing for a call that never ran.
   /** Pulse's Kept safe (proposal 3): each step a setting stopped, by gate.
    *  A question sent on to Michael is routing, so it passes no gate. */
   onRefused?: (agentId: string | undefined, gate: RefusalGate) => void;
 
+  // A refused call sends no step and is marked blocked, so the sidebar and
+  // the office floor show nothing for a call that never ran.
   private emitRefused(agentId: string | undefined, event: string, p: HookPayload, gate?: RefusalGate): void {
     if (gate) { try { this.onRefused?.(agentId, gate); } catch { /* counting never blocks a refusal */ } }
     this.emit(agentId, event, p, true, true);

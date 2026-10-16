@@ -161,7 +161,9 @@ export function mergeHumanQA(onDisk: unknown[], incoming: unknown[]): { humanQA:
     // Which option and which parts ride along only with the owner's own answer,
     // so text an agent wrote into an open ask never counts (eng review R2).
     const extra = answerDetail(d as AskEntry & AskShapeFields, next as { picked?: unknown; partAnswers?: unknown });
-    return { ...d, a: next.a, ...(typeof next.answeredAt === 'string' ? { answeredAt: next.answeredAt } : {}), ...extra };
+    // Drop any the agent left on the open ask, so only the owner's own survive.
+    const { picked: _p, partAnswers: _pa, ...base } = d as AskEntry & { picked?: unknown; partAnswers?: unknown };
+    return { ...base, a: next.a, ...(typeof next.answeredAt === 'string' ? { answeredAt: next.answeredAt } : {}), ...extra };
   });
   return { humanQA, added };
 }

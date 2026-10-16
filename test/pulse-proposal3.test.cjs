@@ -202,3 +202,33 @@ test('Pulse shows the plan\'s cost with the pay per use figure behind the (i), a
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/i18n/locales/en.json'), 'utf8'));
   assert.match(en.pulse.plan.tip, /\{\{payPerUse\}\} at pay per use prices/);
 });
+
+// ─── coverage audit, 2026-10-16: the backfill's rejected frames and floor controls ──
+
+test('the backfill counts only a frame naming the wrong member as an impostor, and keeps reopened cards and trust decisions', () => {
+  // Value: protects=Kept safe's sender count from the past, and reopen evidence; fails_when=a no secret or old secret frame logged before 2026-10-15 counts as an impostor, a wrong sender frame is dropped, or a reopen or trust decision is lost; why_new=logPoints' rejected frame rule had no test; seam=none; no_claim=none beyond protects
+  const pts = logPoints([
+    { ts: 10, kind: 'hook-frame-rejected', reason: 'wrong-sender', agentId: 'god' },
+    { ts: 10, kind: 'hook-frame-rejected', reason: 'no-secret', agentId: 'god' },
+    { ts: 10, kind: 'hook-frame-rejected', reason: 'old-secret', agentId: 'pam' },
+    { ts: 10, kind: 'card-reopen', agentId: 'pam', id: 'c1' },
+    { ts: 10, kind: 'trust-layer', way: 'in', decision: 'deny', by: 'model' }
+  ], 0, 50, new Set(['pam', 'god']));
+  assert.deepEqual(pts.map((p) => [p.kind, p.agentId, p.attrs.gate ?? p.attrs.id ?? p.attrs.decision ?? null, p.attrs.bf]), [
+    ['refused', 'god', 'impostor', 1], ['card-reopen', 'pam', 'c1', 1], ['trust', null, 'deny', 1]
+  ]);
+  assert.deepEqual(trustKeys(pts[2].attrs), ['in-stop'], 'a past decision folds like a live one');
+});
+
+test('a step stopped from the floor counts as paused in the backfill, as hooks.ts counts it live', () => {
+  // Value: protects=Your rules held reads the same for the weeks before Pulse as after; fails_when=a refusal from the floor's pause or tool gate is filed under the tool's own rule (sandbox, folder, connector) instead of paused, where hooks.ts files every control refusal live; why_new=gateOfTool matched only the pause wording; seam=none (ControlRegistry's own reasons); no_claim=reasons a future control adds
+  const { ControlRegistry } = loadTs('src/main/control.ts');
+  const c = new ControlRegistry();
+  c.pause('dwight', true);
+  c.gateTool('pam', 'Bash', true);
+  const paused = c.toolDecision('dwight', 'Write');
+  const gated = c.toolDecision('pam', 'Bash');
+  assert.equal(paused.deny && gated.deny, true);
+  assert.equal(gateOfTool('Write', paused.reason), 'paused');
+  assert.equal(gateOfTool('Bash', gated.reason), 'paused', 'a gated tool is a floor control, not the sandbox rule');
+});

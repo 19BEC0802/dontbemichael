@@ -61,6 +61,12 @@ function dependentsTree(id: string, all: HiveTask[], seen = new Set<string>()): 
   return direct.flatMap((d) => [d, ...dependentsTree(d.id, all, seen)]);
 }
 
+/** An ask without any pick or part answers already on it. */
+function withoutDetail<T extends object>(e: T): T {
+  const { picked: _p, partAnswers: _pa, ...rest } = e as T & { picked?: unknown; partAnswers?: unknown };
+  return rest as T;
+}
+
 export function AskMeTab() {
   const { t: translate, i18n } = useTranslation();
   const rtl = useRtl();
@@ -148,6 +154,13 @@ export function AskMeTab() {
     return `${title}: ${q.length > 60 ? `${q.slice(0, 59).trimEnd()}…` : q}`;
   };
 
+  /** The answer a row would send: the owner's words, labeled with the option
+   *  or the questions it answers (ask-me-options.md, 5A). */
+  const answerFor = (row: AskRow, shape: AskShape): string => {
+    const pk = picks[row.key] ?? {};
+    return labeledAnswer(shape, { pick: pk.pick, note: drafts[row.key] ?? '', parts: pk.parts });
+  };
+
   /**
    * Record the owner's answer on one open question, then tell Michael.
    *
@@ -157,13 +170,6 @@ export function AskMeTab() {
    * or Michael withdrew it meanwhile), nothing is sent or remembered and the
    * draft is kept.
    */
-  /** The answer a row would send: the owner's words, labeled with the option
-   *  or the questions it answers (ask-me-options.md, 5A). */
-  const answerFor = (row: AskRow, shape: AskShape): string => {
-    const pk = picks[row.key] ?? {};
-    return labeledAnswer(shape, { pick: pk.pick, note: drafts[row.key] ?? '', parts: pk.parts });
-  };
-
   const sendAnswer = async (row: AskRow) => {
     const { task, index, ask: open } = row;
     const shape = readAskShape(open);
@@ -187,7 +193,9 @@ export function AskMeTab() {
         if (t.id !== task.id) return t;
         const qa = (t.humanQA ?? []).map((e, i) =>
           i === index && e.q === open.q && !isAnswered(e) && !isWithdrawn(e)
-            ? { ...e, a: text, answeredAt: new Date().toISOString(), ...detail }
+            // Only this Reply's own pick and lines go with the answer, never ones
+            // an agent left on the open ask.
+            ? { ...withoutDetail(e), a: text, answeredAt: new Date().toISOString(), ...detail }
             : e
         );
         return { ...t, humanQA: qa };

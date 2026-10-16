@@ -46,7 +46,8 @@ const tsOf = (v: unknown): number => (typeof v === 'string' ? Date.parse(v) : ty
 /** A refused step's gate, from the tool a transcript names (hooks.ts gates). */
 export function gateOfTool(tool: string, reason: string): RefusalGate | null {
   if (/^AskUserQuestion$/.test(tool)) return null;
-  if (/paused|Denied by operator/i.test(reason)) return 'paused';
+  // Every floor control refusal (a paused member or a gated tool) counts as paused, as hooks.ts counts it live.
+  if (/paused|gated by the operator|Denied by operator/i.test(reason)) return 'paused';
   if (/QuickBooks/i.test(tool)) return 'quickbooks';
   if (/^mcp__md-mail__/.test(tool)) return 'mail';
   if (/^mcp__/.test(tool)) return 'connector';
@@ -222,12 +223,13 @@ export async function runBackfill(d: BackfillDeps): Promise<number> {
 
   points.sort((a, b) => a.ts - b.ts);
   const ins = db.prepare('INSERT INTO telemetry_events (office, agent_id, kind, ts, value, attrs) VALUES (?, ?, ?, ?, ?, ?)');
-  for (let i = 0; i < points.length; i += 2000) {
-    const chunk = points.slice(i, i + 2000);
-    db.transaction(() => { for (const e of chunk) ins.run(office, e.agentId, e.kind, Math.round(e.ts), e.value ?? null, e.attrs ? JSON.stringify(e.attrs) : null); })();
-    await new Promise((r) => setImmediate(r));
-  }
-  db.prepare(`INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-    .run(markerKey(office), JSON.stringify({ v: 1, since, until, points: points.length }), d.now);
+  const mark = db.prepare(`INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`);
+  // The points and the marker land together or not at all, so a backfill cut
+  // short (quit, crash, a full disk) runs again from nothing instead of
+  // counting its first rows twice.
+  db.transaction(() => {
+    for (const e of points) ins.run(office, e.agentId, e.kind, Math.round(e.ts), e.value ?? null, e.attrs ? JSON.stringify(e.attrs) : null);
+    mark.run(markerKey(office), JSON.stringify({ v: 1, since, until, points: points.length }), d.now);
+  })();
   return points.length;
 }

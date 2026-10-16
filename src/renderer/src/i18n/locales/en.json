@@ -2499,6 +2499,7 @@
     "valueTip": "What this work would cost at pay per use prices.",
     "perPiece": "Per piece",
     "perPieceTip": "An estimate: scheduled runs by their own cost, other work sharing the rest.",
+    "asksCount_one": "{{count}} ask",
     "asksCount": "{{count}} asks",
     "waited": "waited {{time}} on you",
     "keptAsIs": "Kept as is",

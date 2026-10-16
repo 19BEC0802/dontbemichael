@@ -96,7 +96,7 @@ test('over the socket, a tool check without a valid secret is refused and nothin
   server.handle = (p) => { handled.push(p); return {}; };
   server.start();
   t.after(() => server.stop());
-  await new Promise((r) => setTimeout(r, 50));
+  await server.whenOpen();
   const ask = (payload) => new Promise((resolve, reject) => {
     let out = '';
     const c = net.createConnection(hive.sockPath(), () => c.write(JSON.stringify(payload) + '\n'));
