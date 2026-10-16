@@ -354,7 +354,7 @@ export function PulseView() {
           </div>
           {/* One total (owner, 2026-10-15): who spent what is Team at work's job.
               Plan use sits in the same tile, beside what was spent. */}
-          <div style={{ ...tight, flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ ...tight, flexDirection: 'row', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
               <div style={label}>
                 {t('pulse.whereMoneyWent')}

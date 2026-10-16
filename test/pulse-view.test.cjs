@@ -111,3 +111,8 @@ test('on Last 4 weeks every top tile shows its week by week trend', () => {
   assert.equal((view.match(/<WeekLine /g) || []).length, 2, 'questions per 100 and while you were away');
   assert.match(view, /const wks = view\.weeks \?\? null;/);
 });
+
+test('the Spent tile starts at the top like every other tile', () => {
+  // Value: protects=the owner\'s 2026-10-15 alignment note; fails_when=the Spent tile centers its title again; why_new=owner note; seam=source pin; no_claim=pixel layout
+  assert.match(view, /flexDirection: 'row', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between'/);
+});
