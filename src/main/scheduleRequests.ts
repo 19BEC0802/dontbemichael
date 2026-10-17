@@ -67,7 +67,7 @@ export function makeScheduleRequests(deps: ScheduleRequestDeps) {
     if (actor === godId) {
       let refused = '';
       const res = applyMissions((list) => {
-        const applied = applyScheduleRequest(built.request, list, `m_${now().toString(36)}`);
+        const applied = applyScheduleRequest(built.request, list, `m_${now().toString(36)}`, now());
         if (!applied.ok) { refused = applied.error; return null; }
         return applied.missions.map((m) => (m.id === applied.missionId ? { ...m, approvedBy: 'michael' as const } : m));
       });
@@ -183,7 +183,7 @@ export function makeScheduleRequests(deps: ScheduleRequestDeps) {
       let refused = '';
       // Apply against the list as it is when written (applyMissions reads it fresh).
       const res = applyMissions((list) => {
-        const applied = applyScheduleRequest(req, list, `m_${now().toString(36)}`);
+        const applied = applyScheduleRequest(req, list, `m_${now().toString(36)}`, now());
         if (!applied.ok) { refused = applied.error; return null; }
         return applied.missions.map((m) => (m.id === applied.missionId ? { ...m, approvedBy: by } : m));
       });

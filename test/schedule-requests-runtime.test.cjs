@@ -145,3 +145,14 @@ test('Michael\'s own change applies at once; Research has no schedules; list ans
   assert.match(o.sr.receiveScheduleRequest(RESEARCH_ID, pauseM1), /^You have no schedules: you answer the questions/);
   assert.equal(o.sr.receiveScheduleRequest('pam', { op: 'list' }), 'Your schedules (id: job):\nm1: Check Emails, every 2h');
 });
+
+test('an approved resume starts from now, so it never runs a slot from before it', () => {
+  const o = office();
+  o.cfg.missions[0].enabled = false;
+  o.tick(H);
+  o.sr.receiveScheduleRequest('pam', { op: 'resume', id: 'm1' }, 'Mailbox is back.');
+  o.tick(H);
+  assert.equal(o.sr.receiveScheduleRequest('god', { op: 'approve', request: requestId(o) }), 'Approved and in place.');
+  assert.equal(o.cfg.missions[0].enabled, true);
+  assert.equal(o.cfg.missions[0].scheduledSince, T0 + 2 * H);
+});
