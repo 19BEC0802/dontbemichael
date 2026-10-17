@@ -1386,6 +1386,7 @@ export class HiveManager {
               // Point only this worker at a per-agent system settings file so
               // the bridge is trusted and ~/.gemini/settings.json stays untouched.
               const writable = this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs);
+              env.GEMINI_CLI_TRUST_WORKSPACE = "true";
               env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = this.installGeminiHooks(dir, writable);
               // The agent folder and hive root join its workspace, the folders
               // codex gets with --add-dir above. On argv too: Gemini CLI 0.60
