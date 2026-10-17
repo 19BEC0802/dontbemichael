@@ -217,7 +217,7 @@ test('a stuck card is found on the fleet tick from the ledger and the open owner
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-stuck-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const hive = new HiveManager(() => home);
-  await hive.ensureAgent({ id: 'god', name: 'Michael', cwd: home, isGod: true });
+  await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: home, isGod: true });
   hive.writeTasks([
     { id: 'a', title: 'A', status: 'blocked', dependsOn: [], priority: 3, createdAt: 'x', humanQA: [{ q: 'Q?', a: 'A.' }] },
     { id: 'b', title: 'B', status: 'blocked', dependsOn: [], priority: 3, createdAt: 'x', humanQA: [{ q: 'Q?', a: 'A.' }] }
@@ -295,7 +295,7 @@ test('an owner answer on a card Michael marked Done stays his open request', asy
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-owner-req-michael-done-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const hive = new HiveManager(() => home);
-  await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: home, isGod: true });
+  await hive.ensureAgent({ id: 'god', name: 'Michael', cwd: home, isGod: true });
   const tick = () => new Promise((r) => setTimeout(r, 5));
   hive.send({ to: 'god', act: 'request', subject: 'OWNER ANSWER on card a', body: 'x', conversation: 'card:a' }, 'human');
   await tick();
