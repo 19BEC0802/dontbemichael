@@ -2127,6 +2127,13 @@ function runOfficeBreakTick(): void {
   const r = officeBreak.tick();
   if (!r) { armOfficeBreak(); return; }
   if (r.step === 'over') { endOfficeBreak(r.ended); return; }
+  if (r.step === 'wait') {
+    // A credit or sign in check heard nothing: the stop goes on until a turn finishes.
+    try { hive.appendLog({ kind: 'office-break', step: 'wait', reason: officeBreak.view()?.reason }); } catch { /* best-effort */ }
+    armOfficeBreak();
+    publishOfficeBreak();
+    return;
+  }
   sendOfficeCheck();
 }
 
