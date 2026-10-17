@@ -344,7 +344,7 @@ test('the answer time rides on the last line of the request, and the hive reads 
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-catchup-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const hive = new HiveManager(() => home);
-  await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: os.tmpdir(), isGod: true });
+  await hive.ensureAgent({ id: 'god', name: 'Michael', cwd: os.tmpdir(), isGod: true });
   hive.writeTasks([{ id: 't1', title: 'Pay', status: 'blocked', dependsOn: [], priority: 3, createdAt: '2026-10-01T00:00:00Z', humanQA: [
     { q: 'Q1?', a: 'A1.', answeredAt: '2026-10-02T09:00:00.000Z' },
     { q: 'Q2?', a: 'A2.', answeredAt: '2026-10-02T10:00:00.000Z' }
