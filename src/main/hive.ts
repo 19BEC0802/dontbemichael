@@ -82,6 +82,7 @@ import {
 import { HOUSE_RULES_CHANGED_SUBJECT, houseRulesNoticeBody, houseRulesToTell } from '../shared/houseRulesNotice';
 import { applyGuardFixes, restoreDone, dueReminders, guardSignature, emptyGuardState, guardCards, type GuardCard, type GuardState } from '../shared/cardGuards';
 import { sleepSync } from './atomicFile';
+import { TELEMETRY_TOKEN_HEADER } from './telemetry';
 
 /** A thread id an agent wrote, kept only when it is a plain token. */
 function safeConversation(v: unknown): v is string {
@@ -810,10 +811,13 @@ export class HiveManager {
    *  collector is bound (telemetry.ts). null = telemetry off → no OTel env is
    *  injected at spawn (the transcript reconciler remains the cost source). */
   private _otelEndpoint: string | null = null;
+  /** Mints the token an agent's exporter must send (TelemetryCollector.tokenFor). */
+  private _otelToken: ((agentId: string) => string) | null = null;
   /** Point newly-spawned agents at the live telemetry collector. Call after the
    *  collector starts; only affects spawns made afterwards. */
-  setOtelEndpoint(url: string | null): void {
+  setOtelEndpoint(url: string | null, tokenFor: ((agentId: string) => string) | null = null): void {
     this._otelEndpoint = url;
+    this._otelToken = url ? tokenFor : null;
   }
   /** The collector URL agents are pointed at, or null when telemetry is off. */
   otelEndpoint(): string | null {
@@ -1462,12 +1466,14 @@ export class HiveManager {
     // collector (telemetry.ts). Pure env, no --settings change. Only injected
     // for Claude Code once the collector is up (otelEndpoint set), so telemetry-
     // off installs and non-Claude providers spawn exactly as before.
-    if (claudeProvider && this._otelEndpoint) {
+    if (claudeProvider && this._otelEndpoint && this._otelToken) {
       env.CLAUDE_CODE_ENABLE_TELEMETRY = '1';
       env.OTEL_METRICS_EXPORTER = 'otlp';
       env.OTEL_LOGS_EXPORTER = 'otlp';
       env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
       env.OTEL_EXPORTER_OTLP_ENDPOINT = this._otelEndpoint;
+      // The collector counts a batch only for the agent this token belongs to.
+      env.OTEL_EXPORTER_OTLP_HEADERS = `${TELEMETRY_TOKEN_HEADER}=${this._otelToken(meta.id)}`;
       env.OTEL_METRIC_EXPORT_INTERVAL = '5000'; // 5s — near-live without spamming
       env.OTEL_LOGS_EXPORT_INTERVAL = '2000';
       env.OTEL_RESOURCE_ATTRIBUTES = `agent.id=${meta.id},agent.name=${meta.name}`;

@@ -7765,7 +7765,7 @@ function bootstrapHiveServices(): void {
   // failure just leaves telemetry off (transcript reconciler stays). No breaker.start():
   // the breaker is POLICY-only, ticked by the heartbeat beat (#1, ships disabled).
   void telemetry.start().then((r) => {
-    if (r.ok && r.endpoint) { hive.setOtelEndpoint(r.endpoint); console.log('[telemetry] collector listening', r.endpoint); }
+    if (r.ok && r.endpoint) { hive.setOtelEndpoint(r.endpoint, (agentId) => telemetry.tokenFor(agentId)); console.log('[telemetry] collector listening', r.endpoint); }
     else console.error('[telemetry] collector failed to start:', r.error);
   });
   memory.start(); // init shared palace + mine loop (no-op without mempalace)
