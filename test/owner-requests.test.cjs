@@ -80,7 +80,7 @@ test('Michael closing an owner request is filed, not delivered back to him, and 
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-owner-req-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const hive = new HiveManager(() => home);
-  await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: home, isGod: true });
+  await hive.ensureAgent({ id: 'god', name: 'Michael', cwd: home, isGod: true });
   const sent = hive.send({ to: 'god', act: 'request', subject: 'OWNER ANSWER on card t9', body: 'x', conversation: 'card:t9' }, 'human');
   assert.deepEqual(hive.refreshOwnerRequests().map((r) => r.taskId), ['t9']);
   const inbox = path.join(home, 'hive', 'agents', 'god', 'inbox');
