@@ -28,7 +28,7 @@ test('done with a result tells Michael which open questions it withdrew', async 
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-voice-done-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const hive = new HiveManager(() => home);
-  await hive.ensureAgent({ id: 'god', name: 'Michael', provider: 'claude', cwd: os.tmpdir(), isGod: true });
+  await hive.ensureAgent({ id: 'god', name: 'Michael', cwd: os.tmpdir(), isGod: true });
   hive.writeTasks([
     card('t1', { status: 'blocked', title: 'Pay the supplier', humanQA: [{ q: 'Which account?', raisedBy: 'god' }, { q: 'Now or Friday?', raisedBy: 'god' }, { q: 'Old one', a: 'Main account' }] }),
     card('t2', { status: 'doing', title: 'Quarterly newsletter' })
