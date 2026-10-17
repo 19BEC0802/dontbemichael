@@ -4567,6 +4567,9 @@ ipcMain.handle('providerKey:set', (_evt, payload: unknown) => {
   const p = (payload ?? {}) as { backend?: unknown; key?: unknown };
   if (typeof p.backend !== 'string' || !(p.backend in BACKEND_KEY_ENV)) return { ok: false, error: 'unknown backend' };
   if (typeof p.key !== 'string' || !p.key) return { ok: false, error: 'key required' };
+  // A key this computer cannot encrypt is never saved, so say so (and what to do
+  // about it) before anything else touches it.
+  if (!integrations.canStoreSecrets()) return { ok: false, error: integrations.secretStoreUnavailableReason() };
   const res = integrations.setSecret(providerKeyRef(p.backend), p.key);
   // The same Anthropic key signs Claude in when the owner chose one in Get
   // Michael ready: approve the new one and let the step and the card look again.
