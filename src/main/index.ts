@@ -4403,7 +4403,7 @@ ipcMain.handle('integrations:remove', (_evt, payload: unknown) => {
 // URLs are non-secret and ride HarnessConfig.providerBaseUrls (normal config save).
 ipcMain.handle('providerKey:set', (_evt, payload: unknown) => {
   const p = (payload ?? {}) as { backend?: unknown; key?: unknown };
-  if (typeof p.backend !== 'string' || !(p.backend in BACKEND_KEY_ENV)) return { ok: false, error: 'unknown backend' };
+  if (typeof p.backend !== 'string' || !ownValue(BACKEND_KEY_ENV, p.backend)) return { ok: false, error: 'unknown backend' };
   if (typeof p.key !== 'string' || !p.key) return { ok: false, error: 'key required' };
   // A key this computer cannot encrypt is never saved, so say so (and what to do
   // about it) before anything else touches it.
@@ -4420,7 +4420,7 @@ ipcMain.handle('providerKey:set', (_evt, payload: unknown) => {
 ipcMain.handle('providerKey:has', (_evt, backend: unknown) =>
   typeof backend === 'string' ? integrations.hasSecret(providerKeyRef(backend)) : false);
 ipcMain.handle('providerKey:clear', (_evt, backend: unknown) => {
-  if (typeof backend !== 'string' || !(backend in BACKEND_KEY_ENV)) return { ok: false, error: 'unknown backend' };
+  if (typeof backend !== 'string' || !ownValue(BACKEND_KEY_ENV, backend)) return { ok: false, error: 'unknown backend' };
   try {
     // deleteSecret never throws: false means the key may still be stored.
     if (!integrations.deleteSecret(providerKeyRef(backend))) return { ok: false, error: 'The saved key could not be removed. Try again; if it keeps failing, the saved secrets file needs repair.' };
